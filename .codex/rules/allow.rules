@@ -1,0 +1,71 @@
+prefix_rule(
+    pattern = ["bun", "run", "verify"],
+    decision = "allow",
+    justification = "The Next.js/Turbopack build needs a local port that the sandbox blocks; verify runs lint, typecheck, unit/integration tests and build.",
+    match = ["bun run verify"],
+    not_match = [
+        "bun run dev",
+        "bun run build",
+        "bun run lint",
+        "bun install",
+        "bunx vercel deploy",
+        "bun run verify-all",
+    ],
+)
+
+prefix_rule(
+    pattern = ["bun", "run", "test:e2e"],
+    decision = "allow",
+    justification = "Playwright needs a local server port and a browser, which the sandbox blocks.",
+    match = ["bun run test:e2e"],
+    not_match = [
+        "bun run test",
+        "bun run dev",
+        "bun run build",
+        "bun install",
+        "bunx playwright install",
+        "bun run test:e2e-all",
+    ],
+)
+
+prefix_rule(
+    pattern = ["bun", "run", "test"],
+    decision = "allow",
+    justification = "Subset of the already-allowed `bun run verify`; targeted Vitest runs while iterating.",
+    match = ["bun run test", "bun run test tests/unit/grading"],
+    not_match = [
+        "bun run test:e2e-all",
+        "bun run dev",
+        "bun install",
+    ],
+)
+
+prefix_rule(
+    pattern = ["bun", "install", "--frozen-lockfile"],
+    decision = "allow",
+    justification = "Installs exactly the committed lockfile and needs network access. Adding or changing dependencies (`bun add`, plain `bun install`) still prompts.",
+    match = ["bun install --frozen-lockfile"],
+    not_match = ["bun install", "bun add zod", "bun add -d yaml"],
+)
+
+prefix_rule(
+    pattern = ["bun", "run", ["lint", "typecheck"]],
+    decision = "allow",
+    justification = "Read-only subsets of the already-allowed `bun run verify`; allowed so an escalation request for them never needs a prompt.",
+    match = ["bun run lint", "bun run typecheck"],
+    not_match = [
+        "bun run build",
+        "bun run dev",
+        "bun run lint:fix",
+        "bun add zod",
+        "bun install",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+    justification = "Read-only working-tree inspection with no option that writes files or runs commands. `git diff`, `git log` and `git show` stay unlisted because `--output` writes a file anywhere outside the sandbox; agents run them inside it.",
+    match = ["git status", "git status --porcelain --untracked-files=all"],
+    not_match = ["git diff", "git log --oneline", "git show HEAD", "git stash", "git fetch upstream"],
+)

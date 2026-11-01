@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(bun run verify)",
+      "Bash(bun run test)",
+      "Bash(bun run test *)",
+      "Bash(bun run test:e2e)",
+      "Bash(bun install --frozen-lockfile)",
+      "Bash(bun run lint)",
+      "Bash(bun run typecheck)",
+      "Bash(git status:*)"
+    ],
+    "deny": [
+      "Read(./.env*)",
+      "Read(./**/.env*)",
+      "Edit(./.env*)",
+      "Edit(./**/.env*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git rebase:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(vercel:*)",
+      "Bash(bunx vercel:*)",
+      "Bash(npx vercel:*)",
+      "Bash(supabase db push:*)",
+      "Bash(bunx supabase db push:*)",
+      "Bash(npx supabase db push:*)",
+      "Bash(supabase link:*)",
+      "Bash(bunx supabase link:*)",
+      "Bash(npx supabase link:*)",
+      "Bash(supabase db reset --linked:*)",
+      "Bash(bunx supabase db reset --linked:*)",
+      "Bash(npx supabase db reset --linked:*)",
+      "Bash(supabase db reset --db-url:*)",
+      "Bash(bunx supabase db reset --db-url:*)",
+      "Bash(npx supabase db reset --db-url:*)",
+      "Bash(supabase db dump:*)",
+      "Bash(bunx supabase db dump:*)",
+      "Bash(npx supabase db dump:*)"
+    ]
+  }
+}
