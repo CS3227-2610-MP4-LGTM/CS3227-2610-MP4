@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LGTM
 
-## Getting Started
+[![CI](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/actions/workflows/ci.yml)
 
-First, run the development server:
+LGTM is a code review academy. Learners review pull requests with planted
+flaws and get AI-graded feedback. Code submitted to the app is displayed,
+never executed.
+
+## Roles
+
+- **Learner:** reviews pull requests with planted flaws and gets AI-graded
+  feedback on the review.
+- **Author:** turns working code into challenges by having AI inject flaws.
+- **TA:** moderates AI grades and sees AI summaries of learner blind spots.
+
+## Quick start
+
+Requires Bun 1.4.3 and Node 24 (see `.node-version`).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install --frozen-lockfile
+bun run dev            # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Checks
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Command | What it does |
+| --- | --- |
+| `bun run lint` | ESLint |
+| `bun run typecheck` | Generates route types, then `tsc --noEmit` |
+| `bun run test` | Unit and integration tests (Vitest) |
+| `bun run test:e2e` | End-to-end tests (Playwright, port 3100) |
+| `bun run build` | Production build |
+| `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Repository layout
 
-## Learn More
+| Path | Contents |
+| --- | --- |
+| `src/app/` | Pages and route handlers (Next.js App Router) |
+| `docs/` | Developer Guide |
+| `.github/workflows/` | CI |
+| `.agents/`, `.claude/`, `.codex/` | AI agent skills, permissions and guardrails |
 
-To learn more about Next.js, take a look at the following resources:
+## Documentation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Developer Guide](docs/DeveloperGuide.md)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Stack
 
-## Deploy on Vercel
+Next.js 16 (App Router, Turbopack), React 19, TypeScript 5, Tailwind CSS 4,
+Zod 4, Vitest 5 and Playwright.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Contributing
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Branch as `<type>/<issue>-<slug>`, commit with Conventional Commits, and open
+a PR to `master`; the `verify` check must pass before merging. AI agents
+working in this repo follow [AGENTS.md](AGENTS.md).
