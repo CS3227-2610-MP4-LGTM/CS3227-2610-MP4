@@ -1,0 +1,199 @@
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "AGENTS.md Git rules forbid agents from pushing; leave the local diff for a human to push.",
+    match = ["git push origin master", "git push --force"],
+    not_match = ["git status", "git diff", "git log", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "AGENTS.md Git rules forbid git reset --hard and commands that rewrite history or discard work; use git diff to inspect changes.",
+    match = ["git reset --hard", "git reset --hard HEAD"],
+    not_match = ["git status", "git diff", "git log", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "forbidden",
+    justification = "AGENTS.md Git rules forbid git clean and commands that discard work; use git status to inspect untracked files.",
+    match = ["git clean -fd", "git clean -fdx"],
+    not_match = ["git status", "git diff", "git log", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", ["create", "merge"]],
+    decision = "forbidden",
+    justification = "AGENTS.md Git rules forbid agents from opening or merging pull requests; leave these actions to a human.",
+    match = ["gh pr create", "gh pr merge 5"],
+    not_match = ["gh pr view 5", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["vercel"],
+    decision = "forbidden",
+    justification = "AGENTS.md Security rules forbid vercel and deploy commands; leave deployment to a human.",
+    match = ["vercel", "vercel deploy --prod"],
+    not_match = ["git status", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["bunx", "vercel"],
+    decision = "forbidden",
+    justification = "AGENTS.md Security rules forbid vercel and deploy commands, including through bunx; leave deployment to a human.",
+    match = ["bunx vercel", "bunx vercel deploy --prod"],
+    not_match = ["git status", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["npx", "vercel"],
+    decision = "forbidden",
+    justification = "AGENTS.md Security rules forbid vercel and deploy commands, including through npx; leave deployment to a human.",
+    match = ["npx vercel", "npx vercel deploy --prod"],
+    not_match = ["git status", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["supabase", "db", "push"],
+    decision = "forbidden",
+    justification = "AGENTS.md Security rules require local Supabase only and forbid supabase db push; use the local Supabase workflow.",
+    match = ["supabase db push", "supabase db push --linked"],
+    not_match = ["supabase start", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["bunx", "supabase", "db", "push"],
+    decision = "forbidden",
+    justification = "AGENTS.md Security rules require local Supabase only and forbid supabase db push, including through bunx; use the local Supabase workflow.",
+    match = ["bunx supabase db push", "bunx supabase db push --linked"],
+    not_match = ["supabase start", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["npx", "supabase", "db", "push"],
+    decision = "forbidden",
+    justification = "AGENTS.md Security rules require local Supabase only and forbid supabase db push, including through npx; use the local Supabase workflow.",
+    match = ["npx supabase db push", "npx supabase db push --linked"],
+    not_match = ["supabase start", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "forbidden",
+    justification = "AGENTS.md Git rules reserve commits for humans; leave a reviewable local diff.",
+    match = ["git commit", "git commit -m fix", "git commit --amend"],
+    not_match = ["git status", "git diff", "git log", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["git", "tag"],
+    decision = "forbidden",
+    justification = "AGENTS.md Git rules reserve tags for humans; agents never create tags.",
+    match = ["git tag v1.0.0", "git tag -a v1.0.0 -m release"],
+    not_match = ["git status", "git diff", "git log", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["git", "rebase"],
+    decision = "forbidden",
+    justification = "AGENTS.md Git rules forbid history rewriting; leave branch integration to a human.",
+    match = ["git rebase master", "git rebase -i HEAD~2"],
+    not_match = ["git status", "git diff", "git log", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["supabase", "link"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["supabase link"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["supabase", "db", "reset", "--linked"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["supabase db reset --linked"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["supabase", "db", "reset", "--db-url"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["supabase db reset --db-url"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["supabase", "db", "dump"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["supabase db dump"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["bunx", "supabase", "link"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["bunx supabase link"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["bunx", "supabase", "db", "reset", "--linked"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["bunx supabase db reset --linked"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["bunx", "supabase", "db", "reset", "--db-url"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["bunx supabase db reset --db-url"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["bunx", "supabase", "db", "dump"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["bunx supabase db dump"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["npx", "supabase", "link"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["npx supabase link"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["npx", "supabase", "db", "reset", "--linked"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["npx supabase db reset --linked"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["npx", "supabase", "db", "reset", "--db-url"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["npx supabase db reset --db-url"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["npx", "supabase", "db", "dump"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
+    match = ["npx supabase db dump"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
