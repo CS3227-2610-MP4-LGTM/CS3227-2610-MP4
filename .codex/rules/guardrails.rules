@@ -197,3 +197,27 @@ prefix_rule(
     match = ["npx supabase db dump"],
     not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
 )
+
+prefix_rule(
+    pattern = ["supabase", "db", "reset", "--remote"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; Supabase CLI v3 targets hosted databases with --remote, which is forbidden.",
+    match = ["supabase db reset --remote"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["bunx", "supabase", "db", "reset", "--remote"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; Supabase CLI v3 targets hosted databases with --remote, which is forbidden.",
+    match = ["bunx supabase db reset --remote"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)
+
+prefix_rule(
+    pattern = ["npx", "supabase", "db", "reset", "--remote"],
+    decision = "forbidden",
+    justification = "Use the local Supabase repository scripts only; Supabase CLI v3 targets hosted databases with --remote, which is forbidden.",
+    match = ["npx supabase db reset --remote"],
+    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+)

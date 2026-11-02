@@ -41,7 +41,10 @@
       "Bash(npx supabase db reset --db-url:*)",
       "Bash(supabase db dump:*)",
       "Bash(bunx supabase db dump:*)",
-      "Bash(npx supabase db dump:*)"
+      "Bash(npx supabase db dump:*)",
+      "Bash(supabase * --remote*)",
+      "Bash(bunx supabase * --remote*)",
+      "Bash(npx supabase * --remote*)"
     ]
   }
 }
