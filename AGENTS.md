@@ -61,6 +61,10 @@ Leave a reviewable diff. Humans commit with Conventional Commits
 (`type(scope): subject`) and an `Agent: <name>` trailer for agent work.
 Branches are `<type>/<issue>-<slug>`.
 
+The team uses the forking workflow: `origin` is the member's fork, `upstream`
+is `CS3227-2610-MP4-LGTM/CS3227-2610-MP4`. Branch from `upstream/master`; PRs
+go from the fork to `upstream` `master`. Never push to `upstream`.
+
 ## Workflow
 
 To be defined with the agent workflow. Until then, agents work only on what

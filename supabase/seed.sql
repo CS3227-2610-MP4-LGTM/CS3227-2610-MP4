@@ -1,0 +1,2 @@
+-- Local development seed data. Runs after migrations on `bun run db:reset`.
+-- Never put real user data or secrets here.
