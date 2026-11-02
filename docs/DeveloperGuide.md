@@ -116,7 +116,8 @@ Never prefix `SUPABASE_SECRET_KEY` with `NEXT_PUBLIC_` and never commit
      the `private` schema.
 3. Apply it locally with `bun run db:reset`.
 4. Regenerate types with `bun run db:types` and commit the migration and the
-   types together.
+   types together. CI applies every migration to a fresh database, runs
+   `supabase db lint`, and fails if the committed types are stale.
 
 Never edit a migration that has been merged; add a new one instead.
 
