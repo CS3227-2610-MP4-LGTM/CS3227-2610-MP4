@@ -1,3 +1,9 @@
+---
+layout: default
+title: Developer Guide
+nav_order: 2
+---
+
 # LGTM Developer Guide
 
 ## Git workflow
@@ -132,6 +138,44 @@ Never edit a migration that has been merged; add a new one instead.
 Prefer the user-scoped clients so RLS enforces access. Reach for the admin
 client only for operations no user role may perform directly, such as writing
 AI grades.
+
+## Product site (GitHub Pages)
+
+The product page is `docs/index.md`. Keep its description of LGTM and its
+three roles aligned with [the README](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/README.md), which is the source of
+truth for product information.
+
+GitHub Pages builds the site with its built-in Jekyll build and the
+[Just the Docs remote theme](https://github.com/just-the-docs/just-the-docs/releases/tag/v0.12.0),
+pinned to `v0.12.0` with `color_scheme: dark` in `docs/_config.yml`. The
+`jekyll-remote-theme` plugin loads the theme; `jekyll-relative-links` converts
+relative Markdown links to their published URLs. No Gemfile, application
+build or custom deployment workflow is needed.
+
+Both `docs/index.md` and `docs/DeveloperGuide.md` are rendered on the site.
+Their front matter sets `layout: default`, a navigation `title` and
+`nav_order` (1 for the product page, 2 for the guide). Use relative Markdown
+links within `docs/` so they work on GitHub and the site; use full GitHub URLs
+for links to repository files outside `docs/`.
+
+{% raw %}
+In any `docs/` Markdown, wrap literal `{{` and `{%` in
+`{% raw %}`...<code>&#123;% endraw %&#125;</code>, even inside code blocks;
+otherwise Jekyll may silently drop them or break the build.
+{% endraw %}
+
+After the site files reach `master`, a repository maintainer must configure
+**Settings → Pages → Build and deployment**:
+
+1. Set **Source** to **Deploy from a branch**.
+2. Set **Branch** to **master** and the folder to **/docs**.
+3. Click **Save**.
+
+These are repository settings, not options in `_config.yml`. See GitHub's
+[publishing source documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+Subsequent changes to `docs/` on `master` trigger GitHub's Pages build. Use the
+published URL shown in Pages settings. Do not add a `.nojekyll` file, which
+would bypass Jekyll processing.
 
 ## Acknowledgements
 
