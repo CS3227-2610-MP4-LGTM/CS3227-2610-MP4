@@ -46,13 +46,15 @@ Before the first `bun run dev`, create `.env.local` as described in
 | `src/app/` | Pages and route handlers (Next.js App Router) |
 | `src/lib/supabase/`, `src/server/supabase/` | Supabase clients and generated database types |
 | `supabase/` | Local Supabase config, migrations and seed data |
-| `docs/` | Developer Guide |
+| `docs/` | Product site and Developer Guide |
 | `.github/workflows/` | CI |
 | `.agents/`, `.claude/`, `.codex/` | AI agent skills, permissions and guardrails |
 
 ## Documentation
 
+- [Product page](https://cs3227-2610-mp4-lgtm.github.io/CS3227-2610-MP4/)
 - [Developer Guide](docs/DeveloperGuide.md)
+- [GitHub Pages setup](docs/DeveloperGuide.md#product-site-github-pages)
 
 ## Stack
 
