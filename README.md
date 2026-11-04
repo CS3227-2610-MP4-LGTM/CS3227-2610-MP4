@@ -6,6 +6,9 @@ LGTM is a code review academy. Learners review pull requests with planted
 flaws and get AI-graded feedback. Code submitted to the app is displayed,
 never executed.
 
+- **Production:** [Live app](https://lgtm-cs3227.vercel.app) (deployed from release tags)
+- **Development:** [Live app](https://lgtm-cs3227-dev.vercel.app) (deployed from `master`)
+
 ## Roles
 
 - **Learner:** reviews pull requests with planted flaws and gets AI-graded
@@ -47,7 +50,9 @@ Before the first `bun run dev`, create `.env.local` as described in
 | `src/lib/supabase/`, `src/server/supabase/` | Supabase clients and generated database types |
 | `supabase/` | Local Supabase config, migrations and seed data |
 | `docs/` | Product site and Developer Guide |
-| `.github/workflows/` | CI |
+| `workflow/` | Scripts for parsing and summarizing agent rollouts |
+| `logs/` | Per-member session logs |
+| `.github/workflows/` | CI and deployment |
 | `.agents/`, `.claude/`, `.codex/` | AI agent skills, permissions and guardrails |
 
 ## Documentation
