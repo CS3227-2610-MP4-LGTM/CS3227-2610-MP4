@@ -40,6 +40,9 @@ marked **removed**; references must still resolve to that entry.
 
 ## Reading and verification
 
+All story files use the shared [story template](../templates/story-spec.md); only AI
+stories fill in its AI section.
+
 An agent reads only the story file and the spec sections named by its task,
 never the whole spec set. Tasks must name the sections they depend on.
 
