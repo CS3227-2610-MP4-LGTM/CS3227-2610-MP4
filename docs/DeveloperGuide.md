@@ -62,7 +62,7 @@ stack mirrors these settings (`auto_expose_new_tables = false` in
 `supabase/config.toml`, plus the `enable_rls_on_new_tables` migration), so a
 migration that works locally behaves the same way on hosted projects.
 
-Only humans apply migrations to hosted projects. Agents never run
+Humans and deployment workflows apply migrations to hosted projects. Agents never run
 `supabase link`, `db push` or any command with `--remote`.
 
 ### Prerequisites
@@ -138,6 +138,35 @@ Never edit a migration that has been merged; add a new one instead.
 Prefer the user-scoped clients so RLS enforces access. Reach for the admin
 client only for operations no user role may perform directly, such as writing
 AI grades.
+
+## Deployment
+
+| Workflow | Trigger | GitHub environment | What it deploys |
+| --- | --- | --- | --- |
+| `deploy-dev.yml` | Push to `master` or manual run | `development` (only allows `master`) | Vercel Preview with the development alias |
+| `deploy-prod.yml` | Push of a `v*` tag | `production` (waits for approval) | Vercel Production; the tagged commit must be on `master` |
+
+Cut releases by creating a `v*` tag through a GitHub release targeting `master`.
+
+Migrations apply first, then the application builds and deploys; a later
+failure does not roll migrations back.
+
+Configure these secrets and variables in each GitHub environment:
+
+| Kind | Name | Purpose |
+| --- | --- | --- |
+| Secret | `VERCEL_TOKEN` | Token scoped to the Vercel project; authenticates the Vercel pull, build, deploy and development alias steps |
+| Secret | `SUPABASE_DB_URL` | Database connection string for that environment's migration step |
+| Variable | `VERCEL_ORG_ID` | Selects the Vercel organisation |
+| Variable | `VERCEL_PROJECT_ID` | Selects the Vercel project |
+
+In Vercel, configure `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `APP_ENV` and
+`AI_PROVIDER` for Preview and Production. Preview uses `lgtm-dev`;
+Production uses `lgtm-prod`. Keep `SUPABASE_SECRET_KEY` server-only.
+
+`vercel.json` selects Singapore (`sin1`), disables Git-triggered deployments,
+and configures no cron jobs.
 
 ## Product site (GitHub Pages)
 
