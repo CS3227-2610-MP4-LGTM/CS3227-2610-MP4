@@ -7,7 +7,9 @@ Set up LGTM's product site with GitHub Pages' built-in Jekyll build from `master
 Five task exchanges, including this logging request, covering one focused site task and its refinements.
 
 ## Session metadata
-Tool: Codex. Model: unknown. Reasoning effort: unknown. Session ID: unknown. GitHub attribution: `shawnnygoh`, explicitly supplied by the user.
+Tool: Codex Desktop, CLI `0.166.0-alpha.5.1`. Model: `gpt-6.1-sol`. Reasoning effort: `medium` (5 turns). Service tier: `default` (5 turns). Session ID: `01a1a207-f433-7911-b28b-a08e6bb31862`. GitHub attribution: `shawnnygoh`, explicitly supplied by the user.
+
+Tokens (backfilled full-session totals): input 1,402,689; cached input 1,316,864; cache-write input 0; output 7,722; reasoning output 1,246; total 1,410,411.
 
 ## Key prompts
 - “Don't commit, push or change git state; I review the diff and commit myself.” This restricted the work to file edits and read-only Git inspection, leaving repository operations to the user.

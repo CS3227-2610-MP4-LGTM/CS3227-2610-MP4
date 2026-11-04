@@ -25,6 +25,30 @@ Create exactly one file at `logs/<github-user>/<NNN>-<session-name>.md` in the c
 - Do not modify unrelated files, and do not commit.
 - If no files were created or modified during the session, state that explicitly under the `## Files created or modified` section. 
 
+For Codex sessions, obtain Session metadata immediately before writing with
+`bun workflow/scripts/rollout-summary.ts` from the repository root. This reads
+`$CODEX_HOME/sessions` (default `~/.codex/sessions`), preferring `CODEX_THREAD_ID`,
+then `CODEX_SESSION_ID`; without either, it selects the newest rollout whose
+session cwd matches this repository. Never inspect rollouts directly: they contain
+transcripts and private account data. The CLI outputs only approved summary fields.
+
+- Record Tool as Codex with the CLI version and originator when confirmed. Use
+  `turnValues` for model and effort, including each distinct model/effort/service-tier
+  combination and its turn count when settings switch. Never infer effort or model
+  from your own identity or instructions.
+- Record `sessionId` as Session ID. Include Thread ID only when `threadId`
+  differs from `sessionId`. Use `tokens` verbatim for input, cached input,
+  cache-write input, output, reasoning output and total. Label these cumulative
+  values “token totals as of writing” (an active session's totals can increase).
+  Do not add reasoning to output or recompute total.
+- If the CLI fails, is unavailable, returns unknown, or cannot resolve an ID
+  uniquely, write “unknown” for unconfirmed fields; never guess. An explicit
+  `--id ID` or `--path FILE` selects a known rollout. `--list [N]` lists recent
+  rollouts for this repo separately, including shared session IDs; do not assume
+  the newest rollout belongs to this chat when identity evidence disagrees.
+- For other tools, keep the existing behavior: record only metadata you can
+  confirm and use “unknown” otherwise.
+
 Use this exact structure:
 
 ```markdown
@@ -37,7 +61,7 @@ One or two sentences on what the session set out to do.
 One line on the number of user-assistant exchanges and whether the session was one focused task or several unrelated tasks.
 
 ## Session metadata
-Tool and model (for example Codex with its model name, or Claude Code with its model name), reasoning effort if set, and session ID if known. Write "unknown" for anything you cannot confirm; never guess.
+Tool and model, reasoning effort if set, and session ID if known. For Codex, use the CLI metadata above, including thread ID only when different from session ID, and token totals as of writing. Write "unknown" for anything you cannot confirm; never guess.
 
 ## Key prompts
 The 2–5 instructions that materially shaped the work, quoted in the user's own wording, each followed by a sentence explaining what it asked for and why it was framed that way. Omit routine follow-ups, approvals, and clarifications.

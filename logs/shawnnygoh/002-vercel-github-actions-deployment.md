@@ -7,7 +7,9 @@ Add development and production deployment workflows, a minimal LGTM landing page
 Four task exchanges covering one deployment task, two revisions, and session logging.
 
 ## Session metadata
-Tool: Codex. Exact model: unknown. Reasoning effort: unknown. Session ID: unknown. GitHub attribution: `shawnnygoh` (user-provided).
+Tool: Codex (`codex-tui`), CLI `0.166.0`. Model: `gpt-6.1-sol`. Reasoning effort: `medium` (4 turns). Service tier: `default` (4 turns). Session ID: `01a1a49b-27e5-7121-b960-f8e1b10394e3`. GitHub attribution: `shawnnygoh` (user-provided).
+
+Tokens (backfilled full-session totals): input 2,014,908; cached input 1,943,040; cache-write input 0; output 12,582; reasoning output 1,318; total 2,027,490.
 
 ## Key prompts
 - “Task: add Vercel deployment via GitHub Actions. Leave a reviewable diff; don't commit.” This established the deployment work and required human control over commits.
