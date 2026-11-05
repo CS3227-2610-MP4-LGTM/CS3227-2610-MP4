@@ -9,18 +9,16 @@ owners, statuses or open questions.
 ## One home per fact
 
 Each fact has one authoritative home. Refer to another spec or section instead
-of restating it. This directory initially contains this README and
-[TECHNICAL-SPEC.md](TECHNICAL-SPEC.md); the other documents below are named
-without links until they exist.
+of restating it.
 
 | Document | Owns |
 | --- | --- |
 | `README.md` | Spec conventions and document boundaries. |
-| `PRODUCT-SPEC.md` | Product, roles, product-level UI, and a story index per role plus shared account stories. Each index entry has an ID, one-line story, priority and whether it uses AI. |
+| [PRODUCT-SPEC.md](PRODUCT-SPEC.md) | Product, roles, product-level UI, and a story index per role plus shared account stories. Each index entry has an ID, one-line story, priority and whether it uses AI. |
 | `stories/<ID>-<slug>.md` | Exactly one story: requirement, acceptance criteria, use cases, edge cases and UI notes. |
 | [TECHNICAL-SPEC.md](TECHNICAL-SPEC.md) | Architecture, authentication and authorization mechanisms, data ownership, environments and delivery, and non-functional requirements. |
-| `INTEGRATION-SPEC.md` | Domain data model, API contracts, LLM input/output schemas and shared seed data. |
-| `AI-SECURITY-SPEC.md` | AI attack surfaces, controls, usage limits and security tests. |
+| [INTEGRATION-SPEC.md](INTEGRATION-SPEC.md) | Domain data model, API contracts, LLM input/output schemas and shared seed data. |
+| [AI-SECURITY-SPEC.md](AI-SECURITY-SPEC.md) | AI attack surfaces, controls, usage limits and security tests. |
 | `workflow/PLAN.md` | Implementation tasks derived from approved specs. |
 
 ## Identifiers

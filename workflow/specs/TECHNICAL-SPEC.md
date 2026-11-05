@@ -5,8 +5,8 @@
 This specification defines system requirements, including foundations not yet implemented.
 Account journeys, messages, destinations and navigation belong to ACC-01–ACC-03.
 [Spec conventions](README.md) define document boundaries and identifiers. Domain models,
-contracts and LLM schemas belong to `INTEGRATION-SPEC.md`; AI controls and limits belong
-to `AI-SECURITY-SPEC.md`. Neither document exists yet.
+contracts and LLM schemas belong to [INTEGRATION-SPEC.md](INTEGRATION-SPEC.md). AI controls
+and limits belong to [AI-SECURITY-SPEC.md](AI-SECURITY-SPEC.md).
 
 - **ASM-01:** This course deployment has one shared learning space, without cohorts,
   institutions or TA assignments.
