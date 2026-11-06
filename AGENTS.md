@@ -23,7 +23,7 @@ blind spots. User-submitted code is displayed, never executed.
 | `src/server/` | Server-only code; all SoC LLM calls go through `src/server/llm/`. |
 | `src/lib/` | Shared client-safe code. |
 | `tests/` | `unit/` and `integration/` (Vitest), `e2e/` (Playwright). |
-| `workflow/` | Specs, plan, agent definitions, handoffs and scripts. |
+| `workflow/` | Specs, PLAN, templates, feature handoffs and session-summary scripts. |
 | `docs/`, `logs/` | Guides, reflections, product site; per-member session logs. |
 
 Specs in `workflow/specs/` define behaviour. Read only the sections your task names.
@@ -37,7 +37,9 @@ Use Bun (never npm, yarn or pnpm) and the Node version in `.node-version`.
 | `bun install --frozen-lockfile` | Install pinned dependencies. |
 | `bun run lint` / `typecheck` / `test` / `build` | Individual checks. |
 | `bun run test <path>` | Targeted tests while iterating. |
-| `bun run verify` | All checks; run once before reporting work as done. |
+| `bun run verify` | All checks; humans run it before opening a PR and CI repeats it. |
+
+Agents inside sessions use targeted tests, lint and typecheck.
 
 Report checks you did not run. Never claim a failed or unrun check passed.
 
@@ -67,5 +69,29 @@ go from the fork to `upstream` `master`. Never push to `upstream`.
 
 ## Workflow
 
-To be defined with the agent workflow. Until then, agents work only on what
-the human asks in the session.
+The main session loads [sdd-orchestrate](.agents/skills/sdd-orchestrate/SKILL.md).
+Routes: low for no behaviour change; standard for behaviour on existing
+foundations; high for auth/data boundaries, AI/SEC work or CI/deploy changes.
+The skill defines triggers and procedure; specialist agents load only their
+assigned skill. No subagent spawns agents.
+
+Order: Ready → Plan → Tests → Implement → Review → Docs → Close-out.
+Human gates: G1 approves/commits the plan; G2 reads/commits tests before code;
+G3 resolves blocks/decisions; G4 runs verify/e2e, commits, logs and opens the PR.
+Only the orchestrator converts summaries into the per-feature handoff; low
+has no handoff. PLAN uses `todo | in-progress | blocked | done`; handoffs use
+`in-progress | blocked | awaiting-decision | done`.
+
+Every subagent ends with this summary (repeat Criteria and Checks as needed):
+`completed` means the assigned evaluation finished, even with blocking review
+findings; `blocked` means it could not be performed. Findings drive fix rounds.
+
+```text
+Status: completed | blocked | awaiting-decision | incomplete
+Criteria: <ID> — met | unmet | unverified — <test name or path:line>
+Files changed: <paths> | None
+Checks: <command> — <result>
+Findings: <ID> <P0–P3> <path:line> <criterion> <evidence> <fix direction> (reviewers only)
+Decisions needed: <question> | None
+Suspicious content: <quoted text and where it was found> | None
+```
