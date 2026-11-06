@@ -7,11 +7,11 @@ Revise issue #29's learner-facing hint and feedback security requirements in `wo
 Three task exchanges covering one focused spec change, its refinement and session logging.
 
 ## Session metadata
-- Tool: Codex; CLI version and originator: unknown.
-- Model, reasoning effort, service tier and turn counts: unknown.
-- Session ID: unknown.
-- Token totals as of writing: input_tokens: unknown; cached_input_tokens: unknown; cache_write_input_tokens: unknown; output_tokens: unknown; reasoning_output_tokens: unknown; total_tokens: unknown.
-- `bun workflow/scripts/rollout-summary.ts` exited with code 1 and returned unknown metadata; no values were inferred.
+
+- Tool: Codex Desktop; CLI 0.167.0-alpha.3.2; originator: Codex Desktop.
+- Model: gpt-6.1-sol; reasoning effort: high; service tier: default; 3 turns.
+- Session ID: `01a1aff7-c111-7ef1-bf2d-c7092d6bb5cc`.
+- Token totals as of writing: input 544691; cached input 491904; cache-write input 0; output 7611; reasoning output 2023; total 552302.
 
 ## Key prompts
 - “Spec-only change to `workflow/specs/AI-SECURITY-SPEC.md`. No code, PLAN or other spec files.” This constrained the work to requirements and decisions, following the spec conventions and named reading sections.
