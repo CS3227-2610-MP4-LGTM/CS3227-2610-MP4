@@ -62,8 +62,23 @@ stack mirrors these settings (`auto_expose_new_tables = false` in
 `supabase/config.toml`, plus the `enable_rls_on_new_tables` migration), so a
 migration that works locally behaves the same way on hosted projects.
 
-Humans and deployment workflows apply migrations to hosted projects. Agents never run
-`supabase link`, `db push` or any command with `--remote`.
+Humans and deployment workflows apply migrations to hosted projects. Agents use
+local Supabase only. The denied-command lists live in
+[Codex guardrails](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/rules/guardrails.rules) and
+[Claude settings](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.claude/settings.json), covering commands such as `link`,
+`db pull`, `migration repair` and `inspect` through plain, bunx and npx invocations.
+
+CLI 3.0.0 defaults `db reset`, `db lint` and `gen types --lang typescript` to
+local targets. These forms, local stack commands, `migration new`,
+`functions new/serve`, and all repository `db:*` scripts remain available,
+including `bun run db:reset` and `bun run db:types`.
+
+Codex matches literal prefixes: for reset, lint and type generation, hosted-target
+flags are blocked only as separate tokens immediately after the subcommand.
+Attached values (`gen types --remote=project`), flags after other arguments
+(`gen types --lang typescript --remote`), and global options before blocked
+prefixes remain gaps. Claude also matches trailing and attached hosted flags.
+These limits never authorize hosted access.
 
 ### Prerequisites
 
