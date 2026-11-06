@@ -46,14 +46,14 @@ human moderation do not by themselves make a story an AI story.
 
 | ID | Story | Priority | AI |
 | --- | --- | --- | --- |
-| LRN-01 | As a Learner, I want to browse challenges by language, difficulty and flaw category so that I can choose relevant practice. | Must | No |
-| LRN-02 | As a Learner, I want to view a challenge as a PR with description, code and diff so that I can understand the proposed change. | Must | No |
-| LRN-03 | As a Learner, I want to add, edit and remove line comments before submission so that I can develop my review. | Must | No |
-| LRN-04 | As a Learner, I want to submit a final review that locks its comments so that my assessment is based on a fixed attempt. | Must | No |
-| LRN-05 | As a Learner, I want my submitted review graded using location matching and AI assessment so that I can measure my review quality. | Must | Yes |
-| LRN-06 | As a Learner, I want feedback, eligible hints and one retry so that I can learn from missed flaws without seeing answers. | Must | Yes |
-| LRN-07 | As a Learner, I want to report an unmatched comment that I believe identifies a real issue absent from the answer key so that a TA can review it. | Must | No |
-| LRN-08 | As a Learner, I want review history showing both attempts, grades and moderation outcomes so that I can track my learning. | Should | No |
+| [LRN-01](stories/LRN-01-browse-challenges.md) | As a Learner, I want to browse challenges by language, difficulty and flaw category so that I can choose relevant practice. | Must | No |
+| [LRN-02](stories/LRN-02-view-a-challenge-as-a-pr.md) | As a Learner, I want to view a challenge as a PR with description, code and diff so that I can understand the proposed change. | Must | No |
+| [LRN-03](stories/LRN-03-manage-line-comments.md) | As a Learner, I want to add, edit and remove line comments before submission so that I can develop my review. | Must | No |
+| [LRN-04](stories/LRN-04-submit-a-final-review.md) | As a Learner, I want to submit a final review that locks its comments so that my assessment is based on a fixed attempt. | Must | No |
+| [LRN-05](stories/LRN-05-grade-a-submitted-review.md) | As a Learner, I want my submitted review graded using location matching and AI assessment so that I can measure my review quality. | Must | Yes |
+| [LRN-06](stories/LRN-06-feedback-hints-and-retry.md) | As a Learner, I want feedback, eligible hints and one retry so that I can learn from missed flaws without seeing answers. | Must | Yes |
+| [LRN-07](stories/LRN-07-report-an-unmatched-comment.md) | As a Learner, I want to report an unmatched comment that I believe identifies a real issue absent from the answer key so that a TA can review it. | Must | No |
+| [LRN-08](stories/LRN-08-review-history.md) | As a Learner, I want review history showing both attempts, grades and moderation outcomes so that I can track my learning. | Should | No |
 
 ### Author
 
