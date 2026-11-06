@@ -142,6 +142,18 @@ Never prefix `SUPABASE_SECRET_KEY` with `NEXT_PUBLIC_` and never commit
 
 Never edit a migration that has been merged; add a new one instead.
 
+### Explicit grants for domain and LLM migrations
+
+New `public` tables receive no default grants for `anon`, `authenticated`
+or `service_role`. The
+[auth-core migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261106151000_auth_core.sql)
+enforces this alongside automatic RLS. Every domain-schema and LLM migration
+must grant its required operations explicitly. This includes `service_role`
+for the approved admin operations in
+[SYS-10.3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-10--database-enforcement-and-privileged-access):
+bypassing RLS does not supply table privileges. Explicit grants do not
+authorize any additional admin-client use.
+
 ### Clients
 
 | Import | Use in | Acts as |
@@ -150,9 +162,70 @@ Never edit a migration that has been merged; add a new one instead.
 | `@/server/supabase/server` | Server Components, Server Functions, Route Handlers | The signed-in user, read from request cookies |
 | `@/server/supabase/admin` | Server code, after authorizing the caller | Service role (bypasses RLS) |
 
-Prefer the user-scoped clients so RLS enforces access. Reach for the admin
-client only for operations no user role may perform directly, such as writing
-AI grades.
+Prefer the user-scoped clients so RLS enforces access. Use the admin client
+only for the named SYS-10.3 operations after their authorization preconditions;
+the application auth flow never uses it.
+
+### Auth foundation
+
+The server-only helpers in
+[`src/server/auth/`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/service.ts)
+provide `signUp`, `signIn` and local-scope `signOut`. Sign-up validates a
+request against
+[SYS-05's credential rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle)
+and
+[SYS-06's profile rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-06--profile-provisioning-and-immutable-role).
+A private trigger provisions the profile atomically with the Auth account.
+
+Auth helpers return categories and field-error codes without UI copy or raw
+provider diagnostics. They distinguish authenticated success, confirmed
+creation without a session, rejection, throttling and service unavailability.
+Sign-out clears current-browser auth cookies even when the provider cannot
+confirm local-scope revocation; it reports that failure separately.
+
+[`getAccount` and `readProfile`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/account.ts)
+verify identity with `auth.getUser()` and read the stored `public.profiles`
+role. Failure categories map to HTTP 401, 403 and 503 through `authErrorResponse`.
+
+In later migrations, RLS policies needing the caller's role must read
+`private.profile_roles` (own row only), not `profiles`, to avoid policy
+recursion. This constrained projection is populated by the provisioning trigger
+and bound to the immutable public profile by its `(id, role)` foreign key.
+
+[`src/proxy.ts`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/proxy.ts)
+refreshes session transport and forwards refreshed cookies to server reads,
+preserving SSR cache-prevention headers. Protected operations still authorize
+at their own server boundary.
+
+### Auth tests and settings
+
+`bun run test` runs unit tests without Supabase. Start the local stack before
+running the separate integration suite:
+
+```bash
+bun run db:start
+bun run test:integration
+```
+
+Integration tests run in Vitest's Node environment against real local Auth,
+API and Postgres services. The `pg` dev dependency performs schema checks;
+fixtures exercise provisioning, immutable roles, grants/RLS, profile visibility
+and refresh behavior. Tests capture local CLI configuration in memory and
+clean up fixture accounts. Throttling failures are injected rather than
+exhausting the provider limit. CI's `integration` job runs this suite with local
+Auth and is required by the `verify` job; local `bun run verify` still runs
+lint, typecheck, unit tests and build. CI uses Node 24 from `.node-version`.
+
+Local `auth.rate_limit.sign_in_sign_ups` is 300 per five minutes per IP to
+support repeated integration/fix-round runs. This does not change hosted
+limits. After changing local Auth configuration, run `bun run db:stop` then
+`bun run db:start` to reload it; stopping preserves local data.
+
+Hosted settings require a human dashboard review under
+[SYS-15.2–15.4](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-15--configuration-and-hosted-auth),
+including the authoritative
+[SYS-05 credential policy](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle).
+Local configuration and passing integration tests do not verify hosted settings.
 
 ## Deployment
 
