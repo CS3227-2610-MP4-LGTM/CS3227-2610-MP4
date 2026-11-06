@@ -12,7 +12,7 @@ and [SYS-18](TECHNICAL-SPEC.md#sys-18--resource-use) govern provider enablement.
 | Surface | Abuse case | Required controls |
 | --- | --- | --- |
 | Author code and generated proposals | Comments or string literals instruct the model to expose data, make network calls or change the publication. | SEC-01, SEC-02 |
-| Publication hints | Injected instructions or plausible paraphrases reveal exact flaw locations, snippets or fixes. | SEC-02, SEC-03 |
+| Publication hints | Model-written text reveals flaw locations, snippets or private rationale; location-revealing paraphrases remain an accepted residual risk under SEC-03. | SEC-02, SEC-03 |
 | Learner comments and grading | A review asks the model to award full credit, assess another comment or reproduce the private key. | SEC-01–SEC-03 |
 | TA summaries | Stored comments or feedback act as second-order instructions. Forged evidence IDs cross the summary's learner boundary. | SEC-01, SEC-02 |
 | Provider transport, errors and output | Redirects, extra fields, markup, fabricated identifiers or verbose errors expose secrets or trigger side effects. | SEC-01, SEC-02, SEC-06 |
@@ -63,20 +63,56 @@ navigation, fetch resources or execute code.
 
 ### SEC-03 — Protect learner-facing hints and feedback
 
-Accept learner-facing model text only when it exactly matches a server-approved
-plain-text phrase for its allowed selector. Hint phrases are generic review
-prompts selected by flaw category. Feedback phrases describe the assessment of
-the existing comment using its explanation and fix credits. The phrase sets
-contain no locations, code snippets, concrete fixes or private rationale and
-accept no interpolation from model or private data. The model selects phrasing
-through the existing text fields. The server rejects an unapproved selection
-before persistence. Access to cached hints remains scoped to the eligible
-submission, pinned revision and missed flaw under the integration contract.
+Hints and assessment feedback are model-written plain text in the existing
+INTEGRATION-SPEC fields. Prompts instruct the model to avoid revealing
+locations, identifying snippets, fixes or private rationale, and to make
+feedback specific to the assessed comment and its credits.
+Private rationale is never reused as learner feedback, including for the
+matched flaw.
 
-- **SEC-03.1:** Return schema-valid text that quotes, paraphrases or encodes a
-  planted answer, names a line, supplies a fix or uses a phrase for the wrong
-  category or credits. After permitted retries, assert `INVALID_AI_OUTPUT` and
-  no new publication or original grade. Verify approved phrases succeed.
+Before persistence, the server rejects any hint or feedback that exceeds its
+INTEGRATION-SPEC length bound, contains markup or links, refers to a line or
+line range, or meets the protected-text overlap rule below. Markup
+means HTML/XML tags or comments and backtick code spans or fences; links
+include Markdown links, autolinks and bare URLs. Line references include
+explicit forms such as `line 12`, `lines 12–14`, `L12` and `L12–L14`.
+Accepted text is stored and displayed as inert plain text under SEC-02.
+
+**Protected-text overlap rule:** Normalize each candidate and each protected
+value with Unicode NFKC, then full Unicode case folding. Tokenize into maximal
+runs of Unicode letters, marks or numbers; punctuation, symbols and whitespace
+only separate tokens. Reject an exact contiguous match of eight tokens. For
+protected values of four to seven tokens, reject only when the entire sequence
+appears. Values under four tokens are not checked. Compare each value
+separately: every retained flaw's original snippet, replacement snippet,
+private explanation and fix. Each hint and each feedback item is checked
+against every retained flaw of the revision,
+including the matched flaw for feedback, not only flaws sent to that operation.
+
+Rejected output follows the existing INTEGRATION-SPEC retry and failure
+behaviour: after permitted retries, return `INVALID_AI_OUTPUT`, with no new
+publication or original grade. Access to cached hints remains scoped to the
+eligible submission, pinned revision and missed flaw under the integration
+contract.
+
+**Accepted residual risk:** A paraphrase can point at a flaw's location without
+quoting protected text or naming a line. Protected values under four tokens
+are not checked: they are too short to identify a flaw, and checking them would
+reject ordinary prose such as "return a value". Deterministic checks cannot
+establish that such text is safe; prompt instructions and the checks above
+mitigate these risks but do not eliminate them.
+
+- **SEC-03.1:** Use the fake provider to return schema-valid text with prohibited
+  overlap from a planted original or replacement snippet or private explanation
+  or fix, or text that names a line or range or contains markup or links. Test
+  both hints and feedback, including overlap with another retained flaw and
+  with the matched flaw for feedback. Assert rejection before persistence and,
+  after permitted retries, `INVALID_AI_OUTPUT` with no new publication or
+  original grade. Exercise length bounds, normalization, the eight-token match
+  boundary, whole-value matching at four tokens and punctuation not affecting
+  a match. Verify acceptance of overlap with protected values under four tokens
+  and harmless Markdown emphasis when all other checks pass. Verify a per-flaw
+  hint and comment-specific feedback that pass all checks are accepted.
 - **SEC-03.2:** Attempt early, cross-submission and cross-revision hint reads.
   Verify only eligible cached hints are returned, with the learner DTO
   projection, and neither successful nor rejected reads call the provider.
