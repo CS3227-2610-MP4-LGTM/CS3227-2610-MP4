@@ -55,30 +55,6 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["supabase", "db", "push"],
-    decision = "forbidden",
-    justification = "AGENTS.md Security rules require local Supabase only and forbid supabase db push; use the local Supabase workflow.",
-    match = ["supabase db push", "supabase db push --linked"],
-    not_match = ["supabase start", "bun run verify"],
-)
-
-prefix_rule(
-    pattern = ["bunx", "supabase", "db", "push"],
-    decision = "forbidden",
-    justification = "AGENTS.md Security rules require local Supabase only and forbid supabase db push, including through bunx; use the local Supabase workflow.",
-    match = ["bunx supabase db push", "bunx supabase db push --linked"],
-    not_match = ["supabase start", "bun run verify"],
-)
-
-prefix_rule(
-    pattern = ["npx", "supabase", "db", "push"],
-    decision = "forbidden",
-    justification = "AGENTS.md Security rules require local Supabase only and forbid supabase db push, including through npx; use the local Supabase workflow.",
-    match = ["npx supabase db push", "npx supabase db push --linked"],
-    not_match = ["supabase start", "bun run verify"],
-)
-
-prefix_rule(
     pattern = ["git", "commit"],
     decision = "forbidden",
     justification = "AGENTS.md Git rules reserve commits for humans; leave a reviewable local diff.",
@@ -102,122 +78,359 @@ prefix_rule(
     not_match = ["git status", "git diff", "git log", "bun run verify"],
 )
 
+# Supabase audit: bun.lock pins CLI 3.0.0; checked bunx supabase <cmd> --help.
+# v3 db/migration/gen types/inspect/storage/seed/test targets default to LOCAL;
+# hosted-only administration defaults to the LINKED project where applicable.
+# Block hosted-capable prefixes broadly except repo-required local reset, lint
+# and type generation. Local-only migration new, functions new/serve, db start,
+# declarative sync, init/start/stop/status and the db:* scripts remain available.
+#
+# Prefix rules compare literal tokens, not suffixes or globs. For the three
+# preserved subcommands, target flags below must be separate tokens immediately
+# after the subcommand. --remote=<ref|branch|url> (also legacy --flag=value),
+# target flags after other options/positionals, and global options inserted before
+# command prefixes are NOT comprehensively blocked. These forms remain forbidden
+# by policy; do not treat an unmatched command as permission to use a hosted DB.
+# --linked/--db-url/--project-id are retained defensively for older CLI syntax;
+# v3 help uses --remote. There are deliberately no pretend wildcard tokens.
+
 prefix_rule(
-    pattern = ["supabase", "link"],
+    pattern = ["supabase", ["backups", "bootstrap", "branches", "config", "domains", "encryption", "link", "network-bans", "network-restrictions", "notebooks", "orgs", "postgres-config", "projects", "pull", "secrets", "snippets", "ssl-enforcement", "sso", "vanity-subdomains"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["supabase link"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted project/account administration is forbidden, including commands that default to the linked project; use the local Supabase repository scripts.",
+    match = [
+        "supabase backups list", "supabase bootstrap", "supabase branches list", "supabase config push",
+        "supabase domains get", "supabase encryption get-root-key", "supabase link",
+        "supabase network-bans get", "supabase network-restrictions get", "supabase notebooks pull",
+        "supabase orgs list", "supabase postgres-config get", "supabase projects list", "supabase pull",
+        "supabase secrets list", "supabase snippets list", "supabase ssl-enforcement get",
+        "supabase sso list", "supabase vanity-subdomains get",
+    ],
+    not_match = [
+        "supabase start", "supabase stop", "supabase status", "supabase migration new add_reviews",
+        "supabase gen types --lang typescript", "supabase db reset", "supabase db lint", "bun run db:start",
+        "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types", "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["supabase", "db", "reset", "--linked"],
+    pattern = ["supabase", ["inspect", "seed", "storage"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["supabase db reset --linked"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "These command families can target hosted projects and have no required local use in this repository; use the local Supabase repository scripts.",
+    match = [
+        "supabase inspect db table-stats", "supabase inspect report", "supabase seed buckets",
+        "supabase storage ls",
+    ],
+    not_match = [
+        "supabase start", "supabase stop", "supabase status", "supabase migration new add_reviews",
+        "supabase gen types --lang typescript", "supabase db reset", "supabase db lint", "bun run db:start",
+        "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types", "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["supabase", "db", "reset", "--db-url"],
+    pattern = ["supabase", "functions", ["list", "delete", "download", "deploy"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["supabase db reset --db-url"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted Edge Function operations are forbidden, including the default linked project; use functions new or functions serve locally.",
+    match = [
+        "supabase functions list", "supabase functions delete example",
+        "supabase functions download example", "supabase functions deploy example",
+    ],
+    not_match = [
+        "supabase functions new example", "supabase functions serve", "supabase start", "supabase stop",
+        "supabase status", "supabase migration new add_reviews", "supabase gen types --lang typescript",
+        "supabase db reset", "supabase db lint", "bun run db:start", "bun run db:stop", "bun run db:status",
+        "bun run db:reset", "bun run db:types", "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["supabase", "db", "dump"],
+    pattern = ["supabase", "db", ["advisors", "diff", "dump", "pull", "push", "query"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["supabase db dump"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Database dumps and these hosted-capable database commands are forbidden in every target mode; use db reset, db lint and db:types locally.",
+    match = [
+        "supabase db advisors", "supabase db diff --remote=example", "supabase db dump", "supabase db pull",
+        "supabase db push", "supabase db query --read-only 'select 1'",
+    ],
+    not_match = [
+        "supabase db reset", "supabase db lint", "supabase db start", "supabase db schema declarative sync",
+        "supabase gen types --lang typescript", "bun run db:start", "bun run db:stop", "bun run db:status",
+        "bun run db:reset", "bun run db:types", "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["bunx", "supabase", "link"],
+    pattern = ["supabase", ["migration", "migrations"], ["list", "repair", "squash", "up", "down", "fetch"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["bunx supabase link"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted-capable migration history operations are forbidden, including the migrations alias; create migration files locally and apply them with bun run db:reset.",
+    match = [
+        "supabase migration list", "supabase migration repair", "supabase migration squash",
+        "supabase migration up", "supabase migration down", "supabase migration fetch",
+        "supabase migrations list", "supabase migrations repair", "supabase migrations squash",
+        "supabase migrations up", "supabase migrations down", "supabase migrations fetch",
+    ],
+    not_match = [
+        "supabase migration new add_reviews", "supabase migrations new add_reviews", "supabase db reset",
+        "bun run db:start", "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types",
+        "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["bunx", "supabase", "db", "reset", "--linked"],
+    pattern = ["supabase", "db", "schema", "declarative", "generate"],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["bunx supabase db reset --linked"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Declarative schema generation can read hosted databases and is not required locally here; use local migration files and bun run db:reset.",
+    match = [
+        "supabase db schema declarative generate",
+        "supabase db schema declarative generate --schema public --remote=example",
+    ],
+    not_match = [
+        "supabase db schema declarative sync", "supabase db reset", "supabase gen types --lang typescript",
+        "bun run db:start", "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types",
+        "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["bunx", "supabase", "db", "reset", "--db-url"],
+    pattern = ["supabase", "test", "db"],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["bunx supabase db reset --db-url"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "CLI pgTAP execution can target hosted databases and is not required here; use the repository test scripts against local Supabase.",
+    match = [
+        "supabase test db", "supabase test db tests/database --remote=example",
+    ],
+    not_match = [
+        "supabase test new review_test", "supabase db reset", "supabase gen types --lang typescript",
+        "bun run db:start", "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types",
+        "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["bunx", "supabase", "db", "dump"],
+    pattern = ["supabase", "db", ["lint", "reset"], ["--linked", "--db-url", "--project-id", "--remote"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["bunx supabase db dump"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted target flags are forbidden; keep db reset and db lint local, or use bun run db:reset. Prefix matching only covers a separate flag immediately after the subcommand.",
+    match = [
+        "supabase db lint --linked", "supabase db lint --db-url postgresql://example.invalid/postgres",
+        "supabase db lint --project-id example", "supabase db lint --remote", "supabase db reset --linked",
+        "supabase db reset --db-url postgresql://example.invalid/postgres",
+        "supabase db reset --project-id example", "supabase db reset --remote",
+    ],
+    not_match = [
+        "supabase db reset", "supabase db reset --no-seed", "supabase db lint",
+        "supabase db lint --schema public", "bun run db:start", "bun run db:stop", "bun run db:status",
+        "bun run db:reset", "bun run db:types", "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["npx", "supabase", "link"],
+    pattern = ["supabase", "gen", "types", ["--linked", "--db-url", "--project-id", "--remote"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["npx supabase link"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted type generation is forbidden; use bun run db:types or gen types --lang typescript (local by default in CLI v3). Prefix matching only covers a separate target flag immediately after types.",
+    match = [
+        "supabase gen types --linked", "supabase gen types --db-url postgresql://example.invalid/postgres",
+        "supabase gen types --project-id example", "supabase gen types --remote",
+    ],
+    not_match = [
+        "supabase gen types", "supabase gen types --lang typescript", "supabase gen types --local",
+        "supabase gen types --local --lang typescript", "supabase gen signing-key",
+        "supabase gen bearer-jwt", "bun run db:start", "bun run db:stop", "bun run db:status",
+        "bun run db:reset", "bun run db:types", "bun run verify",
+    ],
 )
 
 prefix_rule(
-    pattern = ["npx", "supabase", "db", "reset", "--linked"],
+    pattern = [["bunx", "npx"], "supabase", ["backups", "bootstrap", "branches", "config", "domains", "encryption", "link", "network-bans", "network-restrictions", "notebooks", "orgs", "postgres-config", "projects", "pull", "secrets", "snippets", "ssl-enforcement", "sso", "vanity-subdomains"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["npx supabase db reset --linked"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted project/account administration is forbidden, including commands that default to the linked project; use the local Supabase repository scripts.",
+    match = [
+        "bunx supabase backups list", "bunx supabase bootstrap", "bunx supabase branches list",
+        "bunx supabase config push", "bunx supabase domains get", "bunx supabase encryption get-root-key",
+        "bunx supabase link", "bunx supabase network-bans get", "bunx supabase network-restrictions get",
+        "bunx supabase notebooks pull", "bunx supabase orgs list", "bunx supabase postgres-config get",
+        "bunx supabase projects list", "bunx supabase pull", "bunx supabase secrets list",
+        "bunx supabase snippets list", "bunx supabase ssl-enforcement get", "bunx supabase sso list",
+        "bunx supabase vanity-subdomains get", "npx supabase backups list", "npx supabase bootstrap",
+        "npx supabase branches list", "npx supabase config push", "npx supabase domains get",
+        "npx supabase encryption get-root-key", "npx supabase link", "npx supabase network-bans get",
+        "npx supabase network-restrictions get", "npx supabase notebooks pull", "npx supabase orgs list",
+        "npx supabase postgres-config get", "npx supabase projects list", "npx supabase pull",
+        "npx supabase secrets list", "npx supabase snippets list", "npx supabase ssl-enforcement get",
+        "npx supabase sso list", "npx supabase vanity-subdomains get",
+    ],
+    not_match = [
+        "bunx supabase start", "bunx supabase stop", "bunx supabase status",
+        "bunx supabase migration new add_reviews", "bunx supabase gen types --lang typescript",
+        "bunx supabase db reset", "bunx supabase db lint", "bun run db:start", "bun run db:stop",
+        "bun run db:status", "bun run db:reset", "bun run db:types", "bun run verify", "npx supabase start",
+        "npx supabase stop", "npx supabase status", "npx supabase migration new add_reviews",
+        "npx supabase gen types --lang typescript", "npx supabase db reset", "npx supabase db lint",
+    ],
 )
 
 prefix_rule(
-    pattern = ["npx", "supabase", "db", "reset", "--db-url"],
+    pattern = [["bunx", "npx"], "supabase", ["inspect", "seed", "storage"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["npx supabase db reset --db-url"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "These command families can target hosted projects and have no required local use in this repository; use the local Supabase repository scripts.",
+    match = [
+        "bunx supabase inspect db table-stats", "bunx supabase inspect report", "bunx supabase seed buckets",
+        "bunx supabase storage ls", "npx supabase inspect db table-stats", "npx supabase inspect report",
+        "npx supabase seed buckets", "npx supabase storage ls",
+    ],
+    not_match = [
+        "bunx supabase start", "bunx supabase stop", "bunx supabase status",
+        "bunx supabase migration new add_reviews", "bunx supabase gen types --lang typescript",
+        "bunx supabase db reset", "bunx supabase db lint", "bun run db:start", "bun run db:stop",
+        "bun run db:status", "bun run db:reset", "bun run db:types", "bun run verify", "npx supabase start",
+        "npx supabase stop", "npx supabase status", "npx supabase migration new add_reviews",
+        "npx supabase gen types --lang typescript", "npx supabase db reset", "npx supabase db lint",
+    ],
 )
 
 prefix_rule(
-    pattern = ["npx", "supabase", "db", "dump"],
+    pattern = [["bunx", "npx"], "supabase", "functions", ["list", "delete", "download", "deploy"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; linking projects, hosted database operations and database dumps are forbidden.",
-    match = ["npx supabase db dump"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted Edge Function operations are forbidden, including the default linked project; use functions new or functions serve locally.",
+    match = [
+        "bunx supabase functions list", "bunx supabase functions delete example",
+        "bunx supabase functions download example", "bunx supabase functions deploy example",
+        "npx supabase functions list", "npx supabase functions delete example",
+        "npx supabase functions download example", "npx supabase functions deploy example",
+    ],
+    not_match = [
+        "bunx supabase functions new example", "bunx supabase functions serve", "bunx supabase start",
+        "bunx supabase stop", "bunx supabase status", "bunx supabase migration new add_reviews",
+        "bunx supabase gen types --lang typescript", "bunx supabase db reset", "bunx supabase db lint",
+        "bun run db:start", "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types",
+        "bun run verify", "npx supabase functions new example", "npx supabase functions serve",
+        "npx supabase start", "npx supabase stop", "npx supabase status",
+        "npx supabase migration new add_reviews", "npx supabase gen types --lang typescript",
+        "npx supabase db reset", "npx supabase db lint",
+    ],
 )
 
 prefix_rule(
-    pattern = ["supabase", "db", "reset", "--remote"],
+    pattern = [["bunx", "npx"], "supabase", "db", ["advisors", "diff", "dump", "pull", "push", "query"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; Supabase CLI v3 targets hosted databases with --remote, which is forbidden.",
-    match = ["supabase db reset --remote"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Database dumps and these hosted-capable database commands are forbidden in every target mode; use db reset, db lint and db:types locally.",
+    match = [
+        "bunx supabase db advisors", "bunx supabase db diff --remote=example", "bunx supabase db dump",
+        "bunx supabase db pull", "bunx supabase db push", "bunx supabase db query --read-only 'select 1'",
+        "npx supabase db advisors", "npx supabase db diff --remote=example", "npx supabase db dump",
+        "npx supabase db pull", "npx supabase db push", "npx supabase db query --read-only 'select 1'",
+    ],
+    not_match = [
+        "bunx supabase db reset", "bunx supabase db lint", "bunx supabase db start",
+        "bunx supabase db schema declarative sync", "bunx supabase gen types --lang typescript",
+        "bun run db:start", "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types",
+        "bun run verify", "npx supabase db reset", "npx supabase db lint", "npx supabase db start",
+        "npx supabase db schema declarative sync", "npx supabase gen types --lang typescript",
+    ],
 )
 
 prefix_rule(
-    pattern = ["bunx", "supabase", "db", "reset", "--remote"],
+    pattern = [["bunx", "npx"], "supabase", ["migration", "migrations"], ["list", "repair", "squash", "up", "down", "fetch"]],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; Supabase CLI v3 targets hosted databases with --remote, which is forbidden.",
-    match = ["bunx supabase db reset --remote"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Hosted-capable migration history operations are forbidden, including the migrations alias; create migration files locally and apply them with bun run db:reset.",
+    match = [
+        "bunx supabase migration list", "bunx supabase migration repair", "bunx supabase migration squash",
+        "bunx supabase migration up", "bunx supabase migration down", "bunx supabase migration fetch",
+        "bunx supabase migrations list", "bunx supabase migrations repair",
+        "bunx supabase migrations squash", "bunx supabase migrations up", "bunx supabase migrations down",
+        "bunx supabase migrations fetch", "npx supabase migration list", "npx supabase migration repair",
+        "npx supabase migration squash", "npx supabase migration up", "npx supabase migration down",
+        "npx supabase migration fetch", "npx supabase migrations list", "npx supabase migrations repair",
+        "npx supabase migrations squash", "npx supabase migrations up", "npx supabase migrations down",
+        "npx supabase migrations fetch",
+    ],
+    not_match = [
+        "bunx supabase migration new add_reviews", "bunx supabase migrations new add_reviews",
+        "bunx supabase db reset", "bun run db:start", "bun run db:stop", "bun run db:status",
+        "bun run db:reset", "bun run db:types", "bun run verify", "npx supabase migration new add_reviews",
+        "npx supabase migrations new add_reviews", "npx supabase db reset",
+    ],
 )
 
 prefix_rule(
-    pattern = ["npx", "supabase", "db", "reset", "--remote"],
+    pattern = [["bunx", "npx"], "supabase", "db", "schema", "declarative", "generate"],
     decision = "forbidden",
-    justification = "Use the local Supabase repository scripts only; Supabase CLI v3 targets hosted databases with --remote, which is forbidden.",
-    match = ["npx supabase db reset --remote"],
-    not_match = ["bun run db:start", "bun run db:reset", "bun run verify"],
+    justification = "Declarative schema generation can read hosted databases and is not required locally here; use local migration files and bun run db:reset.",
+    match = [
+        "bunx supabase db schema declarative generate",
+        "bunx supabase db schema declarative generate --schema public --remote=example",
+        "npx supabase db schema declarative generate",
+        "npx supabase db schema declarative generate --schema public --remote=example",
+    ],
+    not_match = [
+        "bunx supabase db schema declarative sync", "bunx supabase db reset",
+        "bunx supabase gen types --lang typescript", "bun run db:start", "bun run db:stop",
+        "bun run db:status", "bun run db:reset", "bun run db:types", "bun run verify",
+        "npx supabase db schema declarative sync", "npx supabase db reset",
+        "npx supabase gen types --lang typescript",
+    ],
+)
+
+prefix_rule(
+    pattern = [["bunx", "npx"], "supabase", "test", "db"],
+    decision = "forbidden",
+    justification = "CLI pgTAP execution can target hosted databases and is not required here; use the repository test scripts against local Supabase.",
+    match = [
+        "bunx supabase test db", "bunx supabase test db tests/database --remote=example",
+        "npx supabase test db", "npx supabase test db tests/database --remote=example",
+    ],
+    not_match = [
+        "bunx supabase test new review_test", "bunx supabase db reset",
+        "bunx supabase gen types --lang typescript", "bun run db:start", "bun run db:stop",
+        "bun run db:status", "bun run db:reset", "bun run db:types", "bun run verify",
+        "npx supabase test new review_test", "npx supabase db reset",
+        "npx supabase gen types --lang typescript",
+    ],
+)
+
+prefix_rule(
+    pattern = [["bunx", "npx"], "supabase", "db", ["lint", "reset"], ["--linked", "--db-url", "--project-id", "--remote"]],
+    decision = "forbidden",
+    justification = "Hosted target flags are forbidden; keep db reset and db lint local, or use bun run db:reset. Prefix matching only covers a separate flag immediately after the subcommand.",
+    match = [
+        "bunx supabase db lint --linked",
+        "bunx supabase db lint --db-url postgresql://example.invalid/postgres",
+        "bunx supabase db lint --project-id example", "bunx supabase db lint --remote",
+        "bunx supabase db reset --linked",
+        "bunx supabase db reset --db-url postgresql://example.invalid/postgres",
+        "bunx supabase db reset --project-id example", "bunx supabase db reset --remote",
+        "npx supabase db lint --linked",
+        "npx supabase db lint --db-url postgresql://example.invalid/postgres",
+        "npx supabase db lint --project-id example", "npx supabase db lint --remote",
+        "npx supabase db reset --linked",
+        "npx supabase db reset --db-url postgresql://example.invalid/postgres",
+        "npx supabase db reset --project-id example", "npx supabase db reset --remote",
+    ],
+    not_match = [
+        "bunx supabase db reset", "bunx supabase db reset --no-seed", "bunx supabase db lint",
+        "bunx supabase db lint --schema public", "bun run db:start", "bun run db:stop", "bun run db:status",
+        "bun run db:reset", "bun run db:types", "bun run verify", "npx supabase db reset",
+        "npx supabase db reset --no-seed", "npx supabase db lint", "npx supabase db lint --schema public",
+    ],
+)
+
+prefix_rule(
+    pattern = [["bunx", "npx"], "supabase", "gen", "types", ["--linked", "--db-url", "--project-id", "--remote"]],
+    decision = "forbidden",
+    justification = "Hosted type generation is forbidden; use bun run db:types or gen types --lang typescript (local by default in CLI v3). Prefix matching only covers a separate target flag immediately after types.",
+    match = [
+        "bunx supabase gen types --linked",
+        "bunx supabase gen types --db-url postgresql://example.invalid/postgres",
+        "bunx supabase gen types --project-id example", "bunx supabase gen types --remote",
+        "npx supabase gen types --linked",
+        "npx supabase gen types --db-url postgresql://example.invalid/postgres",
+        "npx supabase gen types --project-id example", "npx supabase gen types --remote",
+    ],
+    not_match = [
+        "bunx supabase gen types", "bunx supabase gen types --lang typescript",
+        "bunx supabase gen types --local", "bunx supabase gen types --local --lang typescript",
+        "bunx supabase gen signing-key", "bunx supabase gen bearer-jwt", "bun run db:start",
+        "bun run db:stop", "bun run db:status", "bun run db:reset", "bun run db:types", "bun run verify",
+        "npx supabase gen types", "npx supabase gen types --lang typescript",
+        "npx supabase gen types --local", "npx supabase gen types --local --lang typescript",
+        "npx supabase gen signing-key", "npx supabase gen bearer-jwt",
+    ],
 )
