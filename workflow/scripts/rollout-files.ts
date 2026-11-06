@@ -64,9 +64,12 @@ export async function summarizeRollouts(
   const session = selection.id || env.CODEX_SESSION_ID;
   const byThread = thread ? candidates.filter(file => file.summary.threadId === thread) : [];
   const bySession = session ? candidates.filter(file => file.summary.sessionId === session) : [];
-  if (byThread.length === 1) return [byThread[0].summary];
-  if (byThread.length > 1 || bySession.length > 1) throw new Error();
-  if (bySession.length === 1) return [bySession[0].summary];
+  const matches = recent(byThread.length ? byThread : bySession);
+  if (matches.length) {
+    if (new Set(matches.map(file => file.summary.threadId)).size > 1) throw new Error();
+    // Split rollouts may already have cumulative totals; select one, never sum them.
+    return [(matches.find(file => file.summary.tokens.total_tokens !== "unknown") ?? matches[0]).summary];
+  }
   // An explicit or environment-provided identity must never silently select another session.
   if (thread || session) return [];
   return recent(candidates.filter(file => file.inRepository)).slice(0, 1).map(file => file.summary);

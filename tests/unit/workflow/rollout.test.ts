@@ -131,6 +131,53 @@ describe("file selection and CLI", () => {
     expect((await summarizeRollouts({}, { CODEX_HOME: home }, "/synthetic-repo"))[0].threadId).toBe("thread-b");
     expect((await summarizeRollouts({ id: "other-session" }, env, "/synthetic-repo"))[0].threadId).toBe("other");
   });
+  it.each([
+    { name: "explicit session ID", args: ["--id", "shared-session"], identity: {} },
+    { name: "CODEX_SESSION_ID", args: [], identity: { CODEX_SESSION_ID: "shared-session" } },
+  ])("#31 rejects $name matching distinct threads even when one has token totals", async ({ args, identity }) => {
+    const { home, directory } = await fixtureHome();
+    await writeFile(join(directory, "rollout-b.jsonl"), [meta("thread-b"),
+      record("token_usage_record", { thread_token_usage: usage }, "2026-01-02T00:00:00Z")].join("\n"));
+    const result = spawnSync("bun", ["workflow/scripts/rollout-summary.ts", ...args], {
+      encoding: "utf8",
+      env: { ...process.env, CODEX_HOME: home, CODEX_THREAD_ID: "", CODEX_SESSION_ID: "", ...identity },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual(parseRollout([]));
+  });
+  it.each([
+    { name: "explicit thread ID", args: ["--id", "thread-a"], identity: {} },
+    { name: "explicit session ID", args: ["--id", "shared-session"], identity: {} },
+    { name: "CODEX_THREAD_ID", args: [], identity: { CODEX_THREAD_ID: "thread-a", CODEX_SESSION_ID: "missing" } },
+    { name: "CODEX_SESSION_ID", args: [], identity: { CODEX_SESSION_ID: "shared-session" } },
+  ])("#31 selects the newer split-thread file with token totals via $name", async ({ args, identity }) => {
+    const { home, directory } = await fixtureHome();
+    const lines = [meta(), context("a"), context("b"),
+      record("token_usage_record", { thread_token_usage: usage }, "2026-01-02T00:00:00Z")];
+    await writeFile(join(directory, "rollout-b.jsonl"), lines.join("\n"));
+    const result = spawnSync("bun", ["workflow/scripts/rollout-summary.ts", ...args], {
+      encoding: "utf8",
+      env: { ...process.env, CODEX_HOME: home, CODEX_THREAD_ID: "", CODEX_SESSION_ID: "", ...identity },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual(parseRollout(lines));
+  });
+  it.each([
+    { name: "newest known total without summing", older: usage, newer: { ...usage, total_tokens: 1234 }, expected: "newer" },
+    { name: "older known total over newer partial usage", older: { ...usage, total_tokens: 0 }, newer: { input_tokens: 200 }, expected: "older" },
+    { name: "newest file when neither total is known", older: undefined, newer: undefined, expected: "newer" },
+  ])("#31 prefers the $name", async ({ older, newer, expected }) => {
+    const { home, directory } = await fixtureHome();
+    const olderLines = [meta(), context("a"), record("token_usage_record", { thread_token_usage: older })];
+    const newerLines = [meta(), context("b"),
+      record("token_usage_record", { thread_token_usage: newer }, "2026-01-02T00:00:00Z")];
+    await writeFile(join(directory, "rollout-a.jsonl"), olderLines.join("\n"));
+    await writeFile(join(directory, "rollout-b.jsonl"), newerLines.join("\n"));
+    expect(await summarizeRollouts({ id: "thread-a" }, { CODEX_HOME: home }, "/unrelated-repo"))
+      .toEqual([parseRollout(expected === "older" ? olderLines : newerLines)]);
+  });
   it("reads explicit paths and suppresses all raw filesystem/argument errors", async () => {
     const { home, directory } = await fixtureHome();
     expect((await summarizeRollouts({ path: join(directory, "rollout-a.jsonl") }, {}, "/synthetic-repo"))[0].sessionId).toBe("shared-session");
