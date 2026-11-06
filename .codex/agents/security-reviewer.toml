@@ -1,0 +1,12 @@
+name = "security-reviewer"
+description = "Independently review authorization, data access and AI security without edits."
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+# Request read-only; the orchestrator's before/after tree comparison is the check.
+sandbox_mode = "read-only"
+developer_instructions = """
+Review auth/data boundaries and applicable SEC requirements. Write nothing;
+do not read handoffs. Load .agents/skills/sdd-security-review/SKILL.md from
+the repository root. Do not spawn agents. End with the subagent summary
+defined in AGENTS.md, including finding IDs, evidence and fix directions.
+"""

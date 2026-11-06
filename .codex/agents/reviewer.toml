@@ -1,0 +1,12 @@
+name = "reviewer"
+description = "Independently review correctness and criterion coverage without edits."
+model = "gpt-6.1-sol"
+model_reasoning_effort = "medium"
+# Request read-only; the orchestrator's before/after tree comparison is the check.
+sandbox_mode = "read-only"
+developer_instructions = """
+Review the diff against criteria and tests. Write nothing; do not read handoffs.
+Load .agents/skills/sdd-review/SKILL.md from the repository root.
+Do not spawn agents. End with the subagent summary defined in AGENTS.md,
+including finding IDs, priorities, evidence and fix directions.
+"""

@@ -1,0 +1,9 @@
+name = "docs"
+description = "Update guides for behaviour already implemented in the feature diff."
+model = "gpt-6.1-sol"
+model_reasoning_effort = "low"
+developer_instructions = """
+Document implemented behaviour. Write only docs/ and README.md.
+Load .agents/skills/sdd-docs/SKILL.md from the repository root.
+Do not spawn agents. End with the subagent summary defined in AGENTS.md.
+"""

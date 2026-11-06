@@ -206,6 +206,73 @@ Subsequent changes to `docs/` on `master` trigger GitHub's Pages build. Use the
 published URL shown in Pages settings. Do not add a `.nojekyll` file, which
 would bypass Jekyll processing.
 
+## Agent workflow
+
+Start feature work in a human-led main session with
+[sdd-orchestrate](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.agents/skills/sdd-orchestrate/SKILL.md).
+The orchestrator routes work, checks gates itself and maintains the
+feature handoff. Specialists return evidence, never write their own handoffs
+or spawn more agents. Humans own commits and PRs.
+After each stage, the orchestrator records the agent's rollout token total
+in the handoff (or `unavailable`), and at close-out records its own session total.
+
+Low handles copy, styling, docs and comments without behaviour changes in the
+main session, with targeted checks and no handoff. Standard handles behaviour
+on existing foundations: main-session tests and implementation, independent
+reviewer, then main-session docs. High uses every specialist for auth/session/
+role work, database enforcement, privileged access, AI/SEC work or CI/deploy
+changes. The planner proposes routes; actual changes can escalate them. Only
+a human can downgrade with a recorded reason.
+
+The loop is Ready → Plan → Tests → Implement → Review → Docs → Close-out.
+G1 approves and commits the plan in the feature's own PR; G2 reads and commits
+failing acceptance tests before code; G3 resolves blocked work or decisions;
+G4 runs `bun run verify` and `bun run test:e2e`, commits, logs and opens the PR.
+Existing tasks skip planning. Agent checks use targeted tests, lint and
+typecheck because full verify is unreliable inside agent sessions. Tests use
+local Supabase and the fake LLM provider. The orchestration skill owns the
+gate messages, fix-round limit and human commit sequence.
+
+This uses **orchestrator–subagent** coordination for the loop and
+**generator–verifier** coordination between implementer and reviewer. On high,
+correctness and security reviewers run in parallel and write nothing. Each
+gets fresh context without the parent conversation or handoff, so findings
+come from code and tests. Before and after reviews, the orchestrator compares
+tree hashes: a sandbox label or a report cannot establish that no files
+changed. A mismatch invalidates the review and stops for a human.
+
+Every task's Reads names exact spec headings and story files. Each specialist
+skill adds its fixed reading set; agents extract those sections rather than
+loading complete specs. Spawn prompts place fixed instructions before task
+values to share a cacheable prefix. Sessions without spawning follow the same
+stages themselves and request fresh review sessions at the review gate.
+
+All roles use `gpt-6.1-sol` for consistent model behaviour. Effort follows the
+work: planner high for decomposition and capacity decisions; test-writer,
+implementer and reviewer medium for bounded code work; security-reviewer high
+for access and adversarial paths; docs low for checked guide updates. Low-route
+main-session work uses low effort.
+
+Reviewer files request a read-only sandbox, but the workflow does not rely
+on it. The orchestrator's before/after tree comparison is the check.
+
+| File or location | Purpose |
+| --- | --- |
+| [workflow/PLAN.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/PLAN.md) | Task format, capacity and role groups; planner adds approved feature tasks. |
+| [workflow/templates/handoff.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/templates/handoff.md) | Template for each feature's coordination record. |
+| `workflow/handoffs/<issue>-<slug>.md` | Per-feature route, stages, decisions, findings and next action; created when a standard/high feature starts. |
+| [workflow/templates/story-spec.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/templates/story-spec.md) | Shared format for story specifications. |
+| [workflow/specs/README.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/README.md) | Spec boundaries, identifiers and reading conventions. |
+| [workflow/specs/PRODUCT-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/PRODUCT-SPEC.md) | Product decisions, story allocation and UI vocabulary. |
+| [workflow/specs/TECHNICAL-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md) | SYS requirements. |
+| [workflow/specs/INTEGRATION-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md) | Data, contracts, fixtures and integration verification. |
+| [workflow/specs/AI-SECURITY-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md) | SEC requirements and attack surfaces. |
+| [workflow/specs/stories/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/) | One file per story, using the shared story template. |
+| [workflow/scripts/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/) | `rollout-summary.ts`: session-log metadata CLI; `rollout-files.ts`: safe rollout discovery and selection; `rollout-parser.ts`: projects records into approved summary fields. |
+| [.codex/config.toml](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/config.toml), [.codex/agents/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/agents) | Agent limits and the six specialist definitions. |
+| [.agents/skills/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.agents/skills) | Canonical procedures: sdd-orchestrate, sdd-plan, sdd-test, sdd-implement, sdd-review, sdd-security-review and sdd-docs. |
+| [.claude/skills/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.claude/skills) | Matching pointer stubs for Claude Code. |
+
 ## Acknowledgements
 
 The application was scaffolded with `create-next-app`.
