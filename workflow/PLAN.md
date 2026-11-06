@@ -90,7 +90,7 @@ the limits above remain unchanged.
   The orchestrator runs every database-backed check; subagents report such
   checks as not run, never passed or failed.
 - **Depends on:** none
-- **Status:** todo
+- **Status:** done
 
 ### T-02: Account pages and role navigation
 
