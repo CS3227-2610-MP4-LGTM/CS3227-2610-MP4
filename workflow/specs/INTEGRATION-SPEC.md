@@ -74,8 +74,9 @@ alongside the access rules in SYS-10–SYS-12. All relationships use IDs, never 
 | `challenge_drafts` | One per challenge: `challengeId`, title, description, language, difficulty, `workingCode`, `flawCount`, `categories`, `generationId: UUID | null`, integer `draftVersion >= 1`. Each edit increments draftVersion. |
 | `proposal_sets` | `id`, `challengeId`, `sourceDraftVersion`, immutable input snapshot, validated proposals, `createdAt`. A new generation replaces the draft's active set, not historical sets. |
 | `proposal_decisions` | One per active proposal: `proposalId`, `decision: pending | approved | rejected`. Any active-set decision change increments draftVersion. |
-| `challenge_revisions` | `id`, `challengeId`, integer `revisionNumber >= 1`, title, description, language, difficulty, `workingCode`, `flawedCode`, server-derived diff, `publishedAt`. Unique `(challengeId, revisionNumber)`; immutable after publication. |
-| `revision_flaws` | `id`, `revisionId`, `proposalId`, `category`, `originalSnippet`, `replacementSnippet`, `sourceStartLine`, `sourceEndLine`, `startLine`, `endLine`, `explanation`, `fix`. Source and final flawed-code ranges are inclusive. Private answer material, physically separate from learner-readable revision fields. |
+| `challenge_revisions` | `id`, `challengeId`, integer `revisionNumber >= 1`, title, description, language, difficulty, `flawedCode`, `publishedAt`. Unique `(challengeId, revisionNumber)`; immutable after publication. |
+| `revision_answers` | Unique `revisionId`, `workingCode`, server-derived real diff; immutable after publication. |
+| `revision_flaws` | `id`, `revisionId`, `proposalId`, `category`, `originalSnippet`, `replacementSnippet`, `sourceStartLine`, `sourceEndLine`, `startLine`, `endLine`, `explanation`, `fix`. Source and final flawed-code ranges are inclusive. |
 | `flaw_hints` | `id`, unique `flawId`, `revisionId`, `text`, generation metadata. Immutable after publication, never a learner-editable cache. |
 | `submissions` | `id`, `learnerId`, `challengeId`, `revisionId`, `attemptNumber: 1 | 2`, `previousSubmissionId: UUID | null`, `submittedAt`. Unique `(learnerId, challengeId, attemptNumber)`; immutable content. |
 | `submission_comments` | `id`, `submissionId`, `ordinal` (zero-based input order), `line`, `body`. Unique ordinal per submission; immutable. |
@@ -86,6 +87,11 @@ alongside the access rules in SYS-10–SYS-12. All relationships use IDs, never 
 | `flag_resolutions` | `id`, `flagId`, `actorId`, server timestamp, server `auditOrder`, `disposition: upheld | dismissed`, reason. Append-only; corrections append. |
 | `performance_summaries` | `id`, `learnerId`, `requestedBy`, input fingerprint, immutable validated output, `createdAt`. No email, Auth records or unrestricted profile payloads. |
 | `ai_usage_records` | Server-derived account and operation IDs, operation kind, reservation/settlement state and usage events under SYS-10/SYS-12. Budget fields and accounting transitions are owned by AI-SECURITY-SPEC, not accepted from role clients. |
+
+`revision_answers` and `revision_flaws` are private answer material under
+[SYS-12](TECHNICAL-SPEC.md#sys-12--record-access-and-audit), physically separate
+from learner-readable revision fields. Learners cannot read them through server
+entry points or direct user-scoped database access.
 
 `auditOrder` is a unique monotonically increasing server-assigned integer within
 each submission's audit stream. Allocate it transactionally while serializing
@@ -109,7 +115,7 @@ Published revisions, their answer keys and hints are never edited or deleted.
   Rejected flaws contribute neither code changes nor answers nor hints. The
   configured flawCount controls proposal generation; the approved count may be smaller.
 - Generate hints against the complete approved candidate. Persisting the revision,
-  flaws, all hints and published pointer is one transaction. Failure or a changed
+  private answers, flaws, all hints and published pointer is one transaction. Failure or a changed
   draftVersion leaves the existing publication intact and creates no partial revision.
   No database transaction is held open during a provider call.
 - Any title, description, language, difficulty, working-code or configuration edit
@@ -132,13 +138,23 @@ Published revisions, their answer keys and hints are never edited or deleted.
 
 ### Code, proposals and locations
 
-The shared code/diff DTO is `{ path, before, after, hunks }`, where `before` is
-workingCode and `after` is flawedCode. A hunk is `{ oldStart, oldCount, newStart,
-newCount, lines }`; each line is `{ kind: context | added | removed, text,
+The shared `CodeDiff` DTO is `{ path, before, after, hunks }`; `after` is always
+flawedCode. A hunk is `{ oldStart, oldCount, newStart, newCount, lines }`;
+each line is `{ kind: context | added | removed, text,
 oldLine: integer | null, newLine: integer | null }`. Context has both line numbers,
 added has newLine only, removed has oldLine only; counts and text must reproduce
-the stored files. Zero starts/counts are permitted for an empty side. Diff text
+`before` and `after`. Zero starts/counts are permitted for an empty side. Diff text
 is computed by the server, never trusted from an LLM or request.
+
+**Decision: project code by recipient role.** Every Learner projection uses a
+new-file diff: `before` is empty and one hunk contains every flawedCode line as
+`added`, with `oldLine: null` and consecutive `newLine` values starting at 1.
+For N lines under section 1's line convention, the hunk has `oldStart: 0`,
+`oldCount: 0`, `newStart: 1`, `newCount: N`; `after` preserves the stored string,
+including its trailing LF if present. This applies to live challenge views, own
+SubmissionView code (including pinned history) and retries. Authors and TAs
+receive the real workingCode-to-flawedCode diff, with `before: workingCode`.
+This prevents diff hunks from identifying retained flaws or exposing their fixes.
 
 A proposal replaces an inclusive, full-line range in workingCode. Its
 originalSnippet must exactly equal that range joined with LF. ReplacementSnippet
@@ -197,16 +213,16 @@ filter-mismatched cursors return 400. No list returns unbounded rows.
 | DTO | Exact fields |
 | --- | --- |
 | `ChallengeCard` | `id, revisionId, title, description, language, difficulty, categories: Category[], publishedAt`. Categories are the sorted unique approved categories. |
-| `ChallengeView` | ChallengeCard plus `code: CodeDiff`. No proposals, answers, fix text, original annotations or hints. |
+| `ChallengeView` | ChallengeCard plus `code: CodeDiff` (Learner: new-file; Author/TA: real diff), per [section 2](#code-proposals-and-locations). No separate proposals, answer key, fix text, original annotations or hints. |
 | `AuthorDraft` | `id, status, rowVersion, publishedRevisionId, draftVersion, title, description, language, difficulty, workingCode, flawCount, categories, generationId, proposals: ProposalWithDecision[]`. Empty proposals if invalidated. |
-| `AuthorPublication` | `id, status, rowVersion, revisionId, revisionNumber, publishedAt`. Detailed own revision access also includes CodeDiff, private flaws and hints. |
+| `AuthorPublication` | `id, status, rowVersion, revisionId, revisionNumber, publishedAt`. Detailed own revision access also includes Author-projected CodeDiff under [section 2](#code-proposals-and-locations), private flaws and hints. |
 | `Comment` | `id, ordinal, line, body` |
-| `SubmissionView` | `id, challengeId, revisionId, learner: { id, displayName }, attemptNumber, previousSubmissionId, submittedAt, challenge: ChallengeView, comments: Comment[], grading: GradingView, flags: FlagView[]`. No learner email. |
+| `SubmissionView` | `id, challengeId, revisionId, learner: { id, displayName }, attemptNumber, previousSubmissionId, submittedAt, challenge: ChallengeView, comments: Comment[], grading: GradingView, flags: FlagView[]`. Nested ChallengeView uses the authenticated recipient's projection per [section 2](#code-proposals-and-locations). No learner email. |
 | `GradingView` | `state: pending | running | failed | completed`, `failureCode: string | null`, `original: LearnerGrade | null`, `effective: { score, passed, source: ai | ta } | null`, `overrides: { id, actorId, createdAt, auditOrder, score, reason }[]`. Original/effective are nonnull only on completed grading. |
 | `LearnerGrade` | `score, passMark, passed, identificationPoints, explanationPoints, fixPoints, matchedCount, missedCount, unmatchedCommentIds: UUID[], duplicateCommentIds: UUID[], comments: { commentId, matched: boolean, explanationCredit: Credit | null, fixCredit: Credit | null, feedback: string | null }[], eligibleHints: { hintId, category }[]`. No private flaw IDs, locations, explanation or fixes. |
 | `FlagView` | `id, submissionId, source, kind, commentId, reason, createdAt, status: open | resolved, resolutions: { id, actorId, createdAt, auditOrder, disposition, reason }[]` |
 | `SubmissionCard` | `id, challengeId, revisionId, title, learner: { id, displayName }, attemptNumber, submittedAt, gradingState, effectiveScore: integer | null, openFlagCount` |
-| `TaSubmissionView` | SubmissionView plus `answerKey: RevisionFlaw[]`, `matching` and per-flaw original assessment records from section 5. |
+| `TaSubmissionView` | SubmissionView with the TA code projection, plus `answerKey: RevisionFlaw[]`, `matching` and per-flaw original assessment records from section 5. |
 
 `RevisionFlaw` has exactly the revision_flaws fields in section 2. `CodeDiff`
 is the code/diff DTO in section 2. `Proposal`
@@ -490,8 +506,10 @@ Retain two proposals, each replacing only its named source line:
 | F2 | edge_case, source/final line 10 | `  return prices.reduce((sum, price) => sum + price, 0);` → `  return prices.reduce((sum, price) => sum + price);` | An empty basket causes reduce to throw. / Supply zero as the initial accumulator. | H2: “Consider the smallest possible basket.” |
 
 The C1 flawedCode is exactly workingCode with these two substitutions and no
-other changes; the diff has removed/added pairs at lines 3 and 10. This derivation
-defines the full fixture string without a second independently maintained copy.
+other changes; the Author/TA diff has removed/added pairs at lines 3 and 10.
+Learner code follows [section 2](#code-proposals-and-locations), for C1 and C2.
+This derivation defines the full fixture string without a second independently
+maintained copy.
 
 ### C2: Safe quotient
 
@@ -580,6 +598,16 @@ revisions, attempt limits, original-grade uniqueness, all-or-nothing publication
 and append-only audit behavior. Exercise the SYS-12 two-user-per-role matrix
 through server endpoints and direct user-scoped database access, including private
 column/join projections, historical reads and forged IDs/actors/times.
+
+Verify [section 2's code projections](#code-proposals-and-locations) in live
+Learner challenge responses, own SubmissionView responses (including pinned
+history after edits/unpublishing/archiving) and retries. Assert no workingCode
+or real diff is exposed; the empty-before, single all-added hunk reproduces
+flawedCode exactly with valid counts and line numbers, including trailing-LF
+and no-trailing-LF cases. Direct Learner reads, including columns, joins and
+historical revisions, cannot expose workingCode or the real diff. Author and
+TA responses retain the real diff. Comment lines still address flawedCode;
+matching and scoring outcomes remain unchanged.
 
 Fake-provider integration connects Author publication → Learner submission and
 grading → TA override/resolution → Learner history using section 6. Rejection
