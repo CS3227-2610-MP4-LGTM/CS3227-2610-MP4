@@ -43,7 +43,7 @@ Before the first `bun run dev`, create `.env.local` as described in
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |
 
-CI runs the local Auth integration suite in a separate job required by
+CI runs the local Auth and domain integration suites in a separate job required by
 `verify`. See [Auth tests and settings](docs/DeveloperGuide.md#auth-tests-and-settings)
 for setup and the hosted settings that need human review.
 

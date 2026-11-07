@@ -121,7 +121,7 @@ Never prefix `SUPABASE_SECRET_KEY` with `NEXT_PUBLIC_` and never commit
 | `bun run db:stop` | Stops the stack, keeping its data |
 | `bun run db:status` | Shows URLs and keys of the running stack |
 | `bun run db:reset` | Recreates the local database from `supabase/migrations/` and `supabase/seed.sql` |
-| `bun run db:types` | Regenerates `src/lib/supabase/database.types.ts` from the local database |
+| `bun run db:types` | Regenerates `src/lib/supabase/database.types.ts` for `public`, `graphql_public` and `private` from the local database |
 
 ### Changing the schema
 
@@ -153,6 +153,25 @@ for the approved admin operations in
 [SYS-10.3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-10--database-enforcement-and-privileged-access):
 bypassing RLS does not supply table privileges. Explicit grants do not
 authorize any additional admin-client use.
+
+### Domain schema
+
+Domain tables use explicit grants and RLS. `authenticated` can select from
+role-readable domain tables under policies that use the stored profile role
+and record ownership or moderation scope. `anon` and `service_role` have no
+table access to the new domain records. None of these roles has a write grant
+on them. The private audit-order table has explicit RLS and revokes, and the
+migration revokes default function execution and sequence privileges. See the
+[domain schema migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261107120000_domain_schema.sql).
+
+Learners can read the live revision and revisions pinned by their own
+submissions. Answer keys and cached hint text are separate from those revision
+rows and remain restricted to the owning Author and TAs within their read
+scope. The owning Learner and TAs can read grade results, comment feedback and
+eligible hint references. Flaw matches and grade-to-run provenance stay in
+separate TA-only tables. A database trigger preserves a grading run's
+submission, run number and creation time and prevents any transition out of
+`completed`, including for trusted SQL writers.
 
 ### Clients
 
@@ -208,13 +227,15 @@ bun run test:integration
 ```
 
 Integration tests run in Vitest's Node environment against real local Auth,
-API and Postgres services. The `pg` dev dependency performs schema checks;
-fixtures exercise provisioning, immutable roles, grants/RLS, profile visibility
-and refresh behavior. Tests capture local CLI configuration in memory and
-clean up fixture accounts. Throttling failures are injected rather than
-exhausting the provider limit. CI's `integration` job runs this suite with local
-Auth and is required by the `verify` job; local `bun run verify` still runs
-lint, typecheck, unit tests and build. CI uses Node 24 from `.node-version`.
+API and Postgres services. Auth tests cover provisioning, immutable roles,
+profile visibility and refresh behavior. Domain tests use `pg` to check RLS,
+grants, constraints and grading-run history with scoped and trusted SQL
+sessions. They roll back seeded domain rows before deleting fixture accounts.
+To run the domain tests alone, use `bun run test:integration tests/integration/domain`.
+Tests capture local CLI configuration in memory. Auth tests inject throttling
+failures to stay within the provider limit. CI's `integration` job runs these
+suites and is required by the `verify` job. Local `bun run verify` runs lint,
+typecheck, unit tests and build. CI uses Node 24 from `.node-version`.
 
 Local `auth.rate_limit.sign_in_sign_ups` is 300 per five minutes per IP to
 support repeated integration/fix-round runs. This does not change hosted
