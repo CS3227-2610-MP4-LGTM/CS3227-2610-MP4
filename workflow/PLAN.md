@@ -129,6 +129,75 @@ the limits above remain unchanged.
 - **Depends on:** T-01
 - **Status:** todo
 
+### T-03: Domain schema
+
+- **Issue:** #37
+- **Covers:** INTEGRATION-SPEC §1 persisted bounds, §2 domain records and
+  schema invariants (excluding `profiles` and `ai_usage_records`), and §5
+  Flags source/shape and uniqueness. SYS-10.1 on every new application table
+  in both schemas, SYS-10.2 for stored-role RLS and restricted reads, and
+  SYS-10.4 for denial of privileged use on this schema. SYS-12.1 covers read
+  rules and write denial through direct database access for these records.
+  SYS-12.3 covers database denial of forged audit writes, nonblank reasons,
+  and preservation and uniqueness of audit entries. SYS-12.4 covers direct
+  submission write denial and schema preservation of pinned code, answer
+  keys, original grades and Learner history reads across edits, unpublishing
+  and archiving. SYS-12.5 covers denial of direct Learner hint-cache access,
+  forged flags/resolutions and non-TA summary access. SEC-01.1 covers only
+  direct database protection of private records and server-generated writes.
+- **Route:** high
+- **Reads:** `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract
+  conventions, §2 Domain model and publication lifecycle (including SYS-12
+  decision: immutable published revisions and Code, proposals and locations),
+  §3 Shared response types, §5 Matching and score, and §5 Flags;
+  `workflow/specs/TECHNICAL-SPEC.md` §1 Purpose, boundaries and assumptions
+  (ASM-01), SYS-10 — Database enforcement and privileged access,
+  and SYS-12 — Record access and audit; `workflow/specs/AI-SECURITY-SPEC.md`
+  SEC-01 — Authorize and minimize model access (SEC-01.1).
+- **Tests:** integration against local Supabase (`tests/integration/domain/`,
+  with `tests/integration/auth/` as a regression check). Drive one access
+  matrix over one fixture with two accounts per role and an anonymous caller.
+  Create distinct domain accounts through the local Auth admin API using
+  T-01's harness and seed domain rows with `pg` in a rollback transaction.
+  Exercise real restricted database roles and user claims for scoped reads
+  and denied writes, including forged generated rows. Test catalog grants and
+  RLS in both schemas, default table/function/sequence privileges, and zero
+  table access for `service_role`. Use rolled-back constraint probes to test
+  wrong-role owners, cross-record IDs, bounds, uniqueness and immutable or
+  append-only rows. Roll back domain rows before deleting fixture accounts.
+  Keep assertions scoped to fixture IDs and preserve the T-01 Auth cascade.
+  The orchestrator runs all database-backed checks with per-command
+  escalation. Subagents report those checks as unrun.
+- **Config paths:** `vitest.integration.config.mts` (include the domain suite
+  and preserve serial execution), `package.json` (only if needed to include
+  new private relations in local type generation).
+- **Constraints:** Use a new migration and regenerate
+  `src/lib/supabase/database.types.ts` from local Supabase. Represent every
+  stored ID relationship with a foreign key, including proposal identity and
+  same-parent references. Bind each ownership/actor reference to its required
+  stored role. Use non-cascading account-to-domain references and keep
+  immutability triggers on domain rows so the existing Auth/profile cascade
+  still works for accounts without domain rows. Keep revision answers and
+  flaws physically separate from learner-readable revisions. Store only
+  grade fields that `LearnerGrade` may expose in the Learner-readable grade
+  record. Store matching and per-flaw assessments in a separate table linked
+  by a foreign key and readable only by TAs.
+  Enforce `auditOrder` uniqueness across overrides and resolutions in each
+  submission's stream. Use explicit
+  grants only. Read role checks from `private.profile_roles`, apply explicit
+  RLS and revokes to new `private` tables, and revoke default function and
+  sequence privileges. Give `anon` and `service_role` no access to any new
+  table. Give `authenticated` only permitted reads. Add no write grants or
+  policies for these roles, no server entry points, and no pages. Proposals,
+  hints and summaries fail closed for writes. A team spec PR settles their
+  server-generation provenance before T-04.
+  The remaining portions of the Covers criteria, entry points, response
+  projections, write paths and their SYS-10.3 uses belong to the role tasks
+  that own those entry points; T-04 (#38) owns usage records and the SYS-12.5
+  usage-reset denial.
+- **Depends on:** T-01
+- **Status:** todo
+
 ## Learner
 
 ## Author
