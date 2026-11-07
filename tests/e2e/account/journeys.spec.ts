@@ -142,7 +142,7 @@ test.describe("account pages against production Next and local Supabase Auth", (
     await expect(page.getByRole("heading", { name: "Review history", exact: true })).toBeVisible();
     expect(response?.headers()["cache-control"]).toMatch(/private/);
     expect(response?.headers()["cache-control"]).toMatch(/no-store/);
-    expect(response?.headers()["set-cookie"]).toBeTruthy();
+    expect((await response?.allHeaders())?.["set-cookie"]).toBeTruthy();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Review history", exact: true })).toBeVisible();
   });
