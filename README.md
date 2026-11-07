@@ -30,6 +30,12 @@ bun run dev            # http://localhost:3000
 Before the first `bun run dev`, create `.env.local` as described in
 [Database (Supabase)](docs/DeveloperGuide.md#database-supabase).
 
+Open `/sign-up` to create an account with a permanent Learner, Author or TA
+role, or `/sign-in` for an existing account. Each role has shared navigation,
+a landing page and empty list screens. See
+[Account pages](docs/DeveloperGuide.md#account-pages) for destinations and
+access recovery.
+
 ## Checks
 
 | Command | What it does |
@@ -38,14 +44,15 @@ Before the first `bun run dev`, create `.env.local` as described in
 | `bun run typecheck` | Generates route types, then `tsc --noEmit` |
 | `bun run test` | Unit tests (Vitest); no Supabase required |
 | `bun run test:integration` | Auth/API/Postgres integration tests against local Supabase |
-| `bun run test:e2e` | End-to-end tests (Playwright, port 3100) |
+| `bun run test:e2e` | Playwright account journeys against local Auth and a production build (port 3100) |
 | `bun run build` | Production build |
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |
 
-CI runs the local Auth and domain integration suites in a separate job required by
-`verify`. See [Auth tests and settings](docs/DeveloperGuide.md#auth-tests-and-settings)
-for setup and the hosted settings that need human review.
+CI requires both the local Auth/domain integration job and the production-build
+Playwright job before `verify` succeeds. See
+[Auth tests and settings](docs/DeveloperGuide.md#auth-tests-and-settings) for
+setup and the hosted settings that need human review.
 
 ## Repository layout
 
