@@ -59,12 +59,12 @@ human moderation do not by themselves make a story an AI story.
 
 | ID | Story | Priority | AI |
 | --- | --- | --- | --- |
-| AUT-01 | As an Author, I want to create a draft with title, description, language, difficulty and pasted working code so that I can prepare a challenge. | Must | No |
-| AUT-02 | As an Author, I want to configure flaw count, categories and difficulty so that the exercise targets the intended skills. | Must | No |
-| AUT-03 | As an Author, I want AI to propose flaws and their answer key together so that the exercise and assessment agree. | Must | Yes |
-| AUT-04 | As an Author, I want to preview the code and diff and approve or reject each flaw so that I control the final exercise. | Must | Yes |
-| AUT-05 | As an Author, I want to publish an approved challenge with its generated hints ready so that Learners can practise it. | Must | Yes |
-| AUT-06 | As an Author, I want to edit, unpublish and archive challenges so that I can maintain the catalogue while preserving past attempts. | Must | No |
+| [AUT-01](stories/AUT-01-create-a-draft.md) | As an Author, I want to create a draft with title, description, language, difficulty and pasted working code so that I can prepare a challenge. | Must | No |
+| [AUT-02](stories/AUT-02-configure-flaws.md) | As an Author, I want to configure flaw count, categories and difficulty so that the exercise targets the intended skills. | Must | No |
+| [AUT-03](stories/AUT-03-generate-flaw-proposals.md) | As an Author, I want AI to propose flaws and their answer key together so that the exercise and assessment agree. | Must | Yes |
+| [AUT-04](stories/AUT-04-preview-and-decide-flaws.md) | As an Author, I want to preview the code and diff and approve or reject each flaw so that I control the final exercise. | Must | Yes |
+| [AUT-05](stories/AUT-05-publish-a-challenge.md) | As an Author, I want to publish an approved challenge with its generated hints ready so that Learners can practise it. | Must | Yes |
+| [AUT-06](stories/AUT-06-maintain-challenges.md) | As an Author, I want to edit, unpublish and archive challenges so that I can maintain the catalogue while preserving past attempts. | Must | No |
 
 ### TA
 
