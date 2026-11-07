@@ -196,7 +196,7 @@ the limits above remain unchanged.
   that own those entry points; T-04 (#38) owns usage records and the SYS-12.5
   usage-reset denial.
 - **Depends on:** T-01
-- **Status:** todo
+- **Status:** done
 
 ## Learner
 

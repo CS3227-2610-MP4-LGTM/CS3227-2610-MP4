@@ -15,7 +15,7 @@
     "db:stop": "supabase stop",
     "db:status": "supabase status",
     "db:reset": "supabase db reset",
-    "db:types": "bash -o pipefail -c 'supabase gen types --lang typescript | sed \"s/[[:blank:]]*$//\" > src/lib/supabase/database.types.ts'",
+    "db:types": "bash -o pipefail -c 'supabase gen types --lang typescript --schema public,graphql_public,private | sed \"s/[[:blank:]]*$//\" > src/lib/supabase/database.types.ts'",
     "verify": "bun run lint && bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
