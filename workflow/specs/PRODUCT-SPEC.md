@@ -70,11 +70,11 @@ human moderation do not by themselves make a story an AI story.
 
 | ID | Story | Priority | AI |
 | --- | --- | --- | --- |
-| TA-01 | As a TA, I want to inspect submissions, comments and assessments so that I can review learner work. | Must | No |
-| TA-02 | As a TA, I want a flagged-submission queue with reasons and resolution history so that I can resolve cases needing moderation. | Must | No |
-| TA-03 | As a TA, I want to override a grade with a justification so that I can correct an assessment transparently. | Must | No |
-| TA-04 | As a TA, I want an AI learner performance summary of recurring strengths and blind spots so that I can focus my support. | Must | Yes |
-| TA-05 | As a TA, I want progress per flaw category and rule-based challenge recommendations so that I can guide each learner's next practice. | Should | No |
+| [TA-01](stories/TA-01-inspect-submissions.md) | As a TA, I want to inspect submissions, comments and assessments so that I can review learner work. | Must | No |
+| [TA-02](stories/TA-02-resolve-flagged-submissions.md) | As a TA, I want a flagged-submission queue with reasons and resolution history so that I can resolve cases needing moderation. | Must | No |
+| [TA-03](stories/TA-03-override-a-grade.md) | As a TA, I want to override a grade with a justification so that I can correct an assessment transparently. | Must | No |
+| [TA-04](stories/TA-04-learner-performance-summary.md) | As a TA, I want an AI learner performance summary of recurring strengths and blind spots so that I can focus my support. | Must | Yes |
+| [TA-05](stories/TA-05-category-progress-and-recommendations.md) | As a TA, I want progress per flaw category and rule-based challenge recommendations so that I can guide each learner's next practice. | Should | No |
 
 ## 4. Product decisions
 
