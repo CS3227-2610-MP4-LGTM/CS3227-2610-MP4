@@ -127,7 +127,7 @@ the limits above remain unchanged.
   inject throttling failures. The orchestrator runs every database-backed
   check; subagents report such checks as not run, never passed or failed.
 - **Depends on:** T-01
-- **Status:** todo
+- **Status:** done
 
 ### T-03: Domain schema
 

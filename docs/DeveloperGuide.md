@@ -216,6 +216,35 @@ refreshes session transport and forwards refreshed cookies to server reads,
 preserving SSR cache-prevention headers. Protected operations still authorize
 at their own server boundary.
 
+### Account pages
+
+Visitors create an account at `/sign-up` or enter an existing account at
+`/sign-in`. A usable signed-in account opening either page or `/` goes to its
+stored role's landing:
+
+| Role | Landing | Navigation |
+| --- | --- | --- |
+| Learner | `/learner/challenges` — “Challenges” | Challenges; Review history |
+| Author | `/author/challenges` — “My challenges” | My challenges; Create challenge |
+| TA | `/ta/submissions` — “Submissions” | Submissions; Flagged submissions; Learners |
+
+Shared navigation shows the account's display name, role and “Sign out”. List
+screens provide empty states; detailed challenge, review and moderation
+interactions belong to separate role features. Signed-out protected access
+opens sign-in. Cross-role access shows “Access denied” with “Go to my workspace”.
+Invalid profiles show “Account unavailable”; account-service failures show
+“Service unavailable”. Both recovery screens offer “Try again” and “Sign out”.
+
+The shared
+[`AccountEntry`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/account-entry.tsx)
+and [`WorkspacePage`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/workspace-page.tsx)
+boundaries recheck verified identity and stored role on each request. Pages put
+session work behind Suspense and `connection()` with Cache Components enabled;
+protected results use no cache scopes. The
+[auth actions](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/actions.ts)
+invalidate the root layout before redirecting after authentication changes so
+prior account navigation is discarded. Sign-in always uses the role landing.
+
 ### Auth tests and settings
 
 `bun run test` runs unit tests without Supabase. Start the local stack before
@@ -236,6 +265,22 @@ Tests capture local CLI configuration in memory. Auth tests inject throttling
 failures to stay within the provider limit. CI's `integration` job runs these
 suites and is required by the `verify` job. Local `bun run verify` runs lint,
 typecheck, unit tests and build. CI uses Node 24 from `.node-version`.
+
+For browser account journeys, install Chromium once, then run:
+
+```bash
+bunx playwright install chromium
+bun run test:e2e
+```
+
+Keep local Supabase running. Playwright's
+[launcher](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/tests/e2e/account/server.ts)
+gets local settings from the CLI, builds the app and starts an isolated
+production server on port 3100. It does not reuse a development server. The
+suite covers all roles, refresh, cookie deletion, denied access and account
+switching through back, prefetch and reload. Fixtures create and clean up local
+accounts; one worker and zero retries bound Auth traffic. CI's separate `e2e`
+job runs this suite against local Auth and is also required by `verify`.
 
 Local `auth.rate_limit.sign_in_sign_ups` is 300 per five minutes per IP to
 support repeated integration/fix-round runs. This does not change hosted

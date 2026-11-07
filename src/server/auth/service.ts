@@ -53,7 +53,7 @@ export async function signOut(): Promise<{ status: "signed_out" | "sign_out_unco
     const store = await cookies();
     for (const { name } of store.getAll()) {
       if (/^sb-.+-auth-token(?:-code-verifier)?(?:\.\d+)?$/.test(name)) {
-        store.set(name, "", { path: "/", maxAge: 0 });
+        store.set(name, "", { path: "/", maxAge: 0, expires: new Date(0) });
       }
     }
   }
