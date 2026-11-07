@@ -97,9 +97,10 @@ entry points or direct user-scoped database access.
 each submission's audit stream. Allocate it transactionally while serializing
 that stream. Latest override/resolution is the entry with largest auditOrder,
 including when timestamps tie; clients cannot supply actors, times or order.
-Generation, hints and summaries use authorized user-scoped persistence paths
-that enforce server-generation provenance; this document adds no admin-client
-uses to SYS-10.3. Direct user writes cannot impersonate server generation.
+
+Generated proposals, publication hints and TA performance summaries use the
+named persistence paths in [SYS-10.3](TECHNICAL-SPEC.md#sys-10--database-enforcement-and-privileged-access).
+Direct user writes cannot impersonate server generation.
 
 ### SYS-12 decision: immutable published revisions
 

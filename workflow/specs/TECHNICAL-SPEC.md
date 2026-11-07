@@ -151,16 +151,25 @@ policies enforce [SYS-12](#sys-12--record-access-and-audit), including direct da
 requests.
 
 - **SYS-10.1:** Schema checks verify RLS, no automatic exposure of new tables, no
-  ungranted operations and no anonymous access to application records.
+  ungranted operations and no anonymous access to application records. They also
+  verify the database function and privilege restrictions in SYS-10.3.
 - **SYS-10.2:** User-scoped clients are the default. Policies use stored profile roles;
   own-profile reads avoid recursion, and views/functions preserve record/field
   restrictions.
-- **SYS-10.3:** The admin client is server-only and restricted to the named uses below.
+- **SYS-10.3:** The server-only admin client accesses the database only through
+  server-only database functions, each dedicated to one named use below and
+  executable only by the admin role. The admin role has no direct table or
+  column privileges. Each function performs its writes atomically, creating a
+  parent and all its children in one call. Author edits and proposal decisions
+  remain user-scoped under [SYS-12](#sys-12--record-access-and-audit).
   Call-site tests/review verify each authorization precondition before privileged access.
 
 | Named use | Authorization precondition | Permitted access |
 | --- | --- | --- |
-| Submission grading | Verified Learner owns the persisted submission eligible for grading. | Read only its private challenge grading context and persist its validated original AI grade; never return private context. |
+| Submission grading | Verified Learner owns the persisted submission eligible for grading. | Read only its private challenge grading context and never return it. Create and transition its grading runs, create its rule-based review flags, and persist its validated original AI grade. |
+| Proposal generation | Verified Author owns the editable challenge. The result passes [SEC-02](AI-SECURITY-SPEC.md#sec-02--validate-model-output-before-use) validation against the captured draft snapshot. | Persist the proposal set, its proposals and their pending decisions together with the draft's active-generation pointer. |
+| Publication | Verified Author owns a publishable draft whose version is unchanged. Hints pass [SEC-02](AI-SECURITY-SPEC.md#sec-02--validate-model-output-before-use) and [SEC-03](AI-SECURITY-SPEC.md#sec-03--protect-learner-facing-hints-and-feedback) validation. | Commit the [publication transaction](INTEGRATION-SPEC.md#sys-12-decision-immutable-published-revisions), including its hints. |
+| TA performance summary | Verified TA requests a summary for a learner in moderation scope. Input comes from authorized data and output is validated. | Persist the summary and its evidence together. |
 | AI usage accounting | Verified account is authorized for the AI operation; reservations pass budget checks and settlements match a server-issued operation/reservation. | Reserve/account for that operation's usage against the server-derived account; return only permitted usage fields. |
 | Post-submission cached hints | Verified Learner owns a completed submission for the exact challenge and flaw being requested. | Read its cached hint and return only the approved learner-facing hint schema, excluding private answer keys, annotations and prompts. |
 
