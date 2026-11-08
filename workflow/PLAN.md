@@ -397,3 +397,235 @@ the limits above remain unchanged.
 ## Author
 
 ## TA
+
+### T-30: Inspect submissions and retained assessment evidence
+
+- **Issue:** #53
+- **Covers:** TA-01.1–TA-01.8; SYS-02.1–02.2, SYS-04.1–04.2,
+  SYS-08.2–08.3, SYS-09.1–09.3, SYS-11.1–11.4, SYS-12.1–12.2 and
+  SYS-12.4 for TA inspection; SYS-17 and SYS-19 for these screens.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → TA, §4 Product
+  decisions → Grading and §5 Navigation and UI;
+  `workflow/specs/stories/TA-01-inspect-submissions.md`;
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-01 — Runtime and server/client boundary,
+  SYS-02 — Untrusted input and submitted code, SYS-04 — Shared building blocks,
+  SYS-08 — Authorization at the data boundary, SYS-09 — Authentication with
+  Cache Components, SYS-10 — Database enforcement and privileged access,
+  SYS-11 — Authentication and authorization failures,
+  SYS-12 — Record access and audit, SYS-16 — Security baseline,
+  SYS-17 — Simple, accessible UI, SYS-19 — Test strategy;
+  `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions,
+  §2 Domain model and publication lifecycle (pinned revisions and Code,
+  proposals and locations), §3 API contracts → Transport, concurrency and
+  errors, Shared response types and TA surface (submission reads),
+  §5 Deterministic grading, moderation and progress → Matching and score,
+  and §7 Integration verification.
+- **Tests:** unit (`tests/unit/ta/inspection/`); integration
+  (`tests/integration/ta/inspection/`); e2e (`tests/e2e/ta/inspection/`). Cover
+  bounded/filter-bound cursors and URL restoration, pending/running/failed
+  versus completed-zero grades, empty comments, duplicate/unmatched/missed
+  evidence, private answer projections, inert code/text, all read/recovery
+  states and retained R1 evidence after publication/lifecycle changes. Exercise
+  direct entry points and database reads with two users per role and an
+  anonymous caller; verify no emails, wrong-role disclosure or provider calls.
+  Browser checks include account transitions, keyboard use and phone width.
+- **Config paths:** `vitest.integration.config.mts` (include the TA suite while
+  preserving existing suites and serial execution).
+- **Constraints:** Own `/ta/submissions`, `/ta/submissions/:submissionId` and
+  their validated server read contracts. Reuse the shared SYS-04 renderer owned
+  by learner issue #49; add TA real-diff projection without a second renderer.
+  Show original and effective grades from stored evidence; do not regrade or
+  implement grading, publication or learner submission flows. T-31 owns detailed
+  flag/resolution and override histories/forms referenced by TA-01.5; provide
+  their stored DTO fields and composition points here. Preserve validated queue
+  and learner return context under TA-01.8; T-32 supplies the learner destination,
+  so neither task waits on the other's implementation for its own tests.
+  Seed persisted records through the local fixture harness rather than require
+  the full Author/Learner flows. Use INTEGRATION-SPEC's shared fixture identities
+  and outcomes; read only the §6 fixture scenarios needed by each test.
+  Read the relevant `node_modules/next/dist/docs/` guide before Next.js code.
+  The orchestrator runs database-backed checks; specialists report them as unrun.
+- **Depends on:** T-02, T-03; shared renderer from #49 (learner task T-10 is
+  not yet entered in this PLAN; no dependency on its downstream learner tasks).
+- **Status:** todo
+
+### T-31: Resolve flags and append justified grade overrides
+
+- **Issue:** #54
+- **Covers:** TA-02.1–TA-02.8, TA-03.1–TA-03.8; SYS-02.1–02.2,
+  SYS-08.2–08.3, SYS-09, SYS-10.1–10.2 and SYS-10.4 for moderation writes,
+  SYS-11, SYS-12.1–12.5 (moderation records, historical access and effective
+  grade only), SYS-16.2, SYS-17 and SYS-19 for these surfaces.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → TA,
+  §4 Product decisions → Grading and Moderation flags and §5 Navigation and UI;
+  `workflow/specs/stories/TA-02-resolve-flagged-submissions.md` and
+  `workflow/specs/stories/TA-03-override-a-grade.md`;
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted code,
+  SYS-08 — Authorization at the data boundary, SYS-09 — Authentication with
+  Cache Components, SYS-10 — Database enforcement and privileged access,
+  SYS-11 — Authentication and authorization failures,
+  SYS-12 — Record access and audit, SYS-16 — Security baseline,
+  SYS-17 — Simple, accessible UI, SYS-19 — Test strategy;
+  `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions,
+  §2 Domain model and publication lifecycle (audit records and auditOrder),
+  §3 API contracts → Transport, concurrency and errors, Shared response types
+  and TA surface (flags, overrides and resolutions), §5 Deterministic grading,
+  moderation and progress → Matching and score and Flags,
+  and §7 Integration verification.
+- **Tests:** unit (`tests/unit/ta/moderation/`); integration
+  (`tests/integration/ta/moderation/`); e2e (`tests/e2e/ta/moderation/`). Cover
+  each flag kind, open/resolved filters, pagination, corrections, reason and
+  integer-score boundaries, unchanged originals/keys/hints/category evidence,
+  historical moderation and shared effective-grade projections. Race distinct
+  overrides and resolutions on independent committed local connections:
+  preserve all entries with unique submission-wide auditOrder and timestamp-tie
+  ordering. Race duplicate keys, reject changed-payload replays and forged
+  actors/times/order, and verify lost-response recovery, state/access failures,
+  no automatic replay after sign-in and no provider calls. Check permitted
+  Learner reads and denied Author/anonymous writes through endpoints and direct
+  database access with two users per role; exercise keyboard/phone-width forms.
+- **Config paths:** none; reuse T-30's TA integration-suite inclusion.
+- **Constraints:** Own `/ta/flags`, both moderation POST contracts and the
+  flag/resolution and override histories/forms composed into T-30 detail.
+  Add only constrained user-scoped moderation append paths, explicit grants
+  and atomic audit/idempotency persistence in a new migration; regenerate
+  `src/lib/supabase/database.types.ts`. No admin-client use is authorized for
+  human moderation. Derive attribution/time/order server-side and serialize
+  the submission's shared audit stream. Keep direct forged writes denied;
+  corrections append, never edit/delete. Resolution changes no grade; overrides
+  change only effective score/pass status and never remove/regenerate flags.
+  Reuse shared grade projection for owning-Learner reads and test it with
+  fixtures; Learner result/history UI remains outside this task. Flag creation
+  and grading remain with learner issues #51/#52, without a completion dependency
+  because persisted flags/grades can be seeded. Reuse T-30's fixture harness.
+  Read the relevant Next.js guide before code; the orchestrator runs all
+  database-backed checks and specialists report them as unrun.
+- **Depends on:** T-30
+- **Status:** todo
+
+### T-32: Learner directory, category progress and rule-based recommendations
+
+- **Issue:** #55
+- **Covers:** TA-04.1–TA-04.2 (learner list/detail shell), TA-05.1–TA-05.7;
+  SYS-02.1–02.2, SYS-04.1, SYS-08.2–08.3, SYS-09, SYS-11,
+  SYS-12.1–12.2 and SYS-12.4 (permitted identity and historical evidence),
+  SYS-17 and SYS-19 for these reads and screens.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → TA,
+  §4 Product decisions → Hints and attempts, Recommendations and Shared
+  vocabularies and §5 Navigation and UI;
+  `workflow/specs/stories/TA-04-learner-performance-summary.md` (TA-04.1–.2
+  and shared learner-shell navigation only) and
+  `workflow/specs/stories/TA-05-category-progress-and-recommendations.md`;
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted code,
+  SYS-04 — Shared building blocks, SYS-08 — Authorization at the data boundary,
+  SYS-09 — Authentication with Cache Components,
+  SYS-10 — Database enforcement and privileged access,
+  SYS-11 — Authentication and authorization failures,
+  SYS-12 — Record access and audit, SYS-17 — Simple, accessible UI,
+  SYS-19 — Test strategy; `workflow/specs/INTEGRATION-SPEC.md`
+  §1 Scope and contract conventions, §2 Domain model and publication lifecycle
+  (retained submissions/revisions and original matching), §3 API contracts →
+  Transport, concurrency and errors, Shared response types (ChallengeCard) and
+  TA surface (learners, progress and recommendations), §5 Deterministic grading,
+  moderation and progress → Category progress and recommendations,
+  and §7 Integration verification.
+- **Tests:** unit (`tests/unit/ta/progress/`); integration
+  (`tests/integration/ta/progress/`); e2e (`tests/e2e/ta/progress/`). Cover all
+  five categories, null versus zero, retained first-attempt history, failed and
+  retry exclusion, override invariance, unrounded weakness ties and candidate
+  ordering, no observed/eligible results, bounds and any-prior-attempt exclusion.
+  Refresh after attempts/publication/lifecycle changes; test independent section
+  failures and retained-content labels. Cover learner pagination, duplicate
+  names, no email, missing/wrong-role IDs, direct endpoint/database access with
+  two users per role and anonymous caller, supporting-submission round trips,
+  keyboard/phone-width states and zero mutation/provider activity on reads.
+- **Config paths:** none; reuse T-30's TA integration-suite inclusion.
+- **Constraints:** Own `/ta/learners`, `/ta/learners/:learnerId`, learner identity
+  reads and the directory/detail shell allocated by TA-04.1–.2. Provide the
+  separate Performance summary composition region for T-33, which owns its
+  read/generation states; do not present a fabricated summary or generation
+  action before that feature exists. Own one shared CategoryProgress aggregation
+  from original matching across all eligible history, reused by T-33's summary
+  snapshot. Deterministic guidance loads independently of summary generation;
+  recommendation cards offer no Learner-only review action. Implement only the
+  TA progress/recommendation read contracts, not challenge publication, grading
+  or Learner browsing. Use T-30 fixture records, adding stable synthetic
+  recommendation/tie cases under the shared contract; no dependency on Author
+  or downstream Learner implementation. T-33 later composes into this shell
+  without reimplementing directory, aggregation or recommendation rules.
+  Read the relevant Next.js guide before code; the orchestrator runs all
+  database-backed checks and specialists report them as unrun.
+- **Depends on:** T-30
+- **Status:** todo
+
+### T-33: Generate and retain evidence-linked learner performance summaries
+
+- **Issue:** #56
+- **Covers:** TA-04.3–TA-04.8; SYS-01.1, SYS-02.1–02.2, SYS-03.1–03.3,
+  SYS-08.2–08.3, SYS-09, SYS-10.1–10.4 (named TA summary persistence),
+  SYS-11, SYS-12.1–12.2 and SYS-12.5 (TA-only summary access), SYS-13.1/13.3,
+  SYS-16–SYS-19 for summary entry points; SEC-01.1–01.2, SEC-02.1–02.2,
+  SEC-04.1–04.2, SEC-05.1–05.3 and SEC-06.1 for this caller/persistence flow,
+  reusing rather than rebuilding T-04's provider/accounting enforcement.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → TA,
+  §4 Product decisions → Hints and attempts, Grading and Shared vocabularies
+  and §5 Navigation and UI;
+  `workflow/specs/stories/TA-04-learner-performance-summary.md`;
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-01 — Runtime and server/client boundary,
+  SYS-02 — Untrusted input and submitted code, SYS-03 — LLM boundary,
+  SYS-08 — Authorization at the data boundary, SYS-09 — Authentication with
+  Cache Components, SYS-10 — Database enforcement and privileged access,
+  SYS-11 — Authentication and authorization failures,
+  SYS-12 — Record access and audit, SYS-13 — Environment isolation,
+  SYS-16 — Security baseline, SYS-17 — Simple, accessible UI,
+  SYS-18 — Resource use, SYS-19 — Test strategy;
+  `workflow/specs/AI-SECURITY-SPEC.md` SEC-01 — Authorize and minimize model
+  access, SEC-02 — Validate model output before use, SEC-04 — Bound SoC requests
+  and usage, SEC-05 — Reserve and settle usage atomically,
+  SEC-06 — Contain failures and keep diagnostics safe;
+  `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions,
+  §2 Domain model and publication lifecycle (performance_summaries and generated
+  provenance), §3 API contracts → Transport, concurrency and errors and TA
+  surface (SummaryRecord and summary operations), §4 Server-only LLM contracts
+  (shared envelope and TA performance summary: `operation: summarize_learner`),
+  §5 Deterministic grading, moderation and progress → Category progress and
+  recommendations (snapshot evidence only), and §7 Integration verification.
+- **Tests:** unit (`tests/unit/ta/summaries/`); integration
+  (`tests/integration/ta/summaries/`); e2e (`tests/e2e/ta/summaries/`). Capture
+  exact latest-20 completed evidence selection/order, all-history progress and
+  fingerprints covering effective overrides; exclude identity, private answers
+  and unrelated learners. Test fresh/stale/null/read-failure states, no automatic
+  generation, explicit retries, no-completed/oversized/quota/timeout/invalid-output
+  failures, empty output sections and inert malicious text/evidence links.
+  Verify wrong-role/forged-resource denial before reservation/dispatch, direct
+  summary-write denial, strict evidence/category validation and atomic summary
+  plus evidence persistence. Race duplicate mutation keys, simulate lost replies,
+  failed accounting/persistence and late results; preserve previous summaries,
+  prevent duplicate dispatch/persistence and verify safe diagnostics. Exercise
+  two users per role and anonymous access, account transitions, independent
+  progress/summary failures, keyboard focus and phone-width rendering with fake
+  AI and local Supabase. Reuse T-04 accounting regression tests for shared limits.
+- **Config paths:** none; consume `src/server/llm/config.ts` unchanged and reuse
+  T-30's TA integration-suite inclusion.
+- **Constraints:** Own only summary GET/POST contracts, authorized snapshot and
+  freshness selection, generated-result persistence and the summary region in
+  T-32's learner detail. Invoke `src/server/llm/` after stored-role/scope/state
+  checks; caller payloads cannot provide evidence, actor or accounting fields.
+  Reuse T-32's CategoryProgress service, T-30 supporting-submission links and
+  T-04's bounded fake provider, retries and durable admission/accounting.
+  Add the dedicated admin-only function for SYS-10.3's TA performance summary
+  named use in a new migration; persist validated output and evidence atomically,
+  retain immutable prior records and regenerate database types. No direct admin
+  table access or user-generated summary writes. Snapshot freshness compares
+  evidence fingerprints, never age alone; completed retry evidence is permitted
+  while progress still excludes retries. No transaction spans a provider call.
+  Summary advice changes no grades, flags, progress or recommendations. All tests
+  remain fake/local; this task does not enable live SoC or add provider settings.
+  Read the relevant Next.js guide before code; the orchestrator runs all
+  database-backed checks and specialists report them as unrun.
+- **Depends on:** T-04, T-32
+- **Status:** todo
