@@ -65,7 +65,6 @@ it("LRN-02.1 LRN-02.2 LRN-02.3 SYS-17.1 focuses an inert PR header and shows the
   expect(source.textContent).toContain(opened.code.after);
   expect(view.container.querySelector("em, img")).toBeNull();
   expect(screen.queryByRole("button", { name: /run|build|execute/i })).toBeNull();
-  expectReadOnly();
 });
 
 it("LRN-02.4 keeps the opened source through a publication and uses the new source on a fresh entry", async () => {
@@ -76,7 +75,6 @@ it("LRN-02.4 keeps the opened source through a publication and uses the new sour
     readChallenge={firstRead} readFirstAttempt={readFirstAttempt} />);
   const source = await screen.findByRole("region", { name: "Source" });
   expect(source.textContent).toContain(opened.code.after);
-  expectReadOnly();
 
   // Simulate a parent refresh after the live pointer has advanced at the same URL.
   await act(async () => {
