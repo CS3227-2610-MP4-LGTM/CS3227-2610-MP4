@@ -123,6 +123,9 @@ isOneToOne: false
 "domain_code_lines":
 { Args: { "value": string }; Returns: (string)[]
                            },
+"learner_revision_categories":
+{ Args: { "p_revision_id": string }; Returns: (string)[]
+                           },
 "normalize_display_name":
 { Args: { "value": string }; Returns: string
                            },
@@ -706,11 +709,17 @@ isOneToOne: false
             "challenge_generation_access":
 { Args: { "resource_id": string }; Returns: string
                            },
+"list_learner_challenges":
+{ Args: { "p_after_id"?: string,"p_before"?: string,"p_category"?: Database["public"]['Enums']["flaw_category"],"p_difficulty"?: Database["public"]['Enums']["challenge_difficulty"],"p_language"?: Database["public"]['Enums']["challenge_language"],"p_limit": number }; Returns: Json
+                           },
 "llm_accounting":
 { Args: { "action": string,"args": Json }; Returns: Json
                            },
 "llm_grading_context":
 { Args: { "account_id": string,"submission_id": string }; Returns: Json
+                           },
+"read_learner_challenge":
+{ Args: { "p_challenge_id": string }; Returns: Json
                            }
           }
           Enums: {

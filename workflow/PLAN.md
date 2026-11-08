@@ -392,7 +392,7 @@ the limits above remain unchanged.
   remain with their owning stories. Read the relevant `node_modules/next/dist/docs/`
   guide before writing Next.js code.
 - **Depends on:** T-02, T-03
-- **Status:** todo
+- **Status:** done
 
 ## Author
 

@@ -1,5 +1,17 @@
-import { RoleLanding } from "@/components/account/role-landing";
+import { Suspense } from "react";
+import { connection } from "next/server";
+import { WorkspacePage } from "@/components/account/workspace-page";
+import { CataloguePage } from "@/components/learner/catalogue-page";
+
 export const instant = false;
-export default function Page(props: PageProps<"/learner/challenges">) {
-  return <RoleLanding role="learner" heading="Challenges" empty="No challenges available." searchParams={props.searchParams} />;
+
+export default function Page() {
+  return <Suspense fallback={<main className="loading-shell" role="status">Loading challenges…</main>}>
+    <RequestedCatalogue />
+  </Suspense>;
+}
+
+async function RequestedCatalogue() {
+  await connection();
+  return <WorkspacePage role="learner">{accountId => <CataloguePage key={accountId} />}</WorkspacePage>;
 }
