@@ -9,9 +9,12 @@ type AccountResult = { status: "ok"; account: Account } | Failure;
 type ProfileResult = { status: "ok"; profile: Account | Omit<Account, "role"> } | Failure;
 const profileSchema = z.object({ id: z.uuid(), display_name: z.string().min(1), role: roleSchema });
 
-export async function getAccount(requiredRole?: Role): Promise<AccountResult> {
+export async function getAccount(
+  requiredRole?: Role,
+  client?: Awaited<ReturnType<typeof createClient>>,
+): Promise<AccountResult> {
   try {
-    const client = await createClient();
+    client ??= await createClient();
     const identity = await client.auth.getUser();
     if (identity.error) {
       return { status: !identity.error.status || identity.error.status >= 500

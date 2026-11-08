@@ -228,10 +228,9 @@ stored role's landing:
 | Author | `/author/challenges` — “My challenges” | My challenges; Create challenge |
 | TA | `/ta/submissions` — “Submissions” | Submissions; Flagged submissions; Learners |
 
-Shared navigation shows the account's display name, role and “Sign out”. List
-screens provide empty states; detailed challenge, review and moderation
-interactions belong to separate role features. Signed-out protected access
-opens sign-in. Cross-role access shows “Access denied” with “Go to my workspace”.
+Shared navigation shows the account's display name, role and “Sign out”.
+Signed-out protected access opens sign-in. Cross-role access shows
+“Access denied” with “Go to my workspace”.
 Invalid profiles show “Account unavailable”; account-service failures show
 “Service unavailable”. Both recovery screens offer “Try again” and “Sign out”.
 
@@ -244,6 +243,82 @@ protected results use no cache scopes. The
 [auth actions](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/actions.ts)
 invalidate the root layout before redirecting after authentication changes so
 prior account navigation is discarded. Sign-in always uses the role landing.
+
+### Learner challenge catalogue and PR view
+
+In **Challenges**, use **Language**, **Difficulty** and **Flaw category** to
+narrow the published catalogue. Each card shows its title, description,
+language, difficulty and flaw categories. Selected filters combine with AND.
+The URL stores the filters and page cursor for reload and browser Back or
+Forward. Changing a filter starts at the first page. **Next page** and
+**First page** keep the filters, and **Clear filters** resets the catalogue.
+
+The results region announces “Loading challenges…” and focuses **Results**
+after pagination. “No challenges available.” is the unfiltered empty state.
+“No challenges match these filters.” appears when a filter is active and there
+are no matches. For invalid filters or a stale page, use **Clear filters**.
+For a read failure, **Try again** repeats the current page request.
+
+Choose **View challenge** to open the read-only PR view. The title, **Description**,
+**Language**, **Difficulty** and **Flaw categories** appear above **Source**.
+The focusable source region scrolls independently for long lines and displays
+the published source as numbered additions to a single file.
+**Back to challenges** returns to the catalogue. Opening the view creates no attempt.
+If the signed-in Learner already has a first attempt on the challenge,
+**View first attempt** links to that attempt's history URL even if the attempt
+used an older revision or grading is pending or failed.
+
+“Loading challenge…” covers both the material and first-attempt reads.
+**Try again** repeats both checks on a read failure. A missing challenge shows
+“Challenge not found”. An unpublished or archived challenge shows
+“Access denied” with “This item isn't available to your account.” Account failures
+follow the shared workspace recovery above.
+
+#### Learner read contracts
+
+| Endpoint | Request and success data |
+| --- | --- |
+| `GET /api/v1/challenges` | Optional `language`, `difficulty`, `category`, `cursor` and `limit`. Returns `{ items, nextCursor }` with only live published cards. Default limit 20, with API limits 1–50. |
+| `GET /api/v1/challenges/:id` | UUID path parameter and no query parameters. Returns the live card fields and its `CodeDiff` projection. |
+
+Responses use `{ data }` or `{ error: { code, message } }` with
+`Cache-Control: private, no-store`. Invalid input returns 400. Missing sessions
+return 401. Unusable profiles, wrong roles and existing non-live records
+return 403. An absent challenge returns 404 on detail and an unavailable read
+returns 503. The list sorts by descending publication time and ascending
+challenge ID. Use the returned cursor with the same filters. Its anchor must
+still match the filtered live revision.
+
+The server readers verify the account and stored Learner role for each
+protected read and use the signed-in user's Supabase client. The catalogue and
+detail database functions grant execution to `authenticated` and check the
+stored role. They expose sorted, unique approved categories from the live
+revision. Detail returns the live revision ID or the access decision, then
+the server reads the matching source under RLS. The first-attempt action
+queries only attempt one for the verified Learner and challenge. A failed
+lookup remains a read failure. These reads use no cross-request cache.
+See the [server readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/challenges.ts)
+and [Learner browse migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108130000_learner_browse.sql).
+
+The open view keeps the loaded revision ID and source together. Fresh reads
+follow the live pointer. The shared renderer takes an authorized `CodeDiff`
+and renders text literally. For Learners, the server projects only the flawed
+source as additions, with one-based line numbers and a language-derived
+filename. A trailing newline adds no extra line.
+See [CodeDiffView](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/code-diff.tsx)
+and the [Learner projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/projection.ts).
+
+#### Learner browse checks
+
+- `bun run test tests/unit/learner` covers validation, source projection and
+  rendering, loading, recovery and focus without Supabase.
+- With local Supabase running,
+  `bun run test:integration tests/integration/domain/learner-browse` covers
+  the endpoints and direct database access, including record isolation and
+  pagination.
+- `bun run test:e2e tests/e2e/learner` uses the production build and local
+  Supabase to exercise filter URL history, access outcomes, first-attempt
+  links, account switching and keyboard access at 320 CSS pixels.
 
 ### Auth tests and settings
 
