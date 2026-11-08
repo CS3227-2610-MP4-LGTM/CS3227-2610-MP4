@@ -712,6 +712,9 @@ isOneToOne: false
 "list_learner_challenges":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_category"?: Database["public"]['Enums']["flaw_category"],"p_difficulty"?: Database["public"]['Enums']["challenge_difficulty"],"p_language"?: Database["public"]['Enums']["challenge_language"],"p_limit": number }; Returns: Json
                            },
+"list_ta_submissions":
+{ Args: { "p_after_id"?: string,"p_before"?: string,"p_challenge_id"?: string,"p_grading_state"?: string,"p_learner_id"?: string,"p_limit"?: number }; Returns: Json
+                           },
 "llm_accounting":
 { Args: { "action": string,"args": Json }; Returns: Json
                            },
