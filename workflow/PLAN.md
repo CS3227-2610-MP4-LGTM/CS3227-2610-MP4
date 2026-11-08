@@ -308,6 +308,92 @@ the limits above remain unchanged.
 
 ## Learner
 
+### T-10: Browse challenges and view a challenge as a PR
+
+- **Issue:** #49
+- **Covers:** LRN-01.1–01.7, LRN-02.1–02.2 and LRN-02.5–02.7.
+  LRN-02.3 for inert rendering and LRN-02.4 for opening a read-only workspace
+  without creating an attempt and retaining the opened revision. SYS-02.1–02.2,
+  SYS-04.1–04.2, SYS-08.1–08.3, SYS-09, SYS-10.1–10.2, SYS-10.4, SYS-11 and
+  SYS-12.1 apply to the new Learner reads and rendering where relevant.
+  SYS-17.1 and SYS-17.3 apply to Learner UI keyboard access, focus, labels and
+  phone-width layout.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Learner,
+  §4 Product decisions → Challenge input and Shared vocabularies, and
+  §5 Navigation and UI. `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted
+  input and submitted code, SYS-04 — Shared building blocks, SYS-08 —
+  Authorization at the data boundary, SYS-09 — Authentication with Cache
+  Components, SYS-10 — Database enforcement and privileged access, SYS-11 —
+  Authentication and authorization failures, SYS-12 — Record access and audit
+  (Learner-facing challenge material, private answers and submissions),
+  SYS-17 — Simple, accessible UI and SYS-19 — Test strategy.
+  `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions
+  (including Shared values and bounds and Pasted-code cap for display and line
+  conventions), §2 Domain model and publication lifecycle → SYS-12 decision:
+  immutable published revisions and Code, proposals and locations, §3 API
+  contracts → Transport, concurrency and errors, Shared response types and
+  Learner surface, §6 Shared deterministic seed fixtures (C1: Checkout totals,
+  C2: Safe quotient, Submissions and expected outcomes and Derived fixture
+  scenarios for relevant reads), and §7 Integration verification (live Learner
+  projection and access checks).
+  `workflow/specs/stories/LRN-01-browse-challenges.md`,
+  `workflow/specs/stories/LRN-02-view-a-challenge-as-a-pr.md` and
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  (existing workspace, access recovery and unfiltered empty state).
+- **Tests:** unit (`tests/unit/learner/`) for strict query and cursor validation,
+  exact new-file projection with and without trailing LF, and inert rendering.
+  Use jsdom component tests there, following `tests/unit/account/`, for loading,
+  superseded responses, disabled pagination while pending, empty/invalid/error
+  states and retry, focus moves, announcements and retention of the open
+  workspace's loaded revision after a live pointer change.
+  Local Supabase integration (`tests/integration/domain/learner-browse.test.ts`)
+  for the protected list/detail and first-attempt reads, bounded AND filtering
+  and tie-safe cursor order. Use published C1/C2 and derived fixtures with two
+  users per relevant role and an anonymous caller. Call both Route Handlers for
+  anonymous (401), wrong-role (403) and invalid-query (400) requests. For missing
+  and unpublished/archived challenges, assert 404 and 403 respectively on detail
+  and omission from the catalogue. After the live pointer changes, assert detail
+  returns the live revision ID with its matching source. Exercise server entry
+  points and direct user-scoped database calls, including wrong role,
+  cross-account attempt isolation, old revisions, forbidden versus absent
+  challenges without owned submissions, and private table, column and join
+  denial. Cover own first attempts across revisions, pending or failed grading,
+  and a second attempt's presence. E2e (`tests/e2e/learner/`) uses the production
+  build for filtered URL restoration with pagination and back/forward,
+  forbidden versus missing detail, the first-attempt link, and keyboard
+  navigation and source access at 320 CSS pixels without page-level horizontal
+  scrolling. The orchestrator runs all database-backed checks with per-command
+  escalation. Specialists report them as unrun.
+- **Config paths:** none.
+- **Constraints:** Extend T-02's Learner pages and reuse its navigation and
+  access recovery. Add the `GET /api/v1/challenges` and
+  `GET /api/v1/challenges/:id` Route Handlers per INTEGRATION-SPEC §3
+  (“Transport, concurrency and errors” and “Learner surface”). The handlers and
+  pages share one validated server read contract.
+  Verify session and stored Learner role at every protected entry point and
+  prevent cross-request caching. Use T-03's user-scoped RLS for permitted data.
+  Add a migration and regenerate `src/lib/supabase/database.types.ts` for a
+  narrow Learner-scoped database read boundary. Project the sorted, unique
+  approved category values for the live revision and filter by category before
+  pagination. Limit the access check to the decision needed for 403 versus 404.
+  Enforce stored-role and live-pointer rules at this database boundary and test
+  explicit execution grants. Keep private flaw, answer and hint tables behind
+  existing policies. Use the signed-in Learner's client for application reads.
+  Look up attempt one by the verified Learner and challenge across revisions,
+  regardless of grading state, with failure distinct from an absent attempt.
+  A detail retry repeats both the live revision and first-attempt reads.
+  Keep the loaded live revision ID and source together for the open workspace.
+  Fresh reads use the live pointer and do not fall back to historical code.
+  Build the shared SYS-04 renderer around the authorized `CodeDiff` DTO so
+  Author and TA can reuse it with their own real-diff projections. This task
+  delivers the Learner new-file projection only. LRN-03 and LRN-04 own comment
+  and submission controls and stale submission handling. History and retry
+  remain with their owning stories. Read the relevant `node_modules/next/dist/docs/`
+  guide before writing Next.js code.
+- **Depends on:** T-02, T-03
+- **Status:** todo
+
 ## Author
 
 ## TA
