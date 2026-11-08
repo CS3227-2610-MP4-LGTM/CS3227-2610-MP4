@@ -37,7 +37,7 @@ jobs:
         if: ${{ hashFiles('supabase/migrations/**/*.sql') != '' }}
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: bunx supabase db push --remote="$SUPABASE_DB_URL" --yes
+        run: bunx supabase db push --remote="$SUPABASE_DB_URL" --include-all --dry-run
       - name: Pull Vercel Preview environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
