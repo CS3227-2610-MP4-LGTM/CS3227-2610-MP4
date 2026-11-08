@@ -2,6 +2,7 @@ import { test as base, expect, type Locator, type Page } from "@playwright/test"
 import { createInspectionFixture } from "../../../integration/ta/inspection/fixture";
 import { id } from "../../../unit/ta/inspection/evidence";
 import { accountAccessHeader } from "@/lib/learner/challenges";
+import { expireSession } from "../../account/fixtures";
 const detail = `/ta/submissions/${id(501)}?from=flags&flagId=${id(801)}`;
 const overrideApi = `**/api/v1/ta/submissions/${id(501)}/overrides`;
 const resolutionApi = `**/api/v1/ta/flags/${id(801)}/resolutions`;
@@ -125,6 +126,7 @@ test("TA-02.8 TA-03.8 SYS-09.3 SYS-11 auth failures and switching accounts never
   }
   let writes = 0; await page.route(overrideApi, route => { writes++; return route.fulfill({ status: 401, json: { error: { code: "UNAUTHENTICATED", message: "Sign in" } } }); });
   await action(page, "Override grade").click(); await page.getByLabel("Replacement score").fill("100"); await page.getByLabel("Reason", { exact: true }).fill("Session expired decision");
+  await expireSession(page.context(), true);
   await action(page, "Save override").click(); await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
   await login(page, inspection.actors.taB, "/ta/submissions"); await page.goto(detail); expect(writes).toBe(1); await expect(page.getByText("Session expired decision")).toHaveCount(0); await page.unroute(overrideApi);
   await page.getByRole("button", { name: "Sign out" }).click(); await login(page, inspection.actors.learnerB, "/learner/challenges");
