@@ -448,7 +448,7 @@ the limits above remain unchanged.
   The orchestrator runs database-backed checks; specialists report them as unrun.
 - **Depends on:** T-02, T-03; shared renderer from #49 (learner task T-10 is
   not yet entered in this PLAN; no dependency on its downstream learner tasks).
-- **Status:** todo
+- **Status:** done
 
 ### T-31: Resolve flags and append justified grade overrides
 

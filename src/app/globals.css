@@ -85,3 +85,9 @@ input[aria-invalid], select[aria-invalid] { border-color: #a12d26; }
 .source-line[data-kind="added"] { background: #edf7ed; }
 .source-line[data-kind="removed"] { background: #fff0ed; }
 .source-number { text-align: end; color: var(--muted); user-select: none; }
+
+.ta-evidence { min-width: 0; overflow-wrap: anywhere; }
+.ta-evidence dd { margin-inline-start: 0; margin-block-end: .75rem; }
+.ta-evidence dt { font-weight: 700; }
+.ta-evidence pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ta-return-links { display: flex; flex-wrap: wrap; gap: 1rem; }
