@@ -70,7 +70,7 @@ it.each([131072, 131073])("SEC-04.1 bounds streaming response consumption at %s 
   let pulls = 0;
   let cancelled = false;
   const stream = new ReadableStream({
-    pull(controller) { pulls++; if (pulls === 1) controller.enqueue(new Uint8Array(byteCount).fill(32)); else controller.close(); },
+    pull(controller) { pulls++; if (pulls === 1) controller.enqueue(new Uint8Array(byteCount).fill(32)); else if (byteCount <= 131072) controller.close(); },
     cancel() { cancelled = true; },
   });
   const fetch = vi.fn().mockResolvedValue(new Response(stream));
