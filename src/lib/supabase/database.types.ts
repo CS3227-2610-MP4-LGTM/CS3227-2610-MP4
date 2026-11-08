@@ -111,13 +111,30 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"ta_moderation_keys": {
+                  Row: {
+                    "actor_id": string,"key": string,"operation": string,"payload": NonNullable<Json>,"resource_id": string,"result": NonNullable<Json>,"submission_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_id": string,"key": string,"operation": string,"payload": NonNullable<Json>,"resource_id": string,"result": NonNullable<Json>,"submission_id": string
+                  }
+                  Update: {
+                    "actor_id"?: string,"key"?: string,"operation"?: string,"payload"?: NonNullable<Json>,"resource_id"?: string,"result"?: NonNullable<Json>,"submission_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 }
           }
           Views: {
             [_ in never]: never
           }
           Functions: {
-            "current_domain_role":
+            "append_ta_moderation":
+{ Args: { "p_id": string,"p_key": string,"p_operation": string,"p_payload": Json }; Returns: Json
+                           },
+"current_domain_role":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
 "domain_code_lines":
@@ -128,6 +145,12 @@ isOneToOne: false
                            },
 "normalize_display_name":
 { Args: { "value": string }; Returns: string
+                           },
+"ta_flag_view":
+{ Args: { "p_id": string }; Returns: Json
+                           },
+"ta_grading_view":
+{ Args: { "p_id": string }; Returns: Json
                            },
 "valid_domain_categories":
 { Args: { "value": (Database["public"]['Enums']["flaw_category"])[] }; Returns: boolean
@@ -706,11 +729,20 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "challenge_generation_access":
+            "append_ta_override":
+{ Args: { "p_id": string,"p_key": string,"p_payload": Json }; Returns: Json
+                           },
+"append_ta_resolution":
+{ Args: { "p_id": string,"p_key": string,"p_payload": Json }; Returns: Json
+                           },
+"challenge_generation_access":
 { Args: { "resource_id": string }; Returns: string
                            },
 "list_learner_challenges":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_category"?: Database["public"]['Enums']["flaw_category"],"p_difficulty"?: Database["public"]['Enums']["challenge_difficulty"],"p_language"?: Database["public"]['Enums']["challenge_language"],"p_limit": number }; Returns: Json
+                           },
+"list_ta_flags":
+{ Args: { "p_after_id"?: string,"p_before"?: string,"p_kind"?: string,"p_limit"?: number,"p_status"?: string }; Returns: Json
                            },
 "list_ta_submissions":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_challenge_id"?: string,"p_grading_state"?: string,"p_learner_id"?: string,"p_limit"?: number }; Returns: Json

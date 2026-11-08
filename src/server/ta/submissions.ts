@@ -4,9 +4,10 @@ import { getAccount } from "@/server/auth/account";
 import { createClient } from "@/server/supabase/server";
 import { cardSchema, submissionSchema, type DetailResult, type ListResult, type ReadFailure } from "@/lib/ta/submissions";
 import { challengeIdSchema } from "@/server/learner/validation";
+import { projectEffectiveGrade } from "@/lib/grading/effective-grade";
 import { encodeSubmissionCursor, parseSubmissionQuery } from "./validation";
 type Client = Awaited<ReturnType<typeof createClient>>;
-async function withTa<T>(read: (client: Client) => Promise<T>): Promise<T | ReadFailure> {
+export async function withTa<T>(read: (client: Client) => Promise<T>): Promise<T | ReadFailure> {
   let client: Client;
   try {
     client = await createClient();
@@ -81,8 +82,8 @@ export async function readSubmission(id: string): Promise<DetailResult> {
       assessments = perFlaw.map(a => { const c = ordered.find(c => c.comment_id === a.comment_id); return { flawId: a.flaw_id, commentId: a.comment_id, explanationCredit: c?.explanation_credit ?? 0, fixCredit: c?.fix_credit ?? 0, feedback: c?.feedback ?? null }; }) as typeof assessments;
       original = { score: g.score, passed: g.passed, passMark: 60, identificationPoints: g.identification_points, explanationPoints: g.explanation_points, fixPoints: g.fix_points, matchedCount: matching.matches.length, missedCount: matching.missedFlawIds.length, unmatchedCommentIds: matching.unmatchedCommentIds, duplicateCommentIds: matching.duplicateCommentIds, comments: ordered.map(c => ({ commentId: c.comment_id, matched: c.kind === "matched", explanationCredit: c.explanation_credit, fixCredit: c.fix_credit, feedback: c.feedback })), eligibleHints: hints.data.map(h => ({ hintId: h.hint_id, category: h.category })) };
     }
-    const latest = history.at(-1), r = revision.data;
-    const effective = original ? { score: latest?.score ?? original.score, passed: (latest?.score ?? original.score) >= 60, source: latest ? "ta" : "ai" } : null;
+    const r = revision.data;
+    const effective = projectEffectiveGrade(original?.score ?? null, history);
     return { status: "ok", submission: submissionSchema.parse({ id: s.id, challengeId: s.challenge_id, revisionId: s.revision_id, learner: { id: profile.data.id, displayName: profile.data.display_name }, attemptNumber: s.attempt_number, previousSubmissionId: s.previous_submission_id, submittedAt: s.submitted_at, challenge: { id: s.challenge_id, revisionId: r.id, title: r.title, description: r.description, language: r.language, difficulty: r.difficulty, categories: [...new Set(answers.map(f => f.category))].sort(), publishedAt: r.published_at, code: code.data.real_diff }, comments: comments.data, answerKey: answers, matching, assessments, grading: { state, failureCode: runs.data?.[0]?.failure_code ?? null, original, effective, overrides: history }, flags: flagViews }) };
   });
 }
