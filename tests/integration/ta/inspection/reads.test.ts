@@ -124,7 +124,7 @@ it("TA-01.8 SYS-12.4 retains exact R1 code, key and original assessment after dr
       const sid = caller === "learnerA" ? id(501) : id(503);
       const own = await fixture.actors[caller].client.from("submissions").select("revision_id,ai_grades(score)").eq("id", sid).single();
       expect(own.error).toBeNull(); expect(own.data?.revision_id).toBe(id(201));
-      expect(own.data?.ai_grades).toEqual([{ score: caller === "learnerA" ? 25 : 60 }]);
+      expect(own.data?.ai_grades).toEqual({ score: caller === "learnerA" ? 25 : 60 });
     }
   }
 });
