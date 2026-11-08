@@ -23,7 +23,67 @@ export type Database = {
           }
         },"private": {
           Tables: {
-            "profile_roles": {
+            "ai_usage_records": {
+                  Row: {
+                    "account_id": string,"charged_tokens": number,"dispatched": boolean,"environment_id": string,"id": string,"input_tokens": number,"operation_id": string,"outcome": string | null,"output_tokens": number,"reserved_at": string,"settlement": Json | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"charged_tokens": number,"dispatched"?: boolean,"environment_id": string,"id"?: string,"input_tokens": number,"operation_id": string,"outcome"?: string | null,"output_tokens": number,"reserved_at": string,"settlement"?: Json | null
+                  }
+                  Update: {
+                    "account_id"?: string,"charged_tokens"?: number,"dispatched"?: boolean,"environment_id"?: string,"id"?: string,"input_tokens"?: number,"operation_id"?: string,"outcome"?: string | null,"output_tokens"?: number,"reserved_at"?: string,"settlement"?: Json | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "ai_usage_records_operation_id_fkey"
+      columns: ["operation_id"]
+isOneToOne: false
+      referencedRelation: "llm_operations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"llm_operations": {
+                  Row: {
+                    "account_id": string,"environment_id": string,"expires_at": string,"fingerprint": string,"id": string,"idempotency_key": string,"operation": string,"resource_id": string,"state": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"environment_id": string,"expires_at": string,"fingerprint": string,"id"?: string,"idempotency_key": string,"operation": string,"resource_id": string,"state"?: string
+                  }
+                  Update: {
+                    "account_id"?: string,"environment_id"?: string,"expires_at"?: string,"fingerprint"?: string,"id"?: string,"idempotency_key"?: string,"operation"?: string,"resource_id"?: string,"state"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"llm_usage_events": {
+                  Row: {
+                    "account_id": string,"details": NonNullable<Json>,"environment_id": string,"event_type": string,"id": string,"operation_id": string,"recorded_at": string,"reservation_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"details": NonNullable<Json>,"environment_id": string,"event_type": string,"id"?: string,"operation_id": string,"recorded_at"?: string,"reservation_id"?: string | null
+                  }
+                  Update: {
+                    "account_id"?: string,"details"?: NonNullable<Json>,"environment_id"?: string,"event_type"?: string,"id"?: string,"operation_id"?: string,"recorded_at"?: string,"reservation_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "llm_usage_events_operation_id_fkey"
+      columns: ["operation_id"]
+isOneToOne: false
+      referencedRelation: "llm_operations"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "llm_usage_events_reservation_id_fkey"
+      columns: ["reservation_id"]
+isOneToOne: false
+      referencedRelation: "ai_usage_records"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"profile_roles": {
                   Row: {
                     "id": string,"role": string
                   }
@@ -643,7 +703,15 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "challenge_generation_access":
+{ Args: { "resource_id": string }; Returns: string
+                           },
+"llm_accounting":
+{ Args: { "action": string,"args": Json }; Returns: Json
+                           },
+"llm_grading_context":
+{ Args: { "account_id": string,"submission_id": string }; Returns: Json
+                           }
           }
           Enums: {
             "challenge_difficulty": "easy"|"medium"|"hard","challenge_language": "python"|"java"|"javascript"|"typescript","flaw_category": "logic_bug"|"edge_case"|"error_handling"|"security"|"performance"

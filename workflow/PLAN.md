@@ -304,7 +304,7 @@ the limits above remain unchanged.
   `node_modules/next/dist/docs/` guide before any Next.js code. The orchestrator
   runs every database-backed check; specialists report those checks as unrun.
 - **Depends on:** T-01, T-03
-- **Status:** todo
+- **Status:** done
 
 ## Learner
 
