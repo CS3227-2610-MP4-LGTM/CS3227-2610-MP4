@@ -293,6 +293,124 @@ including the authoritative
 [SYS-05 credential policy](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle).
 Local configuration and passing integration tests do not verify hosted settings.
 
+## Shared LLM boundary
+
+The server-only modules in
+[`src/server/llm/`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/boundary.ts)
+provide reusable validation, authorization, fake execution and durable usage
+accounting. They add no role endpoints or new screens.
+
+`createLlmBoundary({client, accounting, provider, clock, limits})` takes a
+user-scoped Supabase client. Its `execute(request, serverSelection?)` accepts
+only `{operation, resourceId, idempotencyKey, expectedVersion?}`; IDs are UUIDs.
+Author operations require the captured draft version as `expectedVersion`.
+The boundary verifies identity, stored role, ownership and eligible persisted
+state before capturing input or reserving usage, then rechecks identity and the
+captured fingerprint before returning generated data.
+
+Every input and output uses the strict envelope
+`{schemaVersion: 1, operation, payload}`:
+
+| Operation | Authorized caller and resource | Model input / validated output |
+| --- | --- | --- |
+| `inject_flaws` | Author; owned challenge draft | Working code and flaw configuration / proposals |
+| `generate_hints` | Author; owned challenge draft with resolved proposal decisions | Assembled flawed code and retained flaws / keyed hints |
+| `assess_review` | Learner; own eligible persisted submission | Pinned flawed code and selected flaw/comment pairs / keyed credit assessments and feedback |
+| `summarize_learner` | TA; learner ID | Latest 20 completed submissions and category progress / strengths, blind spots and next steps with evidence |
+
+For assessment, `serverSelection` is `{matches: [{key, commentId}]}` from a
+trusted server caller's deterministic matching, never an HTTP body. The boundary
+checks unique identities and comment locations against the owned submission.
+An empty match set returns an empty assessment without provider dispatch or quota.
+Role features still own deterministic matching and scoring, authorized endpoints,
+idempotent result persistence and replay, grading flags, browser rendering and
+cached hint reads. Their final persistence transactions must repeat authorization,
+version/fingerprint compare-and-set and expiry checks; a returned result alone
+does not authorize a later write.
+
+Contracts reject unknown fields, invalid ranges, duplicate or mismatched keys,
+unsupported values and unsupported evidence. Candidate assembly validates source
+snippets and non-overlapping replacements. Pasted code is normalized and bounded,
+never executed. Server-owned instructions remain separate from untrusted data;
+tools, browsing, code execution and callbacks are disabled. Hint and feedback
+checks reject markup, code fences, links and line references. Protected-text
+overlap checks use Unicode NFKC and full case folding across every retained
+flaw's original/replacement snippets, explanation and fix: eight-token overlaps,
+or a whole protected value of four to seven tokens, are rejected.
+
+### Accounting and failures
+
+[`createAccountingStore`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/accounting.ts)
+uses admin-only accounting RPCs by default; its optional SQL executor supports
+local committed-connection tests without adding a runtime `pg` dependency.
+The environment namespace is trusted server configuration, never role input.
+Accounting tables have RLS and no direct client or service-role table grants.
+Dedicated functions perform atomic reservations, dispatch marking, settlement,
+close and expiry; immutable events record operation and attempt transitions.
+`readUsage()` exposes only the verified caller's account usage and budget,
+not environment counters or private model material. Callers cannot reset usage.
+
+Each attempt reserves both account and environment capacity before dispatch:
+
+| Ceiling | Account | Environment |
+| --- | --- | --- |
+| Active operations | 1 | 4 |
+| Attempts per UTC minute | 4 | 20 |
+| Attempts per UTC day | 20 | 100 |
+| Tokens per UTC day | 300,000 | 1,500,000 |
+
+Reservations keep their original UTC windows across rollover. Verified usage
+settles once within reserved input/output components; uncertain dispatch or usage
+charges the full reservation, while proven undispatched work releases it.
+Expiry releases active slots, charges unresolved dispatched attempts conservatively
+and rejects late settlement. No database transaction spans a provider call.
+Duplicate keys return in-progress/replay metadata without another dispatch;
+accounting does not store generated role results for replay.
+
+The maximum is 32,768 input tokens, 8,192 output tokens, 128 KiB of response,
+15 seconds per attempt and 35 seconds per operation. Input measurement conservatively
+counts the full serialized request's UTF-8 bytes plus overhead. Limits may be
+lowered, never raised above these ceilings. Only invalid output permits one
+automatic retry, using the same snapshot and operation deadline with a fresh
+reservation. Transport failure and timeout are not retried. Deadlines also cover
+settlement, close and final boundary revalidation.
+
+Success returns `{data: validatedEnvelope, meta: {attempts, outputRetried, deadline}}`;
+duplicate admission returns status metadata, and failures return `{error: {code}}`.
+Safe codes include `INVALID_AI_OUTPUT`, `AI_TIMEOUT`, `AI_UNAVAILABLE` and
+`SERVICE_UNAVAILABLE`; raw provider errors, credentials and private text are
+excluded from diagnostics. Accounting outages fail closed.
+
+### Fake configuration and targeted tests
+
+`getLlmConfig` validates existing settings on use: `APP_ENV` must be `local`,
+`test`, `ci`, `development` or `production`. Set `AI_PROVIDER=fake` explicitly
+for local/test/CI and production; hosted development defaults to fake.
+All live dispatch remains disabled. `SOCLAAS_API_KEY` cannot enable it and must
+remain server-only, as must `SUPABASE_SECRET_KEY`. There are no new endpoint or
+model environment settings and no new dependencies. `createSocProvider` is an
+offline transport test seam restricted to test runtime, fake configuration,
+injected transport and reserved `.invalid` destinations; it is not live enablement.
+
+The fake provider has deterministic success, malformed-output and failure scenarios.
+Run unit checks without Supabase, and integration checks with the local stack:
+
+```bash
+bun run test tests/unit/server/llm tests/unit/llm-internal
+bun run db:start
+APP_ENV=test AI_PROVIDER=fake bun run test:integration tests/integration/llm
+bun run test:integration tests/integration/auth tests/integration/domain
+```
+
+The integration harness obtains local configuration in memory, rejects non-loopback
+services, commits synthetic fixtures to race independent database connections and
+cleans up its own records. Do not supply hosted credentials or make live model
+calls. CI includes LLM tests alongside auth/domain integration with explicit fake
+settings. See the
+[acceptance interface reference](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/tests/integration/llm/README.md)
+for contract signatures; its failing-first execution notes describe the G2 baseline.
+Full verify, production build and browser journeys remain human G4 checks.
+
 ## Deployment
 
 | Workflow | Trigger | GitHub environment | What it deploys |
