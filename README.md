@@ -36,6 +36,11 @@ a landing page and empty list screens. See
 [Account pages](docs/DeveloperGuide.md#account-pages) for destinations and
 access recovery.
 
+The internal [shared LLM boundary](docs/DeveloperGuide.md#shared-llm-boundary)
+provides validated fake operations and durable usage accounting. Live model
+dispatch is disabled; role endpoints and generated-result persistence belong to
+separate features.
+
 ## Checks
 
 | Command | What it does |
@@ -49,7 +54,7 @@ access recovery.
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |
 
-CI requires both the local Auth/domain integration job and the production-build
+CI requires both the local Auth/domain/LLM integration job and the production-build
 Playwright job before `verify` succeeds. See
 [Auth tests and settings](docs/DeveloperGuide.md#auth-tests-and-settings) for
 setup and the hosted settings that need human review.
@@ -59,6 +64,7 @@ setup and the hosted settings that need human review.
 | Path | Contents |
 | --- | --- |
 | `src/app/` | Pages and route handlers (Next.js App Router) |
+| `src/server/llm/` | Server-only AI contracts, fake provider and usage accounting |
 | `src/lib/supabase/`, `src/server/supabase/` | Supabase clients and generated database types |
 | `supabase/` | Local Supabase config, migrations and seed data |
 | `docs/` | Product site and Developer Guide |

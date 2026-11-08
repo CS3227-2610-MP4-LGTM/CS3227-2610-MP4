@@ -198,6 +198,114 @@ the limits above remain unchanged.
 - **Depends on:** T-01
 - **Status:** done
 
+### T-04: Shared LLM provider and usage accounting
+
+- **Issue:** #38
+- **Covers:** SYS-01.1 and SYS-02.1–02.2 at the shared LLM boundary;
+  SYS-03.1–03.3; SYS-10.1–10.4 and SYS-12.1 for AI usage accounting only;
+  SYS-12.5's denial of usage resets; SYS-13.1 and SYS-13.3, SYS-15.1,
+  SYS-16.1, SYS-18.1–18.2 and SYS-19.1/19.3–19.4 for this foundation.
+  INTEGRATION-SPEC §4's four input/output contracts and snapshot validation,
+  with §1 bounds and §2 proposal-location semantics. SEC-01.1–01.2's shared
+  authorization gate, request minimization and instruction/data separation;
+  SEC-02.1 and SEC-02.2's captured-snapshot checks; SEC-03.1's shared hint and
+  feedback checks; SEC-04.1–04.2, SEC-05.1–05.3 and SEC-06.1 for provider
+  execution and durable accounting. Role-entry-point authorization, generated
+  result persistence, grade uniqueness/flags, browser rendering and cached
+  hint reads complete the corresponding criteria in later role tasks.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index and §4 Product
+  decisions → Flaw proposals and answer keys, Hints and attempts, Grading,
+  Moderation flags, Challenge input and Shared vocabularies;
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-01 — Runtime and server/client boundary,
+  SYS-02 — Untrusted input and submitted code, SYS-03 — LLM boundary,
+  SYS-10 — Database enforcement and privileged access (including the current
+  SYS-10.3 named-use register), SYS-12 — Record access and audit (AI usage
+  records and the generated-material rules defining the boundary's callers),
+  SYS-13 — Environment isolation, SYS-15 — Configuration and hosted Auth
+  (LLM configuration rows and SYS-15.1 only), SYS-16 — Security baseline,
+  SYS-18 — Resource use, SYS-19 — Test strategy;
+  `workflow/specs/AI-SECURITY-SPEC.md` SEC-01 — Authorize and minimize model
+  access, SEC-02 — Validate model output before use, SEC-03 — Protect
+  learner-facing hints and feedback, SEC-04 — Bound SoC requests and usage,
+  SEC-05 — Reserve and settle usage atomically, SEC-06 — Contain failures and
+  keep diagnostics safe; `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and
+  contract conventions (including Shared values and bounds and Pasted-code
+  cap), §2 Domain model and publication lifecycle (`ai_usage_records`, the
+  SYS-10.3 provenance reference, captured draft/revision invariants and Code,
+  proposals and locations), §3 API contracts → Transport, concurrency and
+  errors and Shared response types (`LearnerGrade` feedback rule only),
+  §4 Server-only LLM contracts (all four operations), and §5 Category progress
+  and recommendations (`CategoryProgress` shape only). No story implementation.
+- **Tests:** unit (`tests/unit/server/llm/`); integration
+  (`tests/integration/llm/`), with existing auth/domain integration regressions.
+  Unit tests cover strict envelopes, unknown fields, all four exact input
+  projections, output cardinality/identity/evidence/range checks, assembled
+  candidate bounds, malicious text retained as data, server-owned instructions
+  and capabilities, and rejection of redirects. Exercise deterministic fake
+  success, malformed output and failures; full Unicode NFKC/case-fold overlap
+  checks across every retained flaw; markup/link/line-reference rejection;
+  permitted short protected values and harmless emphasis. Test each payload,
+  token, byte, deadline and attempt boundary at and one beyond the limit,
+  including multibyte text, conservative full-request measurement, lower
+  effective ceilings, bounded response consumption and fake-clock UTC rollover.
+  Assert safe errors/logs/traces with sentinel secrets and private text,
+  client-import rejection, and no live/non-loopback dispatch in local/test/CI.
+  Integration tests drive the shared boundary with persisted authorized fixture
+  snapshots, two users per role and an anonymous caller; denied role, owner,
+  ID and state cases create neither reservations nor provider attempts. Verify
+  own-only usage/budget reads, direct client write/reset/spoof denial, RLS,
+  explicit grants, admin-only accounting functions and no admin table access.
+  Use independent committed database connections to race different keys at the
+  last account/environment slot, attempt or token unit and duplicate keys at
+  admission/settlement; assert only admitted fake attempts dispatch. Exercise
+  mixed operations/accounts, persisted state across boundary instances, window
+  rollover with active slots, before/after-dispatch and settlement failures,
+  full uncertain charges, proven-unused release, once-only settlement, expiry
+  and late-result rejection. Cover invalid-output retry success/failure,
+  denied retry reservation, transport failure/timeout without retry, replay
+  without dispatch and accounting unavailability failing closed. Use synthetic
+  payloads, injected clocks and the fake provider; no live network calls.
+- **Config paths:** `src/server/llm/config.ts` (new), `vitest.config.mts`,
+  `vitest.integration.config.mts` (include the LLM suite and preserve serial
+  execution), `.github/workflows/ci.yml` (explicit fake/local settings only).
+  `package.json` and `bun.lock` only if a justified dependency is necessary;
+  retain existing scripts and CI suites. Never read or edit `.env*`.
+- **Constraints:** One foundation area and one implementer run: implement the
+  server-only provider interface, deterministic fake adapter, all four strict
+  contracts, shared prompt/input/output safety checks and durable accounting
+  together in `src/server/llm/`. Reuse T-01's verified identity/stored-role
+  foundation and T-03's persisted records. Require server-verified operation
+  authorization and a captured resource snapshot before request construction
+  or reservation; never accept caller-owned actors, accounting fields or model
+  instructions. Keep all retained flaws available to the safety validator even
+  when only matched comments are sent to assessment. A no-match assessment
+  invokes no provider and consumes no quota. Return validated results and retry
+  metadata for role callers; matching, scoring and grade/retry-flag persistence
+  stay with the grading task. Role tasks also own resource entry points,
+  idempotent domain mutations, proposal/publication/summary persistence,
+  browser rendering and SEC-03.2 cached-hint reads.
+  Add a new migration for usage records, durable reservations/events and
+  dedicated atomic accounting functions under SYS-10.3; regenerate
+  `src/lib/supabase/database.types.ts` from local Supabase. Admin access is
+  function-only, with no direct table/column grants; expose only permitted
+  own-account usage fields. Atomically reserve both scopes before every attempt,
+  retain reservation-time UTC windows, use the 35-second operation expiry and
+  enforce all SEC-04 ceilings. Only invalid output permits one automatic retry
+  against the same snapshot and deadline; uncertain dispatch/usage charges the
+  maximum reservation. No database transaction spans a provider call. Use real
+  committed local transactions for races; rollback-only probes cannot establish
+  cross-connection accounting correctness. Clean up fixture-owned records.
+  The approved provenance register supersedes T-03's historical deferral, but
+  adds no role persistence functions here. Live use remains fail closed until
+  an approved SoC destination/model, measurement, allocation and enforceable
+  limits exist; do not invent configuration names or enable live calls.
+  Validate settings on use without values in diagnostics. Read the relevant
+  `node_modules/next/dist/docs/` guide before any Next.js code. The orchestrator
+  runs every database-backed check; specialists report those checks as unrun.
+- **Depends on:** T-01, T-03
+- **Status:** done
+
 ## Learner
 
 ## Author
