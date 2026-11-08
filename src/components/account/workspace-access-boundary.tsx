@@ -10,15 +10,15 @@ export function useReportWorkspaceAccessFailure() {
   return useContext(AccessFailureContext);
 }
 
-export function WorkspaceAccessBoundary({ children, signOutAction }: {
+export function WorkspaceAccessBoundary({ children, signOutAction, workspaceHref = "/" }: {
   children: ReactNode;
   signOutAction: () => Promise<void>;
+  workspaceHref?: string;
 }) {
   const [status, reportFailure] = useState<WorkspaceAccessStatus>();
 
   useEffect(() => {
     if (status === "unauthenticated") window.location.replace("/sign-in?notice=session-expired");
-    if (status === "role_denied") window.location.reload();
   }, [status]);
 
   if (status === "account_unavailable" || status === "account_service_unavailable") {
@@ -28,7 +28,11 @@ export function WorkspaceAccessBoundary({ children, signOutAction }: {
     </main>;
   }
 
-  // Re-enter through the server gate so a role denial uses the current role's workspace.
+  if (status === "role_denied") return <main className="account-shell">
+    <AccessScreen kind="role-denied" workspaceHref={workspaceHref} />
+  </main>;
+
+  // Recovery requires explicit navigation; no interrupted operation is replayed.
   if (status) return null;
   return <AccessFailureContext.Provider value={reportFailure}>{children}</AccessFailureContext.Provider>;
 }
