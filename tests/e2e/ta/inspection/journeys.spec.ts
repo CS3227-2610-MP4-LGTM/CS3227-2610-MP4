@@ -89,6 +89,7 @@ test("TA-01.6 refreshes pending/running/failed evidence by GET alone and retains
   expect(mutations).toEqual([]);
 });
 test("TA-01.3 TA-01.7 shows read failure and explicit retry, invalid cursor and missing detail without false emptiness", async ({ page }) => {
+  await expect(page.getByRole("link", { name: "View submission" }).first()).toBeVisible();
   let reads = 0;
   await page.route(api, async route => {
     reads++;
