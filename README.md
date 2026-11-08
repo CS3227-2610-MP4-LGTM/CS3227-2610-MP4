@@ -31,10 +31,14 @@ Before the first `bun run dev`, create `.env.local` as described in
 [Database (Supabase)](docs/DeveloperGuide.md#database-supabase).
 
 Open `/sign-up` to create an account with a permanent Learner, Author or TA
-role, or `/sign-in` for an existing account. Each role has shared navigation,
-a landing page and empty list screens. See
-[Account pages](docs/DeveloperGuide.md#account-pages) for destinations and
-access recovery.
+role, or `/sign-in` for an existing account. See
+[Account pages](docs/DeveloperGuide.md#account-pages) for role destinations
+and access recovery.
+
+Sign in as a Learner to open **Challenges**. Filter published challenges by
+**Language**, **Difficulty** and **Flaw category**, then choose **View challenge**
+to inspect the source in a read-only PR view. See
+[Learner challenge catalogue and PR view](docs/DeveloperGuide.md#learner-challenge-catalogue-and-pr-view).
 
 The internal [shared LLM boundary](docs/DeveloperGuide.md#shared-llm-boundary)
 provides validated fake operations and durable usage accounting. Live model
@@ -49,7 +53,7 @@ separate features.
 | `bun run typecheck` | Generates route types, then `tsc --noEmit` |
 | `bun run test` | Unit tests (Vitest); no Supabase required |
 | `bun run test:integration` | Auth/API/Postgres integration tests against local Supabase |
-| `bun run test:e2e` | Playwright account journeys against local Auth and a production build (port 3100) |
+| `bun run test:e2e` | Playwright account and Learner browse journeys against local Supabase and a production build (port 3100) |
 | `bun run build` | Production build |
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |
