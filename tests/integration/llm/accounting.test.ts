@@ -169,9 +169,9 @@ it("SYS-10.1 all accounting tables have RLS, explicit grants and no anonymous/ad
     expect(row.rls, row.name).toBe(true);
     for (const role of ["anon", "authenticated", "service_role"]) {
       const grants = await h.db.query<{ read: boolean; write: boolean }>(`
-        select has_table_privilege($1,$2,'SELECT') or has_any_column_privilege($1,$2,'SELECT') as read,
-          has_table_privilege($1,$2,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
-          or has_any_column_privilege($1,$2,'INSERT,UPDATE,REFERENCES') as write
+        select has_table_privilege($1,$2::oid,'SELECT') or has_any_column_privilege($1,$2::oid,'SELECT') as read,
+          has_table_privilege($1,$2::oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+          or has_any_column_privilege($1,$2::oid,'INSERT,UPDATE,REFERENCES') as write
       `, [role, row.oid]);
       expect(grants.rows[0].write, `${role} mutations ${row.name}`).toBe(false);
       if (role !== "authenticated") expect(grants.rows[0].read, `${role} reads ${row.name}`).toBe(false);
