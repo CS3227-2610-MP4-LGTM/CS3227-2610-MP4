@@ -1,0 +1,76 @@
+[
+  {
+    "caseId": "c1-summarize-learner",
+    "payload": {
+      "submissions": [
+        {
+          "submissionId": "00000000-0000-4000-8000-000000000501",
+          "revisionId": "00000000-0000-4000-8000-000000000201",
+          "attemptNumber": 1,
+          "submittedAt": "2026-01-01T00:00:01Z",
+          "originalScore": 25,
+          "effectiveScore": 70,
+          "categories": [
+            {
+              "category": "logic_bug",
+              "totalFlaws": 1,
+              "identifiedFlaws": 1
+            },
+            {
+              "category": "edge_case",
+              "totalFlaws": 1,
+              "identifiedFlaws": 0
+            }
+          ],
+          "comments": [
+            {
+              "commentId": "00000000-0000-4000-8000-000000000601",
+              "body": "Check the payable amount.",
+              "feedback": "The consequence and proposed fix are clear."
+            }
+          ]
+        }
+      ],
+      "progress": {
+        "learnerId": "00000000-0000-4000-8000-000000000011",
+        "categories": [
+          {
+            "category": "logic_bug",
+            "totalFlaws": 1,
+            "identifiedFlaws": 1,
+            "identificationRate": 1,
+            "completedFirstAttempts": 1
+          },
+          {
+            "category": "edge_case",
+            "totalFlaws": 1,
+            "identifiedFlaws": 0,
+            "identificationRate": 0,
+            "completedFirstAttempts": 1
+          },
+          {
+            "category": "error_handling",
+            "totalFlaws": 0,
+            "identifiedFlaws": 0,
+            "identificationRate": null,
+            "completedFirstAttempts": 0
+          },
+          {
+            "category": "security",
+            "totalFlaws": 0,
+            "identifiedFlaws": 0,
+            "identificationRate": null,
+            "completedFirstAttempts": 0
+          },
+          {
+            "category": "performance",
+            "totalFlaws": 0,
+            "identifiedFlaws": 0,
+            "identificationRate": null,
+            "completedFirstAttempts": 0
+          }
+        ]
+      }
+    }
+  }
+]

@@ -1,5 +1,4 @@
 import "server-only";
-import { fail } from "./errors";
 export type RetainedFlaw = {
     key?: string;
     originalSnippet?: string;
@@ -8,6 +7,13 @@ export type RetainedFlaw = {
     fix: string;
 };
 import { fullCaseFold } from "./unicode-case-fold";
+export class UnsafeLearnerText extends Error {
+    readonly code = "INVALID_AI_OUTPUT";
+
+    constructor() {
+        super("INVALID_AI_OUTPUT");
+    }
+}
 function tokens(value: string) {
     return fullCaseFold(value.normalize("NFKC")).match(/[\p{L}\p{M}\p{N}]+/gu) ?? [];
 }
@@ -17,11 +23,11 @@ export function validateLearnerText(value: string, options: {
 }) {
     const text = value.trim();
     if (!text || !text.isWellFormed() || [...text].length > options.maxCodePoints || /<[^>]*>|`|!?\[[^\]]*\]\([^)]*\)|(?:[a-z][a-z\d+.-]*:[^\s]|www\.)|\blines?\s*\d|\bL\d/iu.test(text))
-        fail("INVALID_AI_OUTPUT");
+        throw new UnsafeLearnerText();
     // Reference links (including collapsed/image forms) and definitions are
     // links even when their destination is a relative path or non-HTTP scheme.
     if (/!?\[[^\]\n]+\]\s*\[[^\]\n]*\]|^\s{0,3}\[[^\]\n]+\]:\s*\S/imu.test(text))
-        fail("INVALID_AI_OUTPUT");
+        throw new UnsafeLearnerText();
     const candidate = tokens(text);
     const candidateWindows = new Map<number, Set<string>>();
     for (const flaw of options.retainedFlaws)
@@ -41,7 +47,7 @@ export function validateLearnerText(value: string, options: {
             }
             for (let index = 0; index <= protectedTokens.length - width; index++) {
                 if (windows.has(protectedTokens.slice(index, index + width).join("\0")))
-                    fail("INVALID_AI_OUTPUT");
+                    throw new UnsafeLearnerText();
             }
         }
     return text;

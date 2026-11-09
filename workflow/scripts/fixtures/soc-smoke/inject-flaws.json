@@ -1,0 +1,15 @@
+[
+  {
+    "caseId": "c1-inject-flaws",
+    "payload": {
+      "language": "javascript",
+      "difficulty": "easy",
+      "workingCode": "function discounted(price, percent) {\n  const fraction = percent / 100;\n  return price * (1 - fraction);\n}\n\n// Basket totals use whole currency units.\n\nfunction basketTotal(items) {\n  const prices = items.map(item => item.price);\n  return prices.reduce((sum, price) => sum + price, 0);\n}\n",
+      "flawCount": 2,
+      "categories": [
+        "logic_bug",
+        "edge_case"
+      ]
+    }
+  }
+]

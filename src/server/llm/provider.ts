@@ -61,7 +61,7 @@ export async function readBoundedResponse(response: Response, options: {
                 break;
             length += next.value.byteLength;
             if (length > options.maxBytes) {
-                await reader.cancel();
+                abort();
                 fail("INVALID_AI_OUTPUT");
             }
             chunks.push(next.value);
@@ -146,8 +146,8 @@ export function createFakeProvider(options: { scenario: "success" | "malformed" 
     };
 }
 /** Offline transport seam, available only to tests against RFC 2606 .invalid
- * destinations with an explicitly injected transport. There is no live adapter:
- * endpoint/model/allocation approval is absent, so every real dispatch is denied. */
+ * destinations with an explicitly injected transport. Hosted selection uses
+ * the chat-completions adapter instead. */
 export function createSocProvider(options: {
     destination: string;
     model: string;

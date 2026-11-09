@@ -4,10 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "@/lib/supabase/database.types";
 import { assembleCandidate, categories, validateInput, type InputEnvelope, type Proposal } from "./contracts";
-import { type RunResult, createOperationRunner } from "./execution";
-import type { Accounting } from "./accounting";
-import type { Limits } from "./config";
-import type { Provider } from "./provider";
+import { type RunnerOptions, type RunResult, createOperationRunner } from "./execution";
 import { errorCode, fail } from "./errors";
 import type { RetainedFlaw } from "./safety";
 const requestSchema = z.strictObject({
@@ -82,13 +79,7 @@ type Capture = {
     retainedFlaws: RetainedFlaw[];
     fingerprint: string;
 };
-export function createLlmBoundary(options: {
-    client: Client;
-    accounting: Accounting;
-    provider: Provider;
-    clock: () => number;
-    limits: Limits;
-}) {
+export function createLlmBoundary(options: RunnerOptions & { client: Client }) {
     const { client, accounting } = options;
     const runner = createOperationRunner(options);
     async function identity() {
