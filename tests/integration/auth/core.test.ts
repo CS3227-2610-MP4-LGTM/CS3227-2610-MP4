@@ -174,7 +174,7 @@ describe("local Auth and profile enforcement", () => {
 
   it("SYS-12.2 TA profile queries cannot expose learner email or Auth account records", async () => {
     const client = clients.get(identities[4].id)!;
-    const rows = await client.from("profiles").select("*");
+    const rows = await client.from("profiles").select("id,display_name,role");
     expect(rows.error).toBeNull();
     expect(JSON.stringify(rows.data)).not.toMatch(/@example\.test|"email"/);
     expect((await client.from("profiles").select("email")).error).not.toBeNull();

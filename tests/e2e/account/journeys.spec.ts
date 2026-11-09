@@ -105,7 +105,7 @@ test.describe("account pages against production Next and local Supabase Auth", (
   });
 
   for (const role of roles) {
-    test(`ACC-03.1 ACC-03.2 ACC-03.5 ACC-03.8 ${role} navigation, empty states and all cross-role denials`, async ({ page, signInAs }) => {
+    test(`ACC-03.1 ACC-03.2 ACC-03.5 ACC-03.8 ${role} navigation, empty states and all cross-role denials`, async ({ page, signInAs, accounts }) => {
       await signInAs(role);
       for (const entry of ["/", "/sign-in", "/sign-up"]) {
         await page.goto(entry);
@@ -115,12 +115,19 @@ test.describe("account pages against production Next and local Supabase Auth", (
         ? [["Challenges", "/learner/challenges", "No challenges available."], ["Review history", "/learner/history", "No reviews yet."]]
         : role === "author"
           ? [["My challenges", "/author/challenges", "No challenges yet."], ["Create challenge", "/author/challenges/new", null]]
-          : [["Submissions", "/ta/submissions", "No submissions yet."], ["Flagged submissions", "/ta/flags", "No flagged submissions."], ["Learners", "/ta/learners", "No learners yet."]];
+          : [["Submissions", "/ta/submissions", "No submissions yet."], ["Flagged submissions", "/ta/flags", "No flagged submissions."], ["Learners", "/ta/learners", null]];
       for (const [label, path, empty] of items) {
         await page.getByRole("navigation").getByRole("link", { name: label!, exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`${path}(?:\\?|$)`));
         await expect(page.getByRole("heading", { name: label!, exact: true })).toBeVisible();
         await expect(page.getByRole("navigation").getByRole("link", { name: label!, exact: true })).toHaveAttribute("aria-current", "page");
+        if (path === "/ta/learners") {
+          const learner = accounts.users.learner;
+          await expect(page.getByText(learner.displayName, { exact: true })).toBeVisible();
+          await expect(page.getByText(learner.id, { exact: true })).toBeVisible();
+          await expect(page.getByRole("link", { name: "View learner", exact: true })
+            .and(page.locator(`[href="/ta/learners/${learner.id}"]`))).toBeVisible();
+        }
         if (empty) await expect(page.getByText(empty, { exact: true })).toBeVisible();
       }
       for (const other of roles.filter((value) => value !== role)) {
