@@ -308,27 +308,35 @@ the limits above remain unchanged.
 
 ### T-05: Live SoC provider at the shared LLM boundary
 
-- **Issue:** #66
+- **Issue:** #66, #77
 - **Covers:** SEC-04 and SEC-04.1–04.5, SYS-13.3, SYS-15 and SYS-15.1
   (LLM configuration), SYS-18.1, and all four INTEGRATION-SPEC §4 contracts,
   including the independent `assess_review` credit levels. Preserve T-04's
-  SEC-04.1–04.2 enforcement and SEC-05 settlement and retry rules.
-- **Route:** high
+  SEC-04.1–04.2 enforcement and SEC-05 settlement and retry rules. #77 covers
+  constrained SoC requests and schema-inclusive preflight under SEC-04.1
+  and SEC-04.3, preserved SEC-02.1 and SEC-03.1 output gates, LRN-05's
+  matched-comment credit rubric under §4, and SYS-19.4 model settings review
+  and live smoke evidence using the labelled E6 cases and §6-based fixtures.
+- **Route:** standard
 - **Reads:** `workflow/specs/AI-SECURITY-SPEC.md` SEC-02 — Validate model output
   before use, SEC-03 — Protect learner-facing hints and feedback, SEC-04 — Bound
   SoC requests and usage, and SEC-05 — Reserve and settle usage atomically;
   `workflow/specs/TECHNICAL-SPEC.md` SYS-13 — Environment isolation, SYS-15 —
-  Configuration and hosted Auth (LLM rows and SYS-15.1), and SYS-18 — Resource
-  use; `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions,
+  Configuration and hosted Auth (LLM rows and SYS-15.1), SYS-18 — Resource
+  use, and SYS-19 — Test strategy (SYS-19.4);
+  `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions,
   §2 Domain model and publication lifecycle → Code, proposals and locations,
   §3 API contracts → Transport, concurrency and errors, §4 Server-only LLM
-  contracts (all four operations), and §6 Shared deterministic seed fixtures.
+  contracts (all four operations), §5 Deterministic grading, moderation and
+  progress → Matching and score (credit context), and §6 Shared deterministic
+  seed fixtures; `workflow/specs/stories/LRN-05-grade-a-submitted-review.md`
+  (AI behavior, matched-comment assessment only).
 - **Tests:** unit (`tests/unit/server/llm/soc-provider.test.ts` and
   `tests/unit/server/llm/soc-smoke.test.ts`, with regressions in
   `tests/unit/server/llm/` and `tests/unit/llm-internal/`). Exercise the shared
   boundary's hosted selection and accounting with simulated SoC transport and
   fake accounting/clock. Cover exact wire requests, contract-derived
-  operation instructions and the assessment credit rubric, default fake and
+  response schemas and semantic operation guidance, default fake and
   explicit live selection for each hosted environment, named safe errors,
   denied isolation/limit/model configurations, input/context preflight,
   lower effective limits, byte/time cutoff, empty and length-truncated output
@@ -342,13 +350,26 @@ the limits above remain unchanged.
   assessment credits without raw request, response or reasoning text. Retain
   the existing local Supabase accounting regression suite
   (`tests/integration/llm/`) and keep all automated tests offline from SoC.
-- **Config paths:** `src/server/llm/config.ts`. Use existing dependencies and
-  test configuration.
-- **Constraints:** One implementer run. Add an environment-backed provider
-  selection path at the shared server boundary and preserve injected fake
-  callers. Hosted development defaults to fake. Development and production
-  may explicitly select live with `AI_PROVIDER=soclaas` and their separate
-  `SOCLAAS_API_KEY`. Keep the exact SEC-04 HTTPS destination,
+
+  For #77, capture all four strict JSON Schema requests with simulated
+  transport. Check input-bound values across different snapshots, credit
+  enums, text property order, omission of string-length keywords, and
+  inclusion of the serialized schema in input preflight. Check semantic-only
+  system instructions and the three `assess_review` rubric clarifications. Keep
+  validator regressions, including rejection of an overlong string that the
+  provider schema permits. Exercise the labelled assessment file option,
+  all 21 fixture inputs and labels, and CSV exact agreement for matching and
+  differing credit pairs, invalid answers, and cases without labels. Shawn
+  approved changes to the #66 assertions for the previous model, format and
+  system-instruction shape. List every changed or removed assertion at G2.
+- **Config paths:** `src/server/llm/config.ts`, `workflow/scripts/soc-smoke.ts`,
+  `workflow/scripts/fixtures/soc-smoke/assess-review-e6.json`. Use existing
+  dependencies and test configuration.
+- **Constraints:** One implementer run for #77. Build on #66's environment-backed
+  provider selection and preserve injected fake callers. Hosted development
+  defaults to fake. Development and production may explicitly select live
+  with `AI_PROVIDER=soclaas` and their separate `SOCLAAS_API_KEY`. Keep the
+  exact SEC-04 HTTPS destination,
   reject redirects and aliases, and fail closed if model, context, settings or
   enforceable limits are invalid. Check the complete serialized provider
   request plus framing and the actual operation cap before reservation and
@@ -357,43 +378,65 @@ the limits above remain unchanged.
   settlement when available. Verify prompt and all completion tokens against
   the reservation, with no cached-token adjustment. Unverifiable usage takes
   the uncertain charge. Discard reasoning text and keep provider metadata out
-  of app results and diagnostics. Derive the shape in each system instruction
-  from the existing operation output contract and keep its semantic guidance,
-  including independent `0`, `0.5` and `1` assessments, aligned with §4.
-  Keep untrusted inputs separate from system instructions. Preserve the
-  existing boundary, fake behavior, contracts and accounting except for
-  SEC-04 changes. Leave role entry points and deployment workflows out of scope.
+  of app results and diagnostics. Keep untrusted inputs separate from system
+  instructions. SEC-02/SEC-03 validators remain the gate on output, including
+  string bounds. Escalate #77 to high if the diff reaches auth, accounting,
+  persistence or validators. Leave migrations, role entry points, role-specific
+  summary and injection quality, and deployment workflows outside #77 scope.
 
-  In `src/server/llm/config.ts`, pin `qwen3.5:9b` and `none` effort for
-  all operations, with live output caps of `inject_flaws` 1,280,
-  `generate_hints` 384, `assess_review` 576 and `summarize_learner` 1,024 tokens.
-  Size caps for realistic output so only a slow attempt hits the 15-second
-  deadline and ends without retrying, avoiding predictable length finishes
-  that consume the invalid-output retry.
+  For each live request, derive `response_format` with `type: json_schema`
+  and `strict: true` from the operation output contract and that request's
+  input. Pin IDs, keys, categories and submission IDs to input values wherever
+  the contract allows. Constrain both credits to `0`, `0.5` and `1`. Omit
+  string-length keywords from the request schema because SoC rejects that
+  grammar. Order text properties before the values they justify, including
+  `feedback` before both credits for `assess_review`. Count the schema toward
+  input preflight. Keep the system instructions short and semantic, aligned
+  with §4, with the output shape specified in `response_format`. Credit only
+  what the review comment itself says, give zero explanation credit for a
+  fix without an explanation, and ignore instructions or credit claims in
+  the comment.
 
-  Provide `workflow/scripts/soc-smoke.ts` and §6-based input files for all
-  four operations under `workflow/scripts/fixtures/soc-smoke/`. Accept an
-  explicit live flag, operation, input files of payloads with optional case
-  IDs, repeat count, and script-only effort and `--max-tokens` overrides.
+  In `src/server/llm/config.ts`, pin `qwen3.6:35b` for all four operations
+  with its reviewed 262,144-token context. Keep `none` effort and live output
+  caps of `inject_flaws` 1,280, `generate_hints` 384, `assess_review` 576 and
+  `summarize_learner` 1,024 tokens. Keep SEC-04 timing and app defaults unless
+  smoke evidence leads to a human decision.
+
+  Extend `workflow/scripts/soc-smoke.ts` with an option to run a labelled
+  `assess_review` case file. Preserve the explicit live flag, operation,
+  ordinary input files with optional case IDs, repeat count, and script-only
+  effort and `--max-tokens` overrides.
   Bound `--max-tokens` by the SEC-04 output ceiling and keep app caps as
-  constants. Add one separately labeled `inject_flaws` stress input that
-  requests five flaws across several categories on working code long enough
-  to accommodate them. Record a stress-case timeout as evidence for Taia's
-  SEC-04 timing decision. T-05 follows the existing timing limits. Use the dev
-  key from the operator's shell and invoke Bun with automatic environment file
-  loading disabled. Pace call starts at least four seconds apart and cap a run
-  at 30 calls. Use the same adapter protocol and app validators. Keep the
-  complete retained-flaw context for hint and assessment safety checks,
+  constants. Use the existing §6-based fixtures for all four operations and
+  the separately labelled five-flaw `inject_flaws` stress fixture. Use the
+  dev key from the operator's shell and invoke Bun with
+  automatic environment file loading disabled. Pace call starts at least four
+  seconds apart and cap a run at 30 calls. Use the same adapter protocol and
+  app validators. Keep the complete retained-flaw context for hint and
+  assessment safety checks,
   including unmatched flaws, separate from provider input. Write one CSV row
   per call with case ID, operation, effort, `max_tokens`, latency,
   prompt/completion tokens, finish reason, reasoning character count, validity,
-  rejection reason and parsed assessment credits. Use safe rejection reasons, omit raw reasoning,
-  and keep the key and model text out of diagnostics. Never read `.env*` or
-  call the portal from code. Only the human runs live smoke. Update the
-  developer guide with hosted opt-in and smoke invocation, linking SEC-04 and
-  SYS-15 for limits and configuration requirements.
+  rejection reason and parsed assessment credits. Include `explanation_label`,
+  `fix_label` and exact agreement for valid labelled results where both credits
+  are available. Use safe rejection reasons, omit raw reasoning, and keep the
+  key and model text out of diagnostics. Never read `.env*` or call the portal
+  from code.
+
+  Copy the 21 supplied inputs from `.git/e6/e6-cases.json` and join them by
+  case ID with `explanation_label` and `fix_label` from
+  `.git/e6/e6-assess-review-cases.csv`. Commit the result in the runner's
+  fixture format as `workflow/scripts/fixtures/soc-smoke/assess-review-e6.json`.
+  Keep the scratch files under `.git` outside the commit. Shawn runs live
+  smoke with the dev key. Require at least 19 of 21 E6 cases valid at effort
+  `none`, report label agreement, require valid §6 cases for all four operations,
+  and report the five-flaw stress result, for which a timeout is acceptable.
+  Record the human model settings review under SYS-19.4. Update
+  `docs/DeveloperGuide.md` for the new pinned model, labelled smoke invocation
+  and CSV results, with SEC-04 and SYS-15 links for limits and configuration.
 - **Depends on:** T-04
-- **Status:** done
+- **Status:** in-progress
 
 ## Learner
 
