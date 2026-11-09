@@ -37,7 +37,8 @@ test("TA-04.1 TA-05.7 learner navigation and supporting submission round trip pr
   await page.getByRole("link", { name: "Back to learner", exact: true }).click();
   await expect(page).toHaveURL(detail);
   await page.getByRole("link", { name: "Back to learners", exact: true }).click(); await expect(page).toHaveURL(root);
-  expect(await page.locator("main").innerText()).not.toMatch(/@example\.test|email/i);
+  await expect(page.getByRole("link", { name: "View learner", exact: true }).first()).toBeVisible();
+  expect(await page.getByRole("main").innerText()).not.toMatch(/@example\.test|email/i);
 });
 test("TA-04.2 learner cursor survives reload/back; invalid pages recover explicitly", async ({ page }) => {
   const response = await page.request.get("/api/v1/ta/learners?limit=1"); expect(response.status()).toBe(200);
