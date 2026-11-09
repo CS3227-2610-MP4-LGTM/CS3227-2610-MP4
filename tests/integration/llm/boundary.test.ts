@@ -146,11 +146,15 @@ it("SEC-01.2 publication hints project only the complete retained candidate, wit
       explanation: "The calculation halves the amount.", fix: "Double the amount." }] }));
 });
 it("SEC-01.2 assessment captures only server-selected matched comments and the pinned revision", async () => {
+  const gradingRunId = uid(28701).replace("00000000", "38f00000");
+  await h.db.query(`insert into public.grading_runs (id, submission_id, run_number, state)
+    values ($1, $2, 1, 'running') on conflict (id) do nothing`, [gradingRunId, pendingSubmission]);
   const { b, provider } = await boundary("learnerA");
   provider.execute.mockResolvedValue({ output: envelope("assess_review", { assessments: [{ key: keys.pinnedAFlaw,
     commentId: pendingComment, explanationCredit: 1, fixCredit: 0.5, feedback: "The consequence is clear; explain the change more precisely." }] }),
     usage: { inputTokens: 100, outputTokens: 20, verified: true } });
   expect(await b.execute({ operation: "assess_review", resourceId: pendingSubmission, idempotencyKey: freshKey() }, {
+    gradingRunId,
     matches: [{ key: keys.pinnedAFlaw, commentId: pendingComment }],
   })).toHaveProperty("data");
   expect(provider.execute.mock.calls[0][0].data).toEqual(envelope("assess_review", { language: "javascript", flawedCode: pinnedAFlawedCode,
@@ -166,8 +170,12 @@ it.each(["authorA", "authorB", "learnerB", "taA", "taB", "anon"] as const)("SEC-
   expect(reserve).not.toHaveBeenCalled(); expect(provider.execute).not.toHaveBeenCalled();
 });
 it("SEC-01.1 a forged selected comment/flaw ID is denied before reservation", async () => {
+  const gradingRunId = uid(28701).replace("00000000", "38f00000");
+  await h.db.query(`insert into public.grading_runs (id, submission_id, run_number, state)
+    values ($1, $2, 1, 'running') on conflict (id) do nothing`, [gradingRunId, pendingSubmission]);
   const { b, reserve, provider } = await boundary("learnerA");
   expect(await b.execute({ operation: "assess_review", resourceId: pendingSubmission, idempotencyKey: freshKey() }, {
+    gradingRunId,
     matches: [{ key: keys.pinnedBFlaw, commentId: keys.qB }],
   })).toMatchObject({ error: { code: "FORBIDDEN" } });
   expect(reserve).not.toHaveBeenCalled(); expect(provider.execute).not.toHaveBeenCalled();
