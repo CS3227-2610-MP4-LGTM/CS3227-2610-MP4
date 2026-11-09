@@ -77,3 +77,29 @@ it("SYS-10.1 SYS-10.2 SYS-12.2 TA-05.7 identity RPC enforces grants and distingu
   const anon = await f.h.client().rpc("read_ta_learner", { p_learner_id: id(11) }); expect(anon.error).not.toBeNull();
   expect(await f.snapshot()).toEqual(before);
 });
+it("SYS-10.1 SYS-12.2 SEC-REV-01 profile column grants deny timestamps while preserving own stored roles and TA identity RPCs", async () => {
+  for (const role of ["authenticated", "anon", "service_role"]) {
+    const table = await f.h.db.query("select has_table_privilege($1,'public.profiles','SELECT') allowed", [role]);
+    expect.soft(table.rows[0].allowed).toBe(false);
+    for (const column of ["id", "display_name", "role", "created_at"]) {
+      const grant = await f.h.db.query("select has_column_privilege($1,'public.profiles',$2,'SELECT') allowed", [role, column]);
+      expect.soft(grant.rows[0].allowed).toBe(role === "authenticated" && column !== "created_at");
+    }
+  }
+  const callers = { ...Object.fromEntries(Object.entries(f.actors).map(([key, actor]) => [key, actor.client])), anon: f.h.client() };
+  for (const [caller, client] of Object.entries(callers)) {
+    const target = caller === "anon" ? id(11) : f.actors[caller as keyof typeof f.actors].id;
+    const timestamps = await client.from("profiles").select("id,created_at").eq("id", target);
+    expect.soft(timestamps.error?.code).toBe("42501"); expect.soft(timestamps.data).toBeNull();
+    if (caller === "anon") continue;
+    const own = await client.from("profiles").select("id,display_name,role").eq("id", target).single();
+    expect(own.error).toBeNull(); expect(own.data).toEqual({ id: target, display_name: expect.any(String), role: caller.slice(0, -1) });
+    if (caller.startsWith("ta")) {
+      const identity = await client.rpc("read_ta_learner", { p_learner_id: id(11) });
+      expect(identity.error).toBeNull(); expect(identity.data).toEqual({ status: "ok", learner: { id: id(11), displayName: "Learner A" } });
+      const page = await client.rpc("list_ta_learners", { p_limit: 1, p_before: null, p_after_id: null });
+      expect(page.error).toBeNull(); expect(page.data.status).toBe("ok");
+      for (const row of page.data.items) expect(Object.keys(row).sort()).toEqual(["displayName", "id"]);
+    }
+  }
+});

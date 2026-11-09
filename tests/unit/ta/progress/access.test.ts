@@ -59,3 +59,25 @@ it("SYS-11.4 TA-05.6 database failure is unavailable, never empty progress or re
   }
   expect(mocks.admin).not.toHaveBeenCalled(); expect(mocks.provider).not.toHaveBeenCalled();
 });
+it.each([
+  ["directory", "__proto__=unknown"],
+  ["directory", "__proto__=first&__proto__=second"],
+  ["recommendations", "__proto__=unknown"],
+  ["recommendations", "__proto__=first&__proto__=second"],
+] as const)("SYS-02.1 SEC-REV-02 %s rejects %s before protected reads", async (section, query) => {
+  mocks.account.mockResolvedValue({ status: "ok", account: { id: id(21), role: "ta" } });
+  // Valid read responses expose a parser bypass as successful access, rather
+  // than an unrelated missing-mock or database failure.
+  mocks.rpc.mockImplementation(async (name: string) => ({ error: null, data: name === "list_ta_learners"
+    ? { status: "ok", items: [], anchors: [] }
+    : { status: "ok", learner: { id: id(11), displayName: "Learner A" } } }));
+  mocks.from.mockReturnValue({ select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(), range: vi.fn().mockResolvedValue({ data: [], error: null }) });
+  const result = section === "directory" ? await readLearnerPage(new URLSearchParams(query)) : await readRecommendations(id(11), new URLSearchParams(query));
+  expect.soft(result).toEqual({ status: "invalid" });
+  const response = section === "directory" ? await list(request("", query)) : await recommendations(request(`/${id(11)}/recommendations`, query), ctx());
+  expect.soft(response.status).toBe(400);
+  expect.soft(await response.json()).toEqual({ error: expect.objectContaining({ code: "VALIDATION_ERROR", message: expect.any(String) }) });
+  expect.soft(mocks.from).not.toHaveBeenCalled(); expect.soft(mocks.rpc).not.toHaveBeenCalled();
+  expect.soft(mocks.admin).not.toHaveBeenCalled(); expect.soft(mocks.provider).not.toHaveBeenCalled();
+});

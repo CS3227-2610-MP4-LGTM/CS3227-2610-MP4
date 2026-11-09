@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { createProgressFixture } from "./fixture";
 import { id, progress } from "../../../unit/ta/progress/evidence";
+import { challengeCardSchema } from "@/lib/learner/challenge-schema";
 const context = vi.hoisted(() => ({ client: null as SupabaseClient | null, admin: vi.fn(), provider: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/server/supabase/server", () => ({ createClient: async () => {
@@ -64,8 +65,8 @@ it.each(["taA", "taB"] as const)("TA-04.1 TA-04.2 SYS-12.2 %s reads only bounded
   expect((await data(await get(caller, "list"))).items.length).toBeLessThanOrEqual(20);
 });
 it("TA-04.2 TA-05.3 SYS-02.1 rejects malformed/extra/repeated fields and distinguishes missing IDs from existing wrong-role IDs", async () => {
-  for (const query of ["limit=0", "limit=51", "limit=1.1", "limit=1&limit=2", "cursor=broken", `cursor=${"a".repeat(513)}`, "email=forged"]) await failure(await get("taA", "list", id(11), query), 400, "VALIDATION_ERROR");
-  for (const query of ["limit=0", "limit=11", "limit=1.1", "limit=1&limit=2", "role=ta"]) await failure(await get("taA", "recommendations", id(11), query), 400, "VALIDATION_ERROR");
+  for (const query of ["limit=0", "limit=51", "limit=1.1", "limit=1&limit=2", "cursor=broken", `cursor=${"a".repeat(513)}`, "email=forged", "__proto__=unknown", "__proto__=first&__proto__=second"]) await failure(await get("taA", "list", id(11), query), 400, "VALIDATION_ERROR");
+  for (const query of ["limit=0", "limit=11", "limit=1.1", "limit=1&limit=2", "role=ta", "__proto__=unknown", "__proto__=first&__proto__=second"]) await failure(await get("taA", "recommendations", id(11), query), 400, "VALIDATION_ERROR");
   for (const section of ["progress", "recommendations"] as const) {
     await failure(await get("taA", section, "bad"), 400, "VALIDATION_ERROR");
     await failure(await get("taA", section, id(999)), 404, "NOT_FOUND");
@@ -113,7 +114,8 @@ it("TA-05.3 TA-05.4 TA-05.5 refresh recomputes live recommendation ordering and 
   const ids = async () => (await data(await get("taA", "recommendations"))).items.map((r: { challenge: { id: string } }) => r.challenge.id);
   expect(await ids()).toEqual([id(6101), id(6102), id(6103)]);
   const result = await data(await get("taB", "recommendations"));
-  expect(result.items[0]).toEqual({ challenge: { id: id(6101), revisionId: id(7101), title: "Practice 6101", description: "Review the changes.", language: "javascript", difficulty: "easy", categories: ["logic_bug", "edge_case"], publishedAt: expect.any(String) }, targetCategories: ["logic_bug", "edge_case"] });
+  for (const item of result.items) expect(challengeCardSchema.safeParse(item.challenge).success).toBe(true);
+  expect(result.items[0]).toEqual({ challenge: { id: id(6101), revisionId: id(7101), title: "Practice 6101", description: "Review the changes.", language: "javascript", difficulty: "easy", categories: ["edge_case", "logic_bug"], publishedAt: expect.any(String) }, targetCategories: ["logic_bug", "edge_case"] });
   expect((await data(await get("taA", "recommendations", id(11), "limit=1"))).items).toHaveLength(1);
   await f.addAttempt(16001, candidate, "pending"); expect(await ids()).toEqual([id(6102), id(6103)]);
   const running = await f.addCandidate(6105); await f.addAttempt(16002, running, "running");
