@@ -430,7 +430,7 @@ Loading announces “Loading submission…”. A missing record shows “Submiss
 not found.”; a read failure offers **Try again**. **Back to submissions** is
 always available. Valid page context `from=flags` adds **Back to flagged
 submissions**; `from=learner&learnerId=<matching learner UUID>` adds **Back to
-learner**. The learner detail destination remains a separate feature. Account
+learner**. Account
 and role failures use the shared workspace recovery described above.
 
 #### TA read contracts
@@ -465,6 +465,89 @@ and [list migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blo
 - `bun run test:e2e tests/e2e/ta/inspection` uses the production build and local
   Supabase for URL history, refresh/retry, account transitions, return links,
   keyboard access and 320 CSS pixel width.
+
+### TA learner progress and recommendations
+
+Open **Learners** at `/ta/learners`. Cards show display names and learner IDs,
+so learners with the same name can be distinguished without exposing email.
+Choose **View learner** to open **Learner performance** at
+`/ta/learners/:learnerId`. **Next page** and **First page** navigate the directory;
+its URL preserves pagination for reload and browser Back/Forward. An empty
+list says “No learners yet.” An invalid page offers **First page**; read errors
+provide **Try again**. Missing learners show “Learner not found.”
+
+**Category progress** shows Logic bug, Edge case, Error handling, Security and
+Performance, with identified/total flaws, identification rate and completed
+first-attempt counts. Rates display two decimal places. “Not observed” means
+there are no eligible flaws in that category; `0.00%` means flaws were observed
+but none identified. All five categories remain visible with no evidence.
+Progress uses original matching from completed first attempts across retained
+history, including unpublished and archived challenges. Pending, running and
+failed grading, learner retries and grade overrides do not change these counts.
+
+**Recommended challenges** is rule-based advice, with up to five published,
+unattempted challenges showing language, difficulty and practice categories.
+Any prior attempt excludes that challenge, including failed or pending attempts
+and attempts on older revisions. Recommendations target the two weakest
+observed categories (or the only observed category). No observations or eligible
+candidates shows “No eligible recommendations right now.” Cards offer advice
+without assigning practice or starting a review.
+
+Both sections load independently on entry. **Refresh progress and
+recommendations** rereads current history and publication eligibility. Each
+section has its own **Try again**; one failure leaves the other's successful
+result visible. Failed refreshes retain successful content labelled
+“Previously loaded progress” or “Previously loaded recommendations”. These reads
+make no AI request. The separate **Performance summary** region currently has
+no summary content or generation action.
+
+**View submissions** opens the learner-filtered submissions list. Open an attempt
+there and use **Back to learner** to return. **Back to learners** returns to the
+directory. Account and role failures use shared workspace recovery.
+
+#### Learner progress read contracts
+
+| Endpoint | Request and success data |
+| --- | --- |
+| `GET /api/v1/ta/learners` | Optional `cursor` and `limit` (default 20, range 1–50). Returns `{ items: [{ id, displayName }], nextCursor }`. |
+| `GET /api/v1/ta/learners/:id/progress` | UUID path parameter; no query fields. Returns `{ learnerId, categories }`, with `category`, `totalFlaws`, `identifiedFlaws`, `identificationRate` and `completedFirstAttempts` per category. Rate is a fraction rounded to four decimal places, or null. |
+| `GET /api/v1/ta/learners/:id/recommendations` | UUID path parameter; optional `limit` (default 5, range 1–10). Returns `{ items: [{ challenge, targetCategories }] }`; `challenge` follows the shared ChallengeCard contract. |
+
+These GET endpoints use the TA identity/role guard, user-scoped reads and the
+same response envelopes, private/no-store headers and error status mapping as
+TA inspection. Unknown and repeated query fields are rejected. Learner identity
+is resolved server-side for the detail page; there is no separate identity GET
+endpoint. A missing learner returns not-found; a target with another role is
+forbidden.
+
+Directory ordering is profile creation time descending, then ID ascending;
+bounded opaque cursors carry that anchor. The migration adds `profiles.created_at`,
+revokes authenticated table-wide SELECT, and grants SELECT only on `id`,
+`display_name` and `role`, subject to existing RLS. Do not use wildcard profile
+projections. The narrow security-definer RPCs
+`list_ta_learners(p_limit, p_before, p_after_id)` and
+`read_ta_learner(p_learner_id)` verify the caller's stored TA role with a fixed
+empty search path. Execution is granted to authenticated users, revoked from
+PUBLIC, anon and service_role; direct timestamp reads remain unavailable.
+
+The shared aggregator counts original matched flaws over eligible pinned
+first-attempt evidence. Recommendation weakness ordering uses unrounded ratios,
+then greater total flaws, then shared category order. Candidates sort by more
+target-category matches, easier difficulty, then challenge ID ascending. Reads
+recompute eligibility without changing submissions, grades, challenges or summaries.
+
+See the [progress readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/progress.ts),
+[shared aggregation and selection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/ta/progress.ts)
+and [identity migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261109160000_ta_learner_progress.sql).
+
+#### Learner progress checks
+
+- `bun run test tests/unit/ta/progress` covers aggregation, deterministic rules,
+  validation, directory/detail rendering and independent section recovery.
+- With local Supabase running, `bun run test:integration tests/integration/ta/progress`
+  covers protected reads, RPC/grant boundaries and retained original evidence.
+- `bun run test:e2e tests/e2e/ta/progress` covers production browser navigation,
+  refresh/retry, submission round trips, keyboard access and phone-width layouts.
 
 ### TA flag resolution and grade overrides
 
