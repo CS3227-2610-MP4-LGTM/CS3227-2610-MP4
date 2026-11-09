@@ -137,10 +137,17 @@ adjustment, under [SEC-05](#sec-05--reserve-and-settle-usage-atomically).
 Completion tokens include reasoning, so `max_tokens` bounds reasoning and
 answer generation together.
 
-SoC publishes no numeric per-key rate, concurrency or quota limits. Enforce
-LGTM's ceilings below for fake and live use, with environment budgets scoped to
-each environment's key for live use. SoC daily and monthly quotas reset at UTC
-boundaries. Treat an upstream `429` (rate or quota exceeded) or `5xx` as a failed
+Enforce LGTM's ceilings below for fake and live use, with environment budgets
+scoped to each environment's key for live use. During configuration review, read
+the key's limits from `GET https://soclaas-portal.comp.nus.edu.sg/api-key/budget`
+and the pinned model's cost basis from `GET /v1/models`. Whenever the key,
+model or ceilings change, verify that the environment's attempts-per-minute
+ceiling is at or below the key's requests-per-minute limit and that its daily
+token ceiling, priced at the pinned model's output rate, fits within the key's
+daily budget. The app never calls the portal API. SoC budgets reset at 00:00 UTC
+each day for daily budgets and on the first day of each month for monthly budgets.
+
+Treat an upstream `429` (rate or quota exceeded) or `5xx` as a failed
 attempt under the [SEC-05](#sec-05--reserve-and-settle-usage-atomically) transport
 failure rule. Fail closed before live dispatch if the deployment requirements
 or request limits cannot be enforced.
