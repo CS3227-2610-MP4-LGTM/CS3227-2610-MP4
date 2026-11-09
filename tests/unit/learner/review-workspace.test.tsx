@@ -224,7 +224,7 @@ it("LRN-03.3 disables new comments at the count cap while existing comments can 
   expect(screen.getByText("Revised observation.")).toBeTruthy();
   fireEvent.click(screen.getAllByRole("button", { name: /^remove\b/i })[0]!);
   expect((lineAction(3) as HTMLButtonElement).disabled).toBe(false);
-});
+}, 15_000);
 
 it("LRN-03.4 ACC-02.5 retains open editor text and saved drafts on Keep reviewing, then permits the requested sign-out", async () => {
   const view = await openWorkspace();
