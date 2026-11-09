@@ -37,8 +37,11 @@ and access recovery.
 
 Sign in as a Learner to open **Challenges**. Filter published challenges by
 **Language**, **Difficulty** and **Flaw category**, then choose **View challenge**
-to inspect the source in a read-only PR view. See
-[Learner challenge catalogue and PR view](docs/DeveloperGuide.md#learner-challenge-catalogue-and-pr-view).
+to inspect the source in a PR view. For a first attempt, draft line comments
+and choose **Submit review**. Confirming opens the read-only result with the
+submitted comments and **Grading pending**.
+[Learner challenge catalogue and PR view](docs/DeveloperGuide.md#learner-challenge-catalogue-and-pr-view) ·
+[Learner first review](docs/DeveloperGuide.md#learner-first-review)
 
 Sign in as a TA to open **Submissions**, filter attempts by learner, challenge
 and grading status, then choose **View submission** for read-only pinned code,
@@ -61,7 +64,7 @@ separate features.
 | `bun run typecheck` | Generates route types, then `tsc --noEmit` |
 | `bun run test` | Unit tests (Vitest); no Supabase required |
 | `bun run test:integration` | Auth/API/Postgres integration tests against local Supabase |
-| `bun run test:e2e` | Playwright account, Learner browse, TA inspection and moderation journeys against local Supabase and a production build (port 3100) |
+| `bun run test:e2e` | Playwright account, Learner browse and review, TA inspection and moderation journeys against local Supabase and a production build (port 3100) |
 | `bun run build` | Production build |
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |

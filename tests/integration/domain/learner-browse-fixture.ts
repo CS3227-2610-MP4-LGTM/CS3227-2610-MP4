@@ -100,16 +100,19 @@ function revisionSource(publication: Publication) {
 export const longCheckoutLine = `// ${"checkout ".repeat(40).trimEnd()}`;
 
 export async function createLearnerBrowseFixture({
-  scope, pageSize = 21,
-}: { scope: "integration" | "e2e"; pageSize?: number }) {
+  scope, pageSize = 21, cleanupFeatureSubmissions = scope === "submission",
+}: { scope: "integration" | "e2e" | "submission"; pageSize?: number; cleanupFeatureSubmissions?: boolean }) {
   const h = localHarness();
-  const id = (n: number) => `${scope === "integration" ? "49a00000" : "49b00000"}-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const prefix = { integration: "49a00000", e2e: "49b00000", submission: "50a00000" }[scope];
+  const id = (n: number) => `${prefix}-0000-4000-8000-${String(n).padStart(12, "0")}`;
   const practice = Array.from({ length: pageSize }, (_, index) => id(1000 + index));
   const ids = {
     c1: id(101), c2: id(102), draft: id(103), unpublished: id(104), archived: id(105), missing: id(106),
     differentLanguage: id(107), differentDifficulty: id(108), differentCategory: id(109),
     revision1: id(201), revision2: id(211), quotientRevision: id(202),
     archivedRevision: id(205), unpublishedRevision: id(204),
+    differentLanguageRevision: id(207), differentDifficultyRevision: id(208), differentCategoryRevision: id(209),
+    reviewChallenge: id(112), reviewRevision: id(212),
     firstA: id(501), secondA: id(502), firstB: id(503), failedB: id(504),
     practice, longSource: practice[0],
   };
@@ -242,6 +245,25 @@ export async function createLearnerBrowseFixture({
     }
   }
 
+  async function disposeCreatedSubmissions() {
+    if (!cleanupFeatureSubmissions || createdUsers.length === 0) return;
+    const { rows: [ledger] } = await h.db.query<{ exists: boolean }>(
+      "select to_regclass('private.submission_create_requests') is not null as exists",
+    );
+    if (ledger.exists) {
+      await h.db.query("delete from private.submission_create_requests where actor_id = any($1::uuid[])", [createdUsers]);
+    }
+    const seeded = rows.filter(row => row.table === "submissions").map(row => row.id);
+    const { rows: submissions } = await h.db.query<{ id: string }>(`
+      select id from public.submissions where learner_id = any($1::uuid[]) and id <> all($2::uuid[])
+    `, [createdUsers, seeded]);
+    const submissionIds = submissions.map(row => row.id);
+    if (!submissionIds.length) return;
+    await h.db.query("delete from public.submission_comments where submission_id = any($1::uuid[])", [submissionIds]);
+    await h.db.query("delete from public.grading_runs where submission_id = any($1::uuid[])", [submissionIds]);
+    await h.db.query("delete from public.submissions where id = any($1::uuid[])", [submissionIds]);
+  }
+
   async function dispose() {
     try {
       if (rows.length) {
@@ -250,6 +272,7 @@ export async function createLearnerBrowseFixture({
           // Committed rows are needed by PostgREST. Bypass immutability and circular
           // fixture FKs only within this connection's cleanup transaction.
           await h.db.query("set local session_replication_role = replica");
+          await disposeCreatedSubmissions();
           for (const row of rows.toReversed()) {
             await h.db.query(`delete from public.${row.table} where ${row.key} = $1`, [row.id]);
           }
@@ -297,14 +320,14 @@ export async function createLearnerBrowseFixture({
     await h.db.query("update public.challenges set status = 'unpublished' where id = $1", [ids.unpublished]);
     await h.db.query("update public.challenges set status = 'archived' where id = $1", [ids.archived]);
 
-    await publish(ids.differentLanguage, id(207), actors.authorB, {
+    await publish(ids.differentLanguage, ids.differentLanguageRevision, actors.authorB, {
       ...quotient, title: "Python filter control", difficulty: "easy",
       changes: quotient.changes.map(change => ({ ...change, category: "logic_bug" })),
     }, newerAt);
-    await publish(ids.differentDifficulty, id(208), actors.authorA, {
+    await publish(ids.differentDifficulty, ids.differentDifficultyRevision, actors.authorA, {
       ...checkout, title: "Difficulty filter control", difficulty: "hard",
     }, newerAt);
-    await publish(ids.differentCategory, id(209), actors.authorA, {
+    await publish(ids.differentCategory, ids.differentCategoryRevision, actors.authorA, {
       ...checkout, title: "Category filter control", changes: [checkout.changes[1]],
     }, newerAt);
 
@@ -315,13 +338,16 @@ export async function createLearnerBrowseFixture({
         changes: [checkout.changes[0]],
       });
     }
-    const c1 = { challengeId: ids.c1, revisionId: ids.revision1 };
-    await addAttempt({ ...c1, submissionId: ids.firstA, learner: actors.learnerA, state: "completed", score: 25 });
-    await addAttempt({ ...c1, submissionId: ids.secondA, learner: actors.learnerA,
-      previousId: ids.firstA, state: "completed", score: 100 });
-    await addAttempt({ ...c1, submissionId: ids.firstB, learner: actors.learnerB, state: "pending" });
-    await addAttempt({ submissionId: ids.failedB, learner: actors.learnerB, challengeId: ids.c2,
-      revisionId: ids.quotientRevision, state: "failed" });
+    if (scope === "submission") await publish(ids.reviewChallenge, ids.reviewRevision, actors.authorA, checkout);
+    if (scope !== "submission") {
+      const c1 = { challengeId: ids.c1, revisionId: ids.revision1 };
+      await addAttempt({ ...c1, submissionId: ids.firstA, learner: actors.learnerA, state: "completed", score: 25 });
+      await addAttempt({ ...c1, submissionId: ids.secondA, learner: actors.learnerA,
+        previousId: ids.firstA, state: "completed", score: 100 });
+      await addAttempt({ ...c1, submissionId: ids.firstB, learner: actors.learnerB, state: "pending" });
+      await addAttempt({ submissionId: ids.failedB, learner: actors.learnerB, challengeId: ids.c2,
+        revisionId: ids.quotientRevision, state: "failed" });
+    }
   } catch (error) {
     await dispose();
     throw error;

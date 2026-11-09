@@ -2,34 +2,20 @@ import "server-only";
 import { z } from "zod";
 import { isWorkspaceAccessFailure, type WorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { genericReadFailure, type AttemptResult, type CatalogueResult, type ChallengeResult, type ReadFailure } from "@/lib/learner/challenges";
-import { getAccount } from "@/server/auth/account";
+import { categoriesSchema, challengeCardSchema } from "@/lib/learner/challenge-schema";
 import { createClient } from "@/server/supabase/server";
+import { checkLearnerAccount, type LearnerClient } from "./access";
 import { projectLearnerCode } from "./projection";
 import {
-  categorySchema, challengeIdSchema, difficultySchema, encodeChallengeCursor, languageSchema,
-  parseChallengeDetailQuery, parseChallengeListQuery, timestampSchema,
+  challengeIdSchema, encodeChallengeCursor, parseChallengeDetailQuery, parseChallengeListQuery,
 } from "./validation";
 
-type Client = Awaited<ReturnType<typeof createClient>>;
 const unavailable = { status: "unavailable" } as const;
 const invalid = { status: "invalid" } as const;
-const categoriesSchema = z.array(categorySchema).refine(values =>
-  values.every((value, index) => index === 0 || values[index - 1] < value),
-);
-const cardSchema = z.strictObject({
-  id: challengeIdSchema,
-  revisionId: challengeIdSchema,
-  title: z.string(),
-  description: z.string(),
-  language: languageSchema,
-  difficulty: difficultySchema,
-  categories: categoriesSchema,
-  publishedAt: timestampSchema,
-});
 const catalogueSchema = z.union([
   z.strictObject({
     status: z.literal("ok"),
-    items: z.array(cardSchema).max(51),
+    items: z.array(challengeCardSchema).max(51),
     anchorRevisionId: challengeIdSchema.optional(),
   }),
   z.strictObject({ status: z.enum(["forbidden", "invalid"]) }),
@@ -39,17 +25,8 @@ const liveProjectionSchema = z.union([
   z.strictObject({ status: z.enum(["forbidden", "not_found"]) }),
 ]);
 
-async function checkLearnerAccount(client: Client) {
-  const result = await getAccount(undefined, client);
-  if (result.status === "unauthenticated") return { status: "unauthenticated" } as const;
-  if (result.status === "forbidden") return { status: "account_unavailable" } as const;
-  if (result.status !== "ok") return { status: "account_service_unavailable" } as const;
-  if (result.account.role !== "learner") return { status: "role_denied" } as const;
-  return result;
-}
-
-async function withLearner<T>(read: (client: Client, learnerId: string) => Promise<T>): Promise<T | ReadFailure | WorkspaceAccessFailure> {
-  let client: Client;
+async function withLearner<T>(read: (client: LearnerClient, learnerId: string) => Promise<T>): Promise<T | ReadFailure | WorkspaceAccessFailure> {
+  let client: LearnerClient;
   let caller: Awaited<ReturnType<typeof checkLearnerAccount>>;
   try {
     client = await createClient();
@@ -65,7 +42,7 @@ async function withLearner<T>(read: (client: Client, learnerId: string) => Promi
   }
 }
 
-async function readLiveProjection(client: Client, challengeId: string) {
+async function readLiveProjection(client: LearnerClient, challengeId: string) {
   const { data, error } = await client.rpc("read_learner_challenge", { p_challenge_id: challengeId });
   if (error) return unavailable;
   const result = liveProjectionSchema.parse(data);
@@ -131,7 +108,7 @@ export async function readChallengeWithAccess(id: string, search = new URLSearch
       // revision once, keeping each source and category set tied to its ID.
       if (!data) continue;
 
-      const card = cardSchema.parse({
+      const card = challengeCardSchema.parse({
         id: challengeId, revisionId: data.id, title: data.title, description: data.description,
         language: data.language, difficulty: data.difficulty, categories: live.categories, publishedAt: data.published_at,
       });

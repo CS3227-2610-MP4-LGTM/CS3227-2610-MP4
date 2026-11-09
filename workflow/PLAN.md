@@ -394,6 +394,139 @@ the limits above remain unchanged.
 - **Depends on:** T-02, T-03
 - **Status:** done
 
+### T-11: Manage line comments and submit a first review
+
+- **Issue:** #50
+- **Covers:** LRN-03.1–03.6 and LRN-04.1–04.6 for first attempts. Preserve
+  LRN-02.4–02.6's revision and workspace eligibility rules and apply ACC-03.4
+  for session expiry. SYS-02.1–02.2, SYS-04.1–04.2, SYS-08.1–08.3, SYS-09,
+  SYS-10.1–10.2 and SYS-10.4, SYS-11.1–11.4, SYS-12.1 and SYS-12.4,
+  SYS-14.3, SYS-17 and SYS-19 apply to the new Learner write and result read.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Learner,
+  §4 Product decisions → Hints and attempts, and §5 Navigation and UI.
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted
+  code, SYS-04 — Shared building blocks, SYS-08 — Authorization at the data
+  boundary, SYS-09 — Authentication with Cache Components, SYS-10 — Database
+  enforcement and privileged access, SYS-11 — Authentication and authorization
+  failures, SYS-12 — Record access and audit (Learner-facing challenge material,
+  private answers and submissions), SYS-14 — Delivery and database evolution
+  (SYS-14.3), SYS-17 — Simple, accessible UI and SYS-19 — Test strategy.
+  `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions →
+  Shared values and bounds and Pasted-code cap, §2 Domain model and publication
+  lifecycle (submission and comment records) → SYS-12 decision: immutable
+  published revisions and Code, proposals and locations, §3 API contracts →
+  Transport, concurrency and errors, Shared response types and Learner surface,
+  §6 Shared deterministic seed fixtures → C1: Checkout totals, C2: Safe
+  quotient, Submissions and expected outcomes and Derived fixture scenarios,
+  and §7 Integration verification (submission contracts, access and projection).
+  `workflow/specs/stories/LRN-03-manage-line-comments.md`,
+  `workflow/specs/stories/LRN-04-submit-a-final-review.md`,
+  `workflow/specs/stories/LRN-02-view-a-challenge-as-a-pr.md` (LRN-02.4–02.6),
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  (ACC-03.2, ACC-03.4–03.7),
+  `workflow/specs/stories/ACC-02-sign-in-and-sign-out.md` (ACC-02.5–02.7),
+  and PR #43's Decisions made for inherited write rules.
+- **Tests:** unit (`tests/unit/learner/`) for strict request and response shapes,
+  UTF-8 body limits before parsing, comment normalization, text/count and line
+  bounds, and account and failure mapping. Component tests cover inert text,
+  line actions, editor exclusivity, ordering, validation, focus, announcements,
+  empty-review confirmation and cancellation, guard activation for drafts and
+  editor text, draft retention or discard on departure, expiry bypass, and
+  submission states (pending, uncertain, replay, definitive failures and
+  conflict). Assert frozen key/payload reuse and new keys on explicit
+  resubmission after a recorded failure.
+  Local Supabase integration (`tests/integration/domain/`) extends
+  `tests/integration/domain/learner-browse-fixture.ts`. Exercise the POST, the
+  result read and direct user-scoped database access with two accounts per
+  relevant role and an anonymous caller. Check explicit function execution
+  grants, account, ledger and answer isolation, direct validation of every
+  bound, forged IDs/actors/fingerprints, denial of table writes and late comments,
+  and owning Learner access to pinned code and ordered comments after republish,
+  unpublish and archive. Check all-or-nothing writes, valid empty and same-line
+  reviews, server IDs and ordinals, no grading run, stale and unavailable
+  challenges, actor and resource key isolation, duplicate keys and concurrent
+  distinct keys, replay of recorded success and failure after state changes,
+  changed payload conflict, and serialization with lifecycle writes.
+  Production-build e2e (`tests/e2e/learner/`) covers keyboard submission at phone
+  width through the read-only result without a leave warning, both dialog
+  choices for workspace links, role navigation links, sign-out and browser Back,
+  and the native reload warning where supported. The orchestrator runs every
+  database-backed check with per-command escalation. Specialists report them
+  as unrun. Ask before using another project's local Supabase stack or ports.
+- **Config paths:** none.
+- **Constraints:** Extend T-10 (#57) in
+  `src/components/learner/challenge-workspace.tsx` and `src/server/learner/`.
+  Keep all draft state in page memory, including the active editor and frozen
+  request. One shared guard intercepts every in-app departure with draft
+  comments or unsaved editor text, including workspace links, shared role
+  navigation links, sign-out and browser Back/Forward. Use LRN-03.4's “Leave
+  this review?” dialog with “Keep reviewing” and “Leave review”. Reload/close
+  use the native warning where supported. Successful submission and
+  unrefreshable session expiry bypass the guard. Keep `CodeDiffView` generic
+  so Author and TA can use their own projections without comment controls.
+  Before writing Next.js code, read the installed `node_modules/next/dist/docs/`
+  guides, including Link → Blocking navigation and Route Handlers.
+  Add `POST /api/v1/challenges/:id/submissions` per INTEGRATION-SPEC §3 with
+  a pending `SubmissionView` on 201. Any page or Server Action path reuses the
+  same validated submission contract. Verify the session and stored Learner
+  role on each protected entry point and prevent cross-request caching. Accept
+  first attempts only and reject `previousSubmissionId` until T-13 (LRN-06).
+  Add a migration and regenerate `src/lib/supabase/database.types.ts`, including
+  the private schema. Inherit PR #43's restrictions on direct table grants.
+  One user-scoped database call verifies the caller, serializes publication
+  and live revision checks on the challenge row, and creates the submission
+  and all comments together. On direct calls, the function itself enforces
+  UUIDs, strict first-attempt payload and comment shapes, 0–50 comments,
+  trimmed nonblank text of at most 2,000 Unicode code points, and positive
+  integer lines within flawed code. HTTP checks the 128 KiB cap on the raw
+  UTF-8 body before parsing. Assign IDs and zero-based ordinals on the server.
+  No path appends comments to an existing submission. Grant execution
+  explicitly to `authenticated` and deny `PUBLIC`, `anon` and `service_role`.
+  Use a private ledger for submission-create requests only. Scope UUID keys by
+  actor, method and resource. The callable function computes the fingerprint
+  from its validated arguments in canonical form and accepts no caller-supplied
+  fingerprint. Commit database-decided outcomes in the submission-create
+  transaction. Success commits with the submission and all comments.
+  A definitive failure commits its outcome without creating a submission or
+  comments. HTTP validation failures rejected before the database call leave
+  the ledger and domain records untouched.
+  Preserve recorded outcomes on replay and distinguish in-progress requests
+  from definitive rejection.
+
+  The LRN-04.5 and LRN-04.6 outcomes use these INTEGRATION-SPEC §3 mappings.
+
+  | Condition | HTTP and code |
+  | --- | --- |
+  | Stale live revision | `409 VERSION_CONFLICT` |
+  | Challenge no longer published or archived | `409 INVALID_STATE` |
+  | Attempt allowance exhausted or attempt ineligible | `409 ATTEMPT_LIMIT` |
+  | UTF-8 JSON body too large | `413 PAYLOAD_TOO_LARGE` |
+  | Invalid comment input | `400 VALIDATION_ERROR` |
+  | Other definitive submission service failure | `503 SERVICE_UNAVAILABLE` |
+  | Throttling | `429 RATE_LIMITED` |
+  | Idempotency conflict | `409 IDEMPOTENCY_CONFLICT` |
+
+  Route the recorded lifecycle failure to “This challenge is no longer
+  available for submission.” in the review, with its draft intact. For each
+  reused status and code, the server and client share distinct exported error
+  message constants for each case. `409 INVALID_STATE` covers lifecycle
+  rejection and an in-progress duplicate. `503 SERVICE_UNAVAILABLE` covers
+  definitive submission failure and account service outage. The server emits
+  the applicable constant in `error.message`, the client matches it exactly,
+  and tests assert the exact messages. Free-form text is never matched.
+  Account failures follow SYS-11 and ACC-03 recovery. A 503 is a definitive
+  submission failure only when the write is known to have failed. An
+  interruption or otherwise unknown write outcome follows LRN-04.4.
+
+  Add an owning Learner-only `/learner/history/:submissionId` page showing the
+  pinned Learner code projection, submitted comments read-only and plain pending
+  status. Create zero grading runs on submission. `GET /api/v1/submissions/:id`,
+  grade display and grading initiation, including the SYS-10.3 Submission
+  grading use, belong to T-12 (LRN-05).
+- **Depends on:** T-10 (with T-02 and T-03 through T-10).
+- **Status:** done
+
 ## Author
 
 ## TA
