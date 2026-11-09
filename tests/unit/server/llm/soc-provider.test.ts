@@ -4,12 +4,12 @@ import type { Accounting } from "@/server/llm/accounting";
 import { createLlmBoundary } from "@/server/llm/boundary";
 import * as config from "@/server/llm/config";
 import { createOperationRunner } from "@/server/llm/execution";
-import { envelope, inputs, limits, operations, outputs, retainedFlaws, uid, workingCode, type Operation } from "./fixtures";
+import { envelope, inputs, limits, operations, outputs, proposals, retainedFlaws, uid, workingCode, type Operation } from "./fixtures";
 
 vi.mock("server-only", () => ({}));
 
 const destination = "https://soclaas-api.comp.nus.edu.sg/v1/chat/completions";
-const model = "qwen3.5:9b";
+const model = "qwen3.6:35b";
 const caps = { inject_flaws: 1280, generate_hints: 384, assess_review: 576, summarize_learner: 1024 };
 const key = "offline-key-sentinel";
 const reasoning = "private-reasoning-sentinel";
@@ -58,6 +58,7 @@ function setup(operation: Operation = "inject_flaws", overrides: {
   env?: Env;
   soc?: Partial<SocOptions>;
   limits?: Partial<typeof limits>;
+  retainedFlaws?: typeof retainedFlaws;
 } = {}) {
   const transport = vi.fn<typeof fetch>().mockImplementation(async () => Response.json(completion(outputs[operation])));
   let reservation = 9002;
@@ -78,7 +79,7 @@ function setup(operation: Operation = "inject_flaws", overrides: {
   };
   const captured = {
     accountId: uid(1), resourceId: uid(101), idempotencyKey: uid(9101), fingerprint: "captured-v1",
-    retainedFlaws: operation === "generate_hints" || operation === "assess_review" ? retainedFlaws : [],
+    retainedFlaws: overrides.retainedFlaws ?? (operation === "generate_hints" || operation === "assess_review" ? retainedFlaws : []),
   };
   const run = (snapshot: unknown = inputs[operation]) => configuredRunner(options).run({ ...captured, snapshot });
   return { run, transport, accounting, diagnostics, options };
@@ -132,6 +133,10 @@ it("SYS-15 pins the model, operation efforts and exact operation caps in version
   ));
 });
 
+it("SYS-19.4 pins the reviewed context for the selected model", () => {
+  expect(config.reviewedSocDeployment.contextTokens).toBe(262144);
+});
+
 it.each([
   { env: { ...liveEnv, APP_ENV: undefined }, variable: "APP_ENV" },
   { env: { ...liveEnv, APP_ENV: "private-bad-environment" }, variable: "APP_ENV" },
@@ -161,6 +166,7 @@ it.each([
   ["invalid model context", { contextTokens: NaN }],
   ["default alias", { model: "default" }],
   ["coder alias", { model: "coder" }],
+  ["previous model", { model: "qwen3.5:9b" }],
   ["different concrete model", { model: "qwen3.5:4b" }],
   ["alternate host", { destination: "https://soclaas.invalid/v1/chat/completions" }],
   ["alternate path", { destination: "https://soclaas-api.comp.nus.edu.sg/v1/models" }],
@@ -190,12 +196,27 @@ it("SYS-18.1 invalid enforcement limits prevent reservation and dispatch", async
   expect(transport).not.toHaveBeenCalled();
 });
 
+type WireSchema = {
+  type?: string;
+  const?: string | number;
+  enum?: (string | number)[];
+  properties?: Record<string, WireSchema>;
+  required?: string[];
+  additionalProperties?: boolean;
+  items?: WireSchema;
+  prefixItems?: WireSchema[];
+  anyOf?: WireSchema[];
+  oneOf?: WireSchema[];
+  minItems?: number;
+  maxItems?: number;
+};
+
 type WireBody = {
   model: string;
   messages: { role: string; content: string }[];
   reasoning_effort: string;
   max_tokens: number;
-  response_format: { type: string };
+  response_format: { type: string; json_schema?: { name: string; strict: boolean; schema: WireSchema } };
 };
 
 function wire(transport: ReturnType<typeof setup>["transport"]) {
@@ -214,7 +235,9 @@ it.each(operations)("SEC-04.3 dispatches one exact stateless SoC request and res
   expect(headers.get("content-type")).toBe("application/json");
   expect(headers.get("authorization")).toBe("Bearer " + key);
   expect(body).toEqual({
-    model, reasoning_effort: "none", max_tokens: caps[operation], response_format: { type: "json_object" },
+    model, reasoning_effort: "none", max_tokens: caps[operation], response_format: {
+      type: "json_schema", json_schema: { name: expect.stringMatching(/\S/), strict: true, schema: expect.any(Object) },
+    },
     messages: [{ role: "system", content: expect.any(String) }, { role: "user", content: expect.any(String) }],
   });
   expect(JSON.parse(body.messages[1].content)).toEqual(inputs[operation]);
@@ -223,36 +246,162 @@ it.each(operations)("SEC-04.3 dispatches one exact stateless SoC request and res
   expect(accounting.reserve.mock.calls[0][0].inputTokens).toBeGreaterThan(Buffer.byteLength(String(request?.body)));
 });
 
-const instructions: Record<Operation, { fields: string[]; guidance: RegExp[] }> = {
-  inject_flaws: {
-    fields: ["proposals", "key", "category", "sourceStartLine", "sourceEndLine", "originalSnippet", "replacementSnippet", "explanation", "fix"],
-    guidance: [/flawCount/i, /categor/i, /overlap|disjoint/i, /exact.*(line|source)|(line|source).*exact/i],
-  },
-  generate_hints: {
-    fields: ["hints", "key", "text"],
-    guidance: [/one.*(?:key|flaw)/i, /plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
-  },
-  assess_review: {
-    fields: ["assessments", "key", "commentId", "explanationCredit", "fixCredit", "feedback"],
-    guidance: [/independent/i, /matched flaw/i, /plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
-  },
-  summarize_learner: {
-    fields: ["strengths", "blindSpots", "nextSteps", "category", "text", "submissionIds"],
-    guidance: [/evidence/i, /supplied|provided|input/i, /at least one|nonempty|non-empty/i],
-  },
+function wireSchema(transport: ReturnType<typeof setup>["transport"]) {
+  const format = wire(transport).body.response_format;
+  expect(format).toMatchObject({ type: "json_schema", json_schema: { strict: true, schema: expect.any(Object) } });
+  return format.json_schema!.schema;
+}
+
+function objectFields(schema: WireSchema, fields: string[]) {
+  expect(schema).toMatchObject({ type: "object", additionalProperties: false, properties: expect.any(Object) });
+  expect(Object.keys(schema.properties!).sort()).toEqual([...fields].sort());
+  expect([...schema.required!].sort()).toEqual([...fields].sort());
+  return schema.properties!;
+}
+
+function allowedValues(schema: WireSchema): (string | number)[] {
+  return schema.enum ?? (schema.const === undefined ? (schema.anyOf ?? schema.oneOf ?? []).flatMap(allowedValues) : [schema.const]);
+}
+
+function itemVariants(schema: WireSchema): WireSchema[] {
+  expect(schema.type).toBe("array");
+  const items = schema.prefixItems ?? [schema.items!];
+  return items.flatMap(item => item.anyOf ?? item.oneOf ?? [item]);
+}
+
+function expectTextBefore(fields: Record<string, WireSchema>, text: string, ...values: string[]) {
+  const order = Object.keys(fields);
+  for (const value of values) expect(order.indexOf(text)).toBeLessThan(order.indexOf(value));
+}
+
+const outputFields = {
+  inject_flaws: ["proposals"], generate_hints: ["hints"], assess_review: ["assessments"],
+  summarize_learner: ["strengths", "blindSpots", "nextSteps"],
 };
 
-it.each(operations)("INTEGRATION-SPEC §4 supplies the strict %s output shape and semantic instructions", async operation => {
+function payloadFields(transport: ReturnType<typeof setup>["transport"], operation: Operation) {
+  const schema = wireSchema(transport);
+  expect(JSON.stringify(schema)).not.toMatch(/"(?:minLength|maxLength)"\s*:/);
+  const fields = objectFields(schema, ["schemaVersion", "operation", "payload"]);
+  expect(allowedValues(fields.schemaVersion)).toEqual([1]);
+  expect(allowedValues(fields.operation)).toEqual([operation]);
+  return objectFields(fields.payload, outputFields[operation]);
+}
+
+it.each([false, true])("SEC-04.3 constrains proposal count and categories for alternate snapshot=%s", async alternate => {
+  const original = inputs.inject_flaws.payload as { categories: string[]; flawCount: number };
+  const payload = alternate ? { ...original, categories: ["edge_case"], flawCount: 1 } : original;
+  const { run, transport } = setup();
+  if (alternate) transport.mockResolvedValueOnce(Response.json(completion(envelope("inject_flaws", { proposals: [proposals[1]] }))));
+  expect(await run(envelope("inject_flaws", payload))).toHaveProperty("data");
+  const { proposals: schema } = payloadFields(transport, "inject_flaws");
+  expect(schema).toMatchObject({ minItems: payload.flawCount, maxItems: payload.flawCount });
+  for (const variant of itemVariants(schema)) {
+    const fields = objectFields(variant, ["key", "category", "sourceStartLine", "sourceEndLine", "originalSnippet", "replacementSnippet", "explanation", "fix"]);
+    expect(allowedValues(fields.category).sort()).toEqual([...payload.categories].sort());
+  }
+});
+
+it.each([false, true])("SEC-04.3 constrains hint keys to the retained input for alternate snapshot=%s", async alternate => {
+  const original = inputs.generate_hints.payload as { flaws: { key: string }[] };
+  const payload = alternate ? { ...original, flaws: original.flaws.slice(1) } : original;
+  const { run, transport } = setup("generate_hints", { retainedFlaws: alternate ? retainedFlaws.slice(1) : retainedFlaws });
+  if (alternate) {
+    transport.mockResolvedValueOnce(Response.json(completion(envelope("generate_hints", {
+      hints: [{ key: uid(302), text: "Consider the smallest possible basket." }],
+    }))));
+  }
+  expect(await run(envelope("generate_hints", payload))).toHaveProperty("data");
+  const { hints } = payloadFields(transport, "generate_hints");
+  expect(hints).toMatchObject({ minItems: payload.flaws.length, maxItems: payload.flaws.length });
+  const keys = itemVariants(hints).flatMap(item => allowedValues(objectFields(item, ["key", "text"]).key));
+  expect([...new Set(keys)].sort()).toEqual(payload.flaws.map(flaw => flaw.key).sort());
+});
+
+it.each([false, true])("SEC-04.3 pins matched key/comment pairs and puts feedback before credits for alternate snapshot=%s", async alternate => {
+  const original = inputs.assess_review.payload as { matches: { key: string; comment: { id: string } }[] };
+  const { key, category, startLine, endLine, explanation, fix } = retainedFlaws[1];
+  const second = { key, category, startLine, endLine, explanation, fix,
+    comment: { id: uid(605), line: startLine, body: "What happens when the basket is empty?" } };
+  const payload = alternate ? { ...original, matches: [...original.matches, second] } : original;
+  const { run, transport } = setup("assess_review");
+  if (alternate) {
+    const baseline = outputs.assess_review.payload as { assessments: unknown[] };
+    transport.mockResolvedValueOnce(Response.json(completion(envelope("assess_review", {
+      assessments: [...baseline.assessments, { key, commentId: uid(605), explanationCredit: 0.5, fixCredit: 0,
+        feedback: "Explain the consequence and propose an actionable change." }],
+    }))));
+  }
+  expect(await run(envelope("assess_review", payload))).toHaveProperty("data");
+  const { assessments } = payloadFields(transport, "assess_review");
+  expect(assessments).toMatchObject({ minItems: payload.matches.length, maxItems: payload.matches.length });
+  const pairs = itemVariants(assessments).map(item => {
+    const fields = objectFields(item, ["key", "commentId", "feedback", "explanationCredit", "fixCredit"]);
+    expectTextBefore(fields, "feedback", "explanationCredit", "fixCredit");
+    for (const credit of [fields.explanationCredit, fields.fixCredit]) {
+      expect(allowedValues(credit).sort()).toEqual([0, 0.5, 1]);
+    }
+    expect(allowedValues(fields.key)).toHaveLength(1);
+    expect(allowedValues(fields.commentId)).toHaveLength(1);
+    return [allowedValues(fields.key)[0], allowedValues(fields.commentId)[0]];
+  });
+  expect(pairs).toHaveLength(payload.matches.length);
+  expect(pairs).toEqual(expect.arrayContaining(payload.matches.map(match => [match.key, match.comment.id])));
+});
+
+it.each([false, true])("SEC-04.3 pins summary categories and evidence for alternate snapshot=%s", async alternate => {
+  const original = inputs.summarize_learner.payload as {
+    submissions: { submissionId: string; categories: { category: string }[] }[];
+  };
+  const payload = alternate ? { ...original, submissions: original.submissions.map(submission => ({
+    ...submission, submissionId: uid(502), categories: submission.categories.filter(category => category.category === "edge_case"),
+  })) } : original;
+  const { run, transport } = setup("summarize_learner");
+  if (alternate) transport.mockResolvedValueOnce(Response.json(completion(envelope("summarize_learner", {
+    strengths: [], blindSpots: [{ category: "edge_case", text: "The first review missed an empty-input case.", submissionIds: [uid(502)] }], nextSteps: [],
+  }))));
+  expect(await run(envelope("summarize_learner", payload))).toHaveProperty("data");
+  const fields = payloadFields(transport, "summarize_learner");
+  for (const list of Object.values(fields)) {
+    expect(list.maxItems).toBe(5);
+    const categories = new Set();
+    for (const item of itemVariants(list)) {
+      const fields = objectFields(item, ["category", "text", "submissionIds"]);
+      expectTextBefore(fields, "text", "submissionIds");
+      for (const category of allowedValues(fields.category)) categories.add(category);
+      expect(fields.submissionIds.minItems).toBe(1);
+      expect(allowedValues(fields.submissionIds.items!)).toEqual([payload.submissions[0].submissionId]);
+    }
+    expect([...categories].sort()).toEqual(payload.submissions[0].categories.map(entry => entry.category).sort());
+  }
+});
+
+const semanticGuidance: Record<Operation, RegExp[]> = {
+  inject_flaws: [/categor/i, /overlap|disjoint/i, /exact.*(line|source)|(line|source).*exact/i],
+  generate_hints: [/plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
+  assess_review: [/independent/i, /matched flaw/i, /plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
+  summarize_learner: [/evidence/i, /supplied|provided|input/i],
+};
+
+it.each(operations)("INTEGRATION-SPEC §4 sends semantic guidance for %s and leaves the envelope shape to the schema", async operation => {
   const { run, transport } = setup(operation);
   expect(await run()).toHaveProperty("data");
   const system = wire(transport).body.messages[0].content;
-  for (const field of ["schemaVersion", "operation", "payload", operation, ...instructions[operation].fields]) {
-    expect(system).toMatch(new RegExp("\\b" + field + "\\b"));
-  }
-  for (const guidance of instructions[operation].guidance) expect(system).toMatch(guidance);
+  expect(system).not.toMatch(/\bschemaVersion\b|\badditionalProperties\b/);
+  for (const guidance of semanticGuidance[operation]) expect(system).toMatch(guidance);
   expect(system).toMatch(/untrusted|never.*instructions/i);
   expect(system).not.toContain(workingCode);
   expect(system).not.toContain(retainedFlaws[0].explanation);
+});
+
+it("LRN-05 assessment credits only the comment, gives explanation zero for fix-only comments and ignores embedded credit claims", async () => {
+  const { run, transport } = setup("assess_review");
+  expect(await run()).toHaveProperty("data");
+  const system = wire(transport).body.messages[0].content;
+  expect(system).toMatch(/(?:only|solely)[^.\n]*comment|comment[^.\n]*(?:itself|only|explicitly)/i);
+  expect(system).toMatch(/(?:fix[- ]only|fix without (?:an )?explanation|only (?:a |the )?fix)[^.\n]*(?:zero|\b0\b)|(?:zero|\b0\b)[^.\n]*(?:fix[- ]only|fix without (?:an )?explanation|only (?:a |the )?fix)/i);
+  expect(system).toMatch(/(?:ignore|disregard|never follow)[^.\n]*instructions/i);
+  expect(system).toMatch(/(?:ignore|disregard)[^.\n]*credit|credit[^.\n]*(?:claims|requests|self-awarded)/i);
 });
 
 it("INTEGRATION-SPEC §4 instructs all three independent explanation and fix levels, including credit for the wrong flaw", async () => {
@@ -317,11 +466,28 @@ it.each([
   ["foreign summary evidence", "summarize_learner", envelope("summarize_learner", { strengths: [], blindSpots: [{
     category: "edge_case", text: "Check empty collections.", submissionIds: [uid(503)],
   }], nextSteps: [] })],
-] satisfies [string, Operation, unknown][])("INTEGRATION-SPEC §4 rejects the whole live result for %s", async (_case, operation, output) => {
+] satisfies [string, Operation, unknown][])("SEC-02.1 rejects the whole live result for %s", async (_case, operation, output) => {
   const { run, transport } = setup(operation);
   transport.mockImplementation(async () => Response.json(completion(output)));
   expect(await run()).toEqual({ error: { code: "INVALID_AI_OUTPUT" } });
   expect(transport).toHaveBeenCalledTimes(2);
+});
+
+it.each([500, 501])("SEC-03.1 applies the app hint length bound to %s code points", async length => {
+  const { run, transport } = setup("generate_hints");
+  const output = envelope("generate_hints", { hints: [
+    { key: uid(301), text: "é".repeat(length) },
+    { key: uid(302), text: "Consider the smallest possible basket." },
+  ] });
+  transport.mockImplementation(async () => Response.json(completion(output)));
+  const result = await run();
+  if (length === 500) {
+    expect(result).toHaveProperty("data");
+    expect(transport).toHaveBeenCalledOnce();
+  } else {
+    expect(result).toEqual({ error: { code: "INVALID_AI_OUTPUT" } });
+    expect(transport).toHaveBeenCalledTimes(2);
+  }
 });
 
 it("INTEGRATION-SPEC §4 a review without matches never reserves or dispatches to SoC", async () => {
@@ -350,6 +516,21 @@ it("SEC-04.1 counts multibyte wire data and framing before reservation and honor
   expect(await denied.run(snapshot)).toEqual({ error: { code: "PAYLOAD_TOO_LARGE" } });
   expect(denied.accounting.reserve).not.toHaveBeenCalled();
   expect(denied.transport).not.toHaveBeenCalled();
+});
+
+it("SEC-04.1 rejects before reservation when the serialized schema pushes the request over the input ceiling", async () => {
+  const baseline = setup("assess_review");
+  expect(await baseline.run()).toHaveProperty("data");
+  wireSchema(baseline.transport);
+  const { body, request } = wire(baseline.transport);
+  const measured = baseline.accounting.reserve.mock.calls[0][0].inputTokens;
+  const withoutSchema = JSON.stringify({ ...body, response_format: { type: "json_object" } });
+  const schemaBytes = Buffer.byteLength(String(request?.body)) - Buffer.byteLength(withoutSchema);
+  expect(schemaBytes).toBeGreaterThan(1);
+  const capped = setup("assess_review", { limits: { inputTokens: measured - schemaBytes } });
+  expect(await capped.run()).toEqual({ error: { code: "PAYLOAD_TOO_LARGE" } });
+  expect(capped.accounting.reserve).not.toHaveBeenCalled();
+  expect(capped.transport).not.toHaveBeenCalled();
 });
 
 it("SEC-04.1 rejects a valid envelope whose escaped wire input crosses the global ceiling", async () => {
