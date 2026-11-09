@@ -1,7 +1,8 @@
 import "server-only";
-import { buildRequest, measureRequest, type Provider } from "./provider";
+import { buildRequest, createFakeProvider, measureRequest, type Provider } from "./provider";
 import { validateInput, validateOutput, validateRetainedContext, type OutputEnvelope } from "./contracts";
-import { effectiveLimits, type Limits } from "./config";
+import { effectiveLimits, getLlmConfig, reviewedSocDeployment, socOperationSettings, type Limits, type LlmEnvironment } from "./config";
+import { createSocClient, type SocDeployment } from "./soc";
 import { errorCode, fail } from "./errors";
 import type { Accounting, Settlement } from "./accounting";
 import type { RetainedFlaw } from "./safety";
@@ -25,16 +26,19 @@ export type RunResult = {
     meta: { status: string; attempts: number; outputRetried: boolean };
 };
 
-export function createOperationRunner(options: {
-    provider: Provider;
+type ProviderSelection = { provider: Provider; env?: never; soc?: never } |
+    { provider?: never; env: LlmEnvironment; soc?: SocDeployment };
+export type RunnerOptions = ProviderSelection & {
     accounting: Accounting;
     clock: () => number;
     limits: Limits;
     measureInput?: (request: ReturnType<typeof buildRequest>) => number;
     diagnostics?: { log: unknown; trace: unknown };
-}) {
+};
+
+export function createOperationRunner(options: RunnerOptions) {
     const limits = effectiveLimits(options.limits);
-    const { accounting, provider, clock } = options;
+    const { accounting, clock } = options;
     return {
         async run(input: RunInput): Promise<RunResult> {
             let operationId: string | undefined;
@@ -82,8 +86,8 @@ export function createOperationRunner(options: {
                     };
                 }
                 validateRetainedContext(snapshot, input.retainedFlaws);
-                const request = buildRequest(snapshot);
-                const inputTokens = (options.measureInput ?? measureRequest)(request);
+                const prepared = prepareAttempt(options, limits, snapshot);
+                const { inputTokens, outputTokens, execute } = prepared;
                 if (!Number.isSafeInteger(inputTokens) || inputTokens < 0 || inputTokens > limits.inputTokens) fail("PAYLOAD_TOO_LARGE");
 
                 for (let index = 0; index < limits.attemptsPerOperation; index++) {
@@ -91,7 +95,7 @@ export function createOperationRunner(options: {
                     const admitted = await accounting.reserve({
                         accountId: input.accountId, resourceId: input.resourceId,
                         idempotencyKey: input.idempotencyKey, fingerprint: input.fingerprint,
-                        operation: snapshot.operation, inputTokens, outputTokens: limits.outputTokens, operationId,
+                        operation: snapshot.operation, inputTokens, outputTokens, operationId,
                     });
                     operationId = admitted.operationId;
                     if (admitted.status !== "reserved") {
@@ -114,10 +118,11 @@ export function createOperationRunner(options: {
                     const controller = new AbortController();
                     let timer: ReturnType<typeof setTimeout> | undefined;
                     let result: Awaited<ReturnType<Provider["execute"]>>;
+                    const attemptStart = clock();
+                    const timeout = Math.min(limits.attemptMs, deadline - attemptStart);
+                    const attemptDeadline = attemptStart + timeout;
                     try {
-                        const timeout = Math.min(limits.attemptMs, deadline - clock());
                         if (timeout <= 0) fail("AI_TIMEOUT");
-                        const attemptDeadline = clock() + timeout;
                         const timedOut = new Promise<never>((_, reject) => {
                             timer = setTimeout(() => {
                                 controller.abort();
@@ -125,15 +130,14 @@ export function createOperationRunner(options: {
                             }, timeout);
                         });
                         result = await Promise.race([
-                            provider.execute(request, { maxOutputTokens: limits.outputTokens, signal: controller.signal }),
+                            execute(controller.signal),
                             timedOut,
                         ]);
-                        if (clock() >= attemptDeadline) {
-                            controller.abort();
-                            fail("AI_TIMEOUT");
-                        }
+                        if (clock() >= attemptDeadline) fail("AI_TIMEOUT");
                     } catch (error) {
-                        const code = errorCode(error, "AI_UNAVAILABLE");
+                        const expired = clock() >= attemptDeadline;
+                        if (expired) controller.abort();
+                        const code = expired ? "AI_TIMEOUT" : errorCode(error, "AI_UNAVAILABLE");
                         await settle({ reservationId, outcome: "uncertain" });
                         if (code === "INVALID_AI_OUTPUT" && index + 1 < limits.attemptsPerOperation) continue;
                         fail(code === "AI_TIMEOUT" || code === "INVALID_AI_OUTPUT" ? code : "AI_UNAVAILABLE");
@@ -144,7 +148,7 @@ export function createOperationRunner(options: {
                     const usage = result.usage;
                     const validUsage = usage?.verified && Number.isSafeInteger(usage.inputTokens) &&
                         Number.isSafeInteger(usage.outputTokens) && usage.inputTokens >= 0 && usage.outputTokens >= 0 &&
-                        usage.inputTokens <= inputTokens && usage.outputTokens <= limits.outputTokens;
+                        usage.inputTokens <= inputTokens && usage.outputTokens <= outputTokens;
                     await settle({
                         reservationId,
                         outcome: validUsage ? "verified" : "uncertain",
@@ -178,5 +182,28 @@ export function createOperationRunner(options: {
                 return { error: { code } };
             }
         },
+    };
+}
+
+function prepareAttempt(options: RunnerOptions, limits: Limits, snapshot: Parameters<typeof validateRetainedContext>[0]) {
+    if (!options.provider) {
+        let config: ReturnType<typeof getLlmConfig>;
+        try {
+            config = getLlmConfig(options.env);
+        } catch {
+            fail("AI_UNAVAILABLE");
+        }
+        if (config.provider === "soclaas") {
+            const deployment = options.soc ?? { ...reviewedSocDeployment, fetch: globalThis.fetch };
+            return createSocClient(deployment, config.apiKey, limits).prepare(snapshot, socOperationSettings[snapshot.operation]);
+        }
+    }
+    const provider = options.provider ?? createFakeProvider({ scenario: "success" });
+    const request = buildRequest(snapshot);
+    const outputTokens = limits.outputTokens;
+    return {
+        inputTokens: (options.measureInput ?? measureRequest)(request),
+        outputTokens,
+        execute: (signal: AbortSignal) => provider.execute(request, { maxOutputTokens: outputTokens, signal }),
     };
 }

@@ -1,0 +1,185 @@
+import { readFile, realpath } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
+import { z } from "zod";
+import {
+    ceilings, getSocKey, reviewedSocDeployment, socEfforts, socOperationSettings,
+    type LlmEnvironment,
+} from "../../src/server/llm/config";
+import {
+    retainedContextSchema, validateInput, validateOutput, validateRetainedContext, type InputEnvelope,
+} from "../../src/server/llm/contracts";
+import { errorCode, fail } from "../../src/server/llm/errors";
+import { UnsafeLearnerText } from "../../src/server/llm/safety";
+import { createSocClient } from "../../src/server/llm/soc";
+
+type Dependencies = {
+    env: LlmEnvironment;
+    readFile: (path: string) => Promise<string>;
+    fetch: typeof fetch;
+    clock: () => number;
+    sleep: (ms: number) => Promise<void>;
+};
+const maxCalls = 30;
+const spacingMs = 4000;
+const fixtureSchema = z.array(z.strictObject({
+    caseId: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,79}$/i).optional(),
+    payload: z.unknown(),
+    retainedFlaws: retainedContextSchema.optional(),
+})).min(1).max(maxCalls);
+const columns = [
+    "case_id", "operation", "effort", "max_tokens", "latency_ms", "prompt_tokens", "completion_tokens",
+    "finish_reason", "reasoning_chars", "answer_chars", "valid", "rejection_reason", "rejection_detail", "assessment_credits",
+];
+
+function positiveInteger(value: string, max: number, option: string) {
+    const number = Number(value);
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(number) || number < 1 || number > max)
+        throw new Error(`${option} must be an integer from 1 to ${max}`);
+    return number;
+}
+
+function csvCell(value: string | number | boolean | undefined) {
+    const cell = String(value ?? "");
+    return /[",\r\n]/.test(cell) ? `"${cell.replaceAll('"', '""')}"` : cell;
+}
+
+export async function runSocSmoke(args: string[], deps: Dependencies): Promise<string> {
+    let values;
+    try {
+        ({ values } = parseArgs({ args, options: {
+            live: { type: "boolean" },
+            operation: { type: "string" },
+            input: { type: "string", multiple: true },
+            repeat: { type: "string", default: "1" },
+            effort: { type: "string" },
+            "max-tokens": { type: "string" },
+        } }));
+    } catch {
+        throw new Error("Use --live --operation --input [--repeat] [--effort] [--max-tokens]");
+    }
+    if (!values.live) throw new Error("--live is required");
+    const key = getSocKey(deps.env);
+    if (!values.operation || !Object.hasOwn(socOperationSettings, values.operation))
+        throw new Error("--operation is missing or invalid");
+    const operation = values.operation as InputEnvelope["operation"];
+    if (!values.input?.length) throw new Error("--input is required");
+    const repeat = positiveInteger(values.repeat, maxCalls, "--repeat");
+    const defaults = socOperationSettings[operation];
+    const effort = z.enum(socEfforts).safeParse(values.effort ?? defaults.effort);
+    if (!effort.success) throw new Error("--effort must be none, low, medium or high");
+    const maxOutputTokens = values["max-tokens"] === undefined ? defaults.maxOutputTokens :
+        positiveInteger(values["max-tokens"], ceilings.outputTokens, "--max-tokens");
+    const client = createSocClient({ ...reviewedSocDeployment, fetch: deps.fetch }, key, ceilings);
+
+    const cases = [];
+    for (const path of values.input) {
+        let fixtures;
+        try {
+            fixtures = fixtureSchema.parse(JSON.parse(await deps.readFile(path)));
+        } catch {
+            fail("VALIDATION_ERROR");
+        }
+        if ((cases.length + fixtures.length) * repeat > maxCalls)
+            throw new Error("A run allows at most 30 calls");
+        for (const fixture of fixtures) {
+            const snapshot = validateInput({ schemaVersion: 1, operation, payload: fixture.payload });
+            if (snapshot.operation === "assess_review" && !snapshot.payload.matches.length)
+                fail("VALIDATION_ERROR");
+            validateRetainedContext(snapshot, fixture.retainedFlaws);
+            const prepared = client.prepare(snapshot, { effort: effort.data, maxOutputTokens });
+            cases.push({
+                caseId: fixture.caseId ?? `case-${cases.length + 1}`,
+                snapshot,
+                retainedFlaws: fixture.retainedFlaws ?? [],
+                prepared,
+            });
+        }
+    }
+
+    const rows = [columns.join(",")];
+    let lastStart: number | undefined;
+    for (let run = 0; run < repeat; run++) {
+        for (const { caseId, prepared, snapshot, retainedFlaws } of cases) {
+            while (lastStart !== undefined && deps.clock() - lastStart < spacingMs)
+                await deps.sleep(spacingMs - (deps.clock() - lastStart));
+            const start = deps.clock();
+            lastStart = start;
+            let result: Awaited<ReturnType<typeof prepared.execute>> | undefined;
+            let rejectionReason = "";
+            let rejectionDetail = "";
+            let credits: string | undefined;
+            const controller = new AbortController();
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            try {
+                const timeout = new Promise<never>((_, reject) => {
+                    timer = setTimeout(() => {
+                        controller.abort();
+                        reject(Object.assign(new Error("AI_TIMEOUT"), { code: "AI_TIMEOUT" }));
+                    }, ceilings.attemptMs);
+                });
+                const response = await Promise.race([prepared.execute(controller.signal), timeout]);
+                if (deps.clock() - start >= ceilings.attemptMs) fail("AI_TIMEOUT");
+                result = response;
+                if (response.detail) {
+                    rejectionDetail = response.detail;
+                    fail("INVALID_AI_OUTPUT");
+                }
+                try {
+                    const output = validateOutput(snapshot, response.output, { retainedFlaws });
+                    if (output.operation === "assess_review")
+                        credits = JSON.stringify(output.payload.assessments.map(({ explanationCredit, fixCredit }) =>
+                            ({ explanationCredit, fixCredit })));
+                } catch (error) {
+                    rejectionDetail = error instanceof UnsafeLearnerText ? "safety" : "contract";
+                    fail("INVALID_AI_OUTPUT");
+                }
+            } catch (error) {
+                const expired = !result && deps.clock() - start >= ceilings.attemptMs;
+                if (expired) controller.abort();
+                const code = expired ? "AI_TIMEOUT" : errorCode(error, "AI_UNAVAILABLE");
+                rejectionReason = code === "AI_TIMEOUT" || code === "INVALID_AI_OUTPUT" ? code : "AI_UNAVAILABLE";
+            } finally {
+                clearTimeout(timer);
+            }
+            rows.push([
+                caseId, operation, effort.data, prepared.outputTokens, Math.round(deps.clock() - start),
+                result?.usage?.inputTokens, result?.usage?.outputTokens, result?.stats.finishReason,
+                result?.stats.reasoningChars, result?.stats.answerChars, !rejectionReason,
+                rejectionReason, rejectionDetail, credits,
+            ].map(csvCell).join(","));
+        }
+    }
+    return rows.join("\n") + "\n";
+}
+
+async function main() {
+    if (!process.versions.bun || !process.execArgv.includes("--no-env-file") ||
+        process.execArgv.some(arg => arg === "--env-file" || arg.startsWith("--env-file=")))
+        throw new Error("Run with bun --no-env-file --conditions=react-server");
+    if (process.env.APP_ENV === "production" || process.env.APP_ENV === "ci" ||
+        (process.env.CI && process.env.CI !== "false" && process.env.CI !== "0"))
+        throw new Error("Use the development SOCLAAS_API_KEY from a local shell");
+    const csv = await runSocSmoke(process.argv.slice(2), {
+        env: process.env,
+        readFile: async path => {
+            const actual = await realpath(path);
+            if ([path, actual].some(file => basename(file).startsWith(".env") || extname(file) !== ".json"))
+                fail("VALIDATION_ERROR");
+            return readFile(actual, "utf8");
+        },
+        fetch: globalThis.fetch,
+        clock: () => performance.now(),
+        sleep,
+    });
+    process.stdout.write(csv);
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+    main().catch((error: unknown) => {
+        process.stderr.write((error instanceof Error ? error.message : "AI_UNAVAILABLE") + "\n");
+        process.exitCode = 1;
+    });
+}

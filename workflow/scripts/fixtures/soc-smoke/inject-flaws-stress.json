@@ -1,0 +1,18 @@
+[
+  {
+    "caseId": "checkout-five-flaw-stress",
+    "payload": {
+      "language": "javascript",
+      "difficulty": "hard",
+      "workingCode": "export function checkout(items, inventory, discountPercent, customer) {\n  if (!Array.isArray(items) || !Array.isArray(inventory)) {\n    throw new TypeError(\"Items and inventory must be arrays.\");\n  }\n  if (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 100) {\n    throw new RangeError(\"Discount must be between zero and one hundred.\");\n  }\n  const stockBySku = new Map(inventory.map(entry => [entry.sku, entry]));\n  const quantities = new Map();\n  let subtotal = 0;\n  for (const item of items) {\n    const product = stockBySku.get(item.sku);\n    if (!product || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {\n      throw new RangeError(\"Invalid basket item.\");\n    }\n    const quantity = (quantities.get(item.sku) ?? 0) + item.quantity;\n    if (quantity > product.available) {\n      throw new RangeError(\"Not enough stock.\");\n    }\n    quantities.set(item.sku, quantity);\n    subtotal += item.quantity * product.priceCents;\n  }\n  const total = subtotal - Math.round(subtotal * discountPercent / 100);\n  const delivery = total === 0 || total >= 5000 ? 0 : 500;\n  const receipt = { totalCents: total + delivery, items: [...quantities] };\n  if (customer?.canViewStock === true) {\n    receipt.remainingStock = [...quantities].map(([sku, quantity]) => ({\n      sku, remaining: stockBySku.get(sku).available - quantity\n    }));\n  }\n  return receipt;\n}\n",
+      "flawCount": 5,
+      "categories": [
+        "logic_bug",
+        "edge_case",
+        "error_handling",
+        "security",
+        "performance"
+      ]
+    }
+  }
+]

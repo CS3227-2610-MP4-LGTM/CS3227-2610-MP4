@@ -140,6 +140,15 @@ const output = z.discriminatedUnion("operation", [
     }))
 ]);
 export type OutputEnvelope = z.infer<typeof output>;
+export function describeOutputShape(operation: OutputEnvelope["operation"]) {
+    const contract = output.options.find(option => option.shape.operation.value === operation)!;
+    // Transformations normalize received strings. Describe the JSON that the
+    // model must send, while retaining the schema's fields and strictness.
+    const schema = z.toJSONSchema(contract, { io: "input", unrepresentable: "any" });
+    delete schema.$schema;
+    return JSON.stringify(schema);
+}
+
 function parse<S extends z.ZodType>(schema: S, value: unknown): z.infer<S> {
     const p = schema.safeParse(value);
     if (!p.success)
@@ -198,13 +207,14 @@ const protectedFlaw = z.object({
     explanation: text(2000),
     fix: text(2000)
 });
+export const retainedContextSchema = z.array(protectedFlaw).min(1).max(5).refine(a => unique(a.map(f => f.key)));
 /** Caller captures every retained flaw from the authorized revision, including
  * unmatched flaws excluded from provider projections. Missing context fails closed. */
 export function validateRetainedContext(snapshot: InputEnvelope, retainedFlaws?: RetainedFlaw[]) {
     const expected = snapshot.operation === "generate_hints" ? snapshot.payload.flaws : snapshot.operation === "assess_review" ? snapshot.payload.matches : [];
     if (!expected.length)
         return;
-    const context = z.array(protectedFlaw).min(1).max(5).refine(a => unique(a.map(f => f.key))).safeParse(retainedFlaws);
+    const context = retainedContextSchema.safeParse(retainedFlaws);
     if (!context.success)
         fail("INVALID_AI_OUTPUT");
     if (snapshot.operation === "generate_hints" && context.data.length !== expected.length)
