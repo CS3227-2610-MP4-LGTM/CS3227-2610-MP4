@@ -45,7 +45,7 @@ export function SubmissionList({ search, readPage, navigate }: { search: string;
  <dt>Learner</dt><dd><span>{item.learner.displayName}</span><br /><span>{item.learner.id}</span></dd>
  <dt>Challenge</dt><dd>{item.title}</dd><dt>Attempt</dt><dd>{item.attemptNumber}</dd><dt>Submitted</dt><dd><SubmissionTime value={item.submittedAt} /></dd>
  <dt>Grading status</dt><dd>{stateLabel(item.gradingState)}</dd><dt>Effective score</dt><dd>{item.gradingState === "completed" && item.effectiveScore !== null ? `${item.effectiveScore} / 100` : "Not available"}</dd><dt>Open flags</dt><dd>{item.openFlagCount}</dd></dl>
- <Link prefetch={false} href={`${base}/${item.id}`}>View submission</Link></li>)}</ul>}
+ <Link prefetch={false} href={`${base}/${item.id}${params.getAll("learnerId").length === 1 && params.get("learnerId") === item.learner.id ? `?from=learner&learnerId=${item.learner.id}` : ""}`}>View submission</Link></li>)}</ul>}
  {(params.has("cursor") || result?.status === "invalid") && <button className="button secondary" disabled={!result} onClick={() => page()}>First page</button>}
  {result?.status === "ok" && result.page.nextCursor && <button className="button secondary" onClick={() => page(result.page.nextCursor!)}>Next page</button>}
  </>;
