@@ -140,13 +140,102 @@ const output = z.discriminatedUnion("operation", [
     }))
 ]);
 export type OutputEnvelope = z.infer<typeof output>;
-export function describeOutputShape(operation: OutputEnvelope["operation"]) {
-    const contract = output.options.find(option => option.shape.operation.value === operation)!;
-    // Transformations normalize received strings. Describe the JSON that the
-    // model must send, while retaining the schema's fields and strictness.
-    const schema = z.toJSONSchema(contract, { io: "input", unrepresentable: "any" });
+type WireSchema = z.core.JSONSchema.BaseSchema;
+interface WireObject extends WireSchema {
+    properties: Record<string, WireSchema>;
+    required: string[];
+}
+interface WireList extends WireSchema {
+    items: WireObject;
+}
+
+export function socOutputSchema(snapshot: InputEnvelope) {
+    const contract = output.options.find(option => option.shape.operation.value === snapshot.operation)!;
+    const schema = z.toJSONSchema(contract, {
+        io: "input",
+        unrepresentable: "any",
+        override: ({ jsonSchema }) => {
+            // SoC's grammar omits these keywords. The app enforces string bounds.
+            delete jsonSchema.minLength;
+            delete jsonSchema.maxLength;
+        },
+    });
     delete schema.$schema;
-    return JSON.stringify(schema);
+    const payload = schema.properties!.payload as WireObject;
+    const lists = payload.properties as Record<string, WireList>;
+    switch (snapshot.operation) {
+    case "inject_flaws": {
+        const { categories, flawCount, workingCode } = snapshot.payload;
+        const { proposals } = lists;
+        proposals.minItems = proposals.maxItems = flawCount;
+        const fields = proposals.items.properties;
+        fields.category = { type: "string", enum: categories };
+        const lineCount = workingCode.replace(/\n$/, "").split("\n").length;
+        fields.sourceStartLine.maximum = fields.sourceEndLine.maximum = lineCount;
+        break;
+    }
+    case "generate_hints": {
+        const { flaws } = snapshot.payload;
+        const { hints } = lists;
+        hints.minItems = hints.maxItems = flaws.length;
+        hints.items.properties.key = { type: "string", enum: flaws.map(flaw => flaw.key) };
+        break;
+    }
+    case "assess_review": {
+        const { assessments } = lists;
+        const { matches } = snapshot.payload;
+        assessments.minItems = assessments.maxItems = matches.length;
+        if (!matches.length) break;
+
+        const item = assessments.items;
+        const wireCredit = { type: "number", enum: credit.options.map(level => level.value) } as const;
+        const fields = { ...item.properties };
+        delete fields.explanationCredit;
+        delete fields.fixCredit;
+        const pairs = matches.map(({ key, comment }) => {
+            const properties: WireObject["properties"] = {
+                ...fields,
+                key: { type: "string", enum: [key] },
+                commentId: { type: "string", enum: [comment.id] },
+                explanationCredit: wireCredit,
+                fixCredit: wireCredit,
+            };
+            return { ...item, properties, required: Object.keys(properties) };
+        });
+        payload.properties.assessments = { ...assessments, items: pairs.length === 1 ? pairs[0] : { anyOf: pairs } };
+        break;
+    }
+    case "summarize_learner": {
+        const evidence = categories.flatMap(category => {
+            const ids = snapshot.payload.submissions
+                .filter(submission => submission.categories.some(entry => entry.category === category))
+                .map(submission => submission.submissionId);
+            return ids.length ? [{ category, ids }] : [];
+        });
+        for (const [name, list] of Object.entries(lists)) {
+            if (!evidence.length) {
+                list.maxItems = 0;
+                continue;
+            }
+            const item = list.items;
+            const items = evidence.map(({ category, ids }): WireObject => ({
+                ...item,
+                properties: {
+                    ...item.properties,
+                    category: { type: "string", enum: [category] },
+                    submissionIds: {
+                        ...item.properties.submissionIds,
+                        maxItems: ids.length,
+                        items: { type: "string", enum: ids },
+                    },
+                },
+            }));
+            payload.properties[name] = { ...list, items: items.length === 1 ? items[0] : { anyOf: items } };
+        }
+        break;
+    }
+    }
+    return schema;
 }
 
 function parse<S extends z.ZodType>(schema: S, value: unknown): z.infer<S> {
