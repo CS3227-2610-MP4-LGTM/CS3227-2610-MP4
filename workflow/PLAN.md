@@ -393,7 +393,7 @@ the limits above remain unchanged.
   developer guide with hosted opt-in and smoke invocation, linking SEC-04 and
   SYS-15 for limits and configuration requirements.
 - **Depends on:** T-04
-- **Status:** todo
+- **Status:** done
 
 ## Learner
 

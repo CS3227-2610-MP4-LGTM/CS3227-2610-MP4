@@ -612,12 +612,14 @@ Local configuration and passing integration tests do not verify hosted settings.
 
 The server-only modules in
 [`src/server/llm/`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/boundary.ts)
-provide reusable validation, authorization, fake execution and durable usage
-accounting. They add no role endpoints or new screens.
+provide reusable validation, authorization, fake and SoCLaaS execution, and
+durable usage accounting.
 
-`createLlmBoundary({client, accounting, provider, clock, limits})` takes a
-user-scoped Supabase client. Its `execute(request, serverSelection?)` accepts
-only `{operation, resourceId, idempotencyKey, expectedVersion?}`; IDs are UUIDs.
+`createLlmBoundary({client, accounting, env, clock, limits})` takes a
+user-scoped Supabase client and server environment settings. Callers can also
+pass an injected `provider` in place of `env`. Its
+`execute(request, serverSelection?)` accepts only
+`{operation, resourceId, idempotencyKey, expectedVersion?}` with UUIDs for IDs.
 Author operations require the captured draft version as `expectedVersion`.
 The boundary verifies identity, stored role, ownership and eligible persisted
 state before capturing input or reserving usage, then rechecks identity and the
@@ -696,16 +698,63 @@ Safe codes include `INVALID_AI_OUTPUT`, `AI_TIMEOUT`, `AI_UNAVAILABLE` and
 `SERVICE_UNAVAILABLE`; raw provider errors, credentials and private text are
 excluded from diagnostics. Accounting outages fail closed.
 
-### Fake configuration and targeted tests
+### Provider configuration
 
-`getLlmConfig` validates existing settings on use: `APP_ENV` must be `local`,
-`test`, `ci`, `development` or `production`. Set `AI_PROVIDER=fake` explicitly
-for local/test/CI and production; hosted development defaults to fake.
-All live dispatch remains disabled. `SOCLAAS_API_KEY` cannot enable it and must
-remain server-only, as must `SUPABASE_SECRET_KEY`. There are no new endpoint or
-model environment settings and no new dependencies. `createSocProvider` is an
-offline transport test seam restricted to test runtime, fake configuration,
-injected transport and reserved `.invalid` destinations; it is not live enablement.
+`getLlmConfig` validates settings on use and names invalid settings without
+printing their values. Configure the provider independently in each environment.
+
+| Environment | Provider settings |
+| --- | --- |
+| Local, test and CI | Set `APP_ENV` to `local`, `test` or `ci` and set `AI_PROVIDER=fake`. |
+| Hosted development (Vercel Preview) | Set `APP_ENV=development`. The provider defaults to fake. To opt in, set `AI_PROVIDER=soclaas` and the development `SOCLAAS_API_KEY`. |
+| Hosted production (Vercel Production) | Set `APP_ENV=production` and select `AI_PROVIDER=fake` explicitly or opt in with `AI_PROVIDER=soclaas` and the separate production `SOCLAAS_API_KEY`. |
+
+Keep both SoC keys server-only. The app pins `qwen3.5:9b` and uses
+`reasoning_effort=none` for each operation. Completion tokens cover both
+answer and reasoning. See the per-operation output caps in
+[`src/server/llm/config.ts`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/config.ts)
+and the configuration requirements in
+[SYS-15](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-15--configuration-and-hosted-auth).
+
+Repeat the configuration review in
+[SEC-04](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md#sec-04--bound-soc-requests-and-usage)
+before enabling live dispatch and whenever the key, model or ceilings change.
+
+### Manual SoCLaaS smoke
+
+From the repository root in a local shell, export the development key as
+`SOCLAAS_API_KEY`. Pass `--live` to authorize live requests and keep Bun's
+environment-file loading disabled.
+
+```bash
+bun --no-env-file --conditions=react-server workflow/scripts/soc-smoke.ts \
+  --live --operation inject_flaws \
+  --input workflow/scripts/fixtures/soc-smoke/inject-flaws.json
+```
+
+The fixture directory also includes `generate-hints.json`,
+`assess-review.json`, `summarize-learner.json` and a separate five-flaw
+`inject-flaws-stress.json` case. Match `--operation` to the input files.
+Repeat `--input` for more files and use `--repeat` to run the same cases
+again. The script starts calls at least four seconds apart and allows at
+most 30 calls per run. The script-only options `--effort` (`none`, `low`,
+`medium`, or `high`) and `--max-tokens` (1–8,192) override the corresponding
+app defaults for that run.
+
+Each input file is a JSON array of cases with a `payload` and optional
+`caseId`. For hint and assessment cases, include the revision's complete
+retained flaw set in `retainedFlaws`, including unmatched flaws for
+`assess_review`. The script uses this set locally to check the answer
+for protected text and sends only the operation payload in the model's
+input envelope.
+
+The script writes one CSV row per call with case and settings, latency,
+token counts when available, finish reason, answer and reasoning character
+counts, validation outcome, rejection reason and detail, and parsed
+assessment credits when applicable. The CSV omits credentials and raw
+model text.
+
+### Fake provider and targeted tests
 
 The fake provider has deterministic success, malformed-output and failure scenarios.
 Run unit checks without Supabase, and integration checks with the local stack:
@@ -749,8 +798,10 @@ Configure these secrets and variables in each GitHub environment:
 
 In Vercel, configure `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `APP_ENV` and
-`AI_PROVIDER` for Preview and Production. Preview uses `lgtm-dev`;
-Production uses `lgtm-prod`. Keep `SUPABASE_SECRET_KEY` server-only.
+`AI_PROVIDER` for Preview and Production. Preview uses `lgtm-dev` and
+Production uses `lgtm-prod`. Keep `SUPABASE_SECRET_KEY` server-only. For live
+SoCLaaS, follow [Provider configuration](#provider-configuration) and set the
+server-only `SOCLAAS_API_KEY` in the Vercel environment that opts in.
 
 `vercel.json` selects Singapore (`sin1`), disables Git-triggered deployments,
 and configures no cron jobs.
