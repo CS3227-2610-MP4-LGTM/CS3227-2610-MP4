@@ -193,3 +193,116 @@ describe("file selection and CLI", () => {
     }
   });
 });
+
+const later = "2026-01-01T00:00:12.500Z";
+const response = (payload: unknown, at = time) => record("token_usage_record", payload, at);
+const tokenCount = (info: unknown, at = time) => record("event_msg", { type: "token_count", info }, at);
+
+async function perTurnFixture(lines: string[]) {
+  const { home, directory } = await fixtureHome();
+  const path = join(directory, "rollout-a.jsonl");
+  await writeFile(path, [meta("thread-a", "shared-session", process.cwd()), ...lines].join("\n"));
+  return {
+    directory, path,
+    run: (...args: string[]) => spawnSync("bun", ["workflow/scripts/rollout-summary.ts", "--per-turn", ...args], {
+      encoding: "utf8", env: { ...process.env, CODEX_HOME: home, CODEX_THREAD_ID: "", CODEX_SESSION_ID: "" },
+    }),
+  };
+}
+
+describe("#68 per-response CLI", () => {
+  it("uses response order and fractional gaps, marks compaction, and emits only allowlisted fields", async () => {
+    const sentinel = "PRIVATE_SENTINEL";
+    const { path, run } = await perTurnFixture([
+      context("a"),
+      response({ response_id: "first", usage }),
+      tokenCount({ total_token_usage: usage, last_token_usage: usage }),
+      record("response_item", { type: "message", role: "assistant", content: sentinel }),
+      response({ response_id: sentinel, usage: { ...usage, cached_input_tokens: 0 } }, later),
+      response({ response_id: sentinel, usage }, later),
+      record("compacted", { compaction_response_id: sentinel, message: sentinel }, later),
+      record("event_msg", { type: "context_compacted" }, later),
+      response({ usage }, "2026-01-01T00:00:13.000Z"),
+    ]);
+    const result = run("--path", path);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).not.toContain(sentinel);
+    expect(JSON.parse(result.stdout)).toEqual([
+      { timestamp: time, seconds_since_previous_response: "unknown", input_tokens: 100, cached_input_tokens: 70,
+        output_tokens: 20, reasoning_output_tokens: 5, total_tokens: 999, compaction: false },
+      { timestamp: later, seconds_since_previous_response: 12.5, input_tokens: 100, cached_input_tokens: 0,
+        output_tokens: 20, reasoning_output_tokens: 5, total_tokens: 999, compaction: true },
+      { timestamp: "2026-01-01T00:00:13.000Z", seconds_since_previous_response: 0.5, input_tokens: 100,
+        cached_input_tokens: 70, output_tokens: 20, reasoning_output_tokens: 5, total_tokens: 999, compaction: false },
+    ]);
+    const csv = run("--format", "csv");
+    expect(csv.status).toBe(0);
+    expect(csv.stdout).toBe([
+      "timestamp,seconds_since_previous_response,input_tokens,cached_input_tokens,output_tokens,reasoning_output_tokens,total_tokens,compaction",
+      `${time},unknown,100,70,20,5,999,false`,
+      `${later},12.5,100,0,20,5,999,true`,
+      "2026-01-01T00:00:13.000Z,0.5,100,70,20,5,999,false", "",
+    ].join("\n"));
+  });
+
+  it("derives legacy deltas, ignores repeated totals, and keeps unknown fields across partial usage", async () => {
+    const next = { input_tokens: 135, output_tokens: 30, total_tokens: 1044 };
+    const { run } = await perTurnFixture([
+      tokenCount(null),
+      tokenCount({ total_token_usage: usage }),
+      tokenCount({ total_token_usage: usage, last_token_usage: usage }),
+      record("compacted", { message: "ignored" }),
+      tokenCount({ total_token_usage: next }, later),
+      tokenCount({ total_token_usage: { ...next, input_tokens: 140, cached_input_tokens: 74, total_tokens: 1049 },
+        last_token_usage: { reasoning_output_tokens: 0 } }, "2026-01-01T00:00:20.000Z"),
+    ]);
+    const result = run();
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject([
+      { input_tokens: 100, total_tokens: 999, compaction: false },
+      { seconds_since_previous_response: 12.5, input_tokens: 35, cached_input_tokens: "unknown",
+        output_tokens: 10, reasoning_output_tokens: "unknown", total_tokens: 45, compaction: true },
+      { seconds_since_previous_response: 7.5, input_tokens: 5, cached_input_tokens: "unknown",
+        output_tokens: 0, reasoning_output_tokens: 0, total_tokens: 5, compaction: false },
+    ]);
+  });
+
+  it("retains missing-usage responses and resumes deriving ledger deltas after a new baseline", async () => {
+    const { run } = await perTurnFixture([
+      response({ thread_token_usage: usage }),
+      response({}, later),
+      response({ usage: { cached_input_tokens: 0 }, thread_token_usage: { input_tokens: 120, total_tokens: 1020 } },
+        "2026-01-01T00:00:20.000Z"),
+      response({ thread_token_usage: { input_tokens: 130, total_tokens: 1032 } }, "2026-01-01T00:00:21.000Z"),
+    ]);
+    const result = run();
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject([
+      { input_tokens: 100, total_tokens: 999 },
+      { seconds_since_previous_response: 12.5, input_tokens: "unknown", cached_input_tokens: "unknown", total_tokens: "unknown" },
+      { seconds_since_previous_response: 7.5, input_tokens: "unknown", cached_input_tokens: 0, total_tokens: "unknown" },
+      { seconds_since_previous_response: 1, input_tokens: 10, total_tokens: 12 },
+    ]);
+  });
+
+  it("selects one split-thread file and rejects a session shared by distinct threads", async () => {
+    const { directory, path, run } = await perTurnFixture([response({ usage, thread_token_usage: usage })]);
+    await writeFile(join(directory, "rollout-b.jsonl"), [
+      meta(), response({ usage: { input_tokens: 12 }, thread_token_usage: { ...usage, total_tokens: 1100 } }, later),
+      response({ thread_token_usage: { ...usage, input_tokens: 104, total_tokens: 1109 } }, "2026-01-01T00:00:13.000Z"),
+    ].join("\n"));
+    const selected = run("--id", "thread-a");
+    expect(selected.status).toBe(0);
+    expect(JSON.parse(selected.stdout)).toMatchObject([
+      { timestamp: later, input_tokens: 12, total_tokens: "unknown", seconds_since_previous_response: "unknown" },
+      { input_tokens: 4, total_tokens: 9, seconds_since_previous_response: 0.5 },
+    ]);
+    expect(JSON.parse(run("--path", path).stdout)).toMatchObject([{ timestamp: time, input_tokens: 100 }]);
+    await writeFile(join(directory, "rollout-b.jsonl"), meta("thread-b"));
+    const ambiguous = run("--id", "shared-session");
+    expect(ambiguous.status).toBe(1);
+    expect(ambiguous.stderr).toBe("");
+    expect(JSON.parse(ambiguous.stdout)).toEqual([]);
+  });
+});

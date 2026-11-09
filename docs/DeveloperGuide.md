@@ -802,6 +802,7 @@ feature handoff. Specialists return evidence, never write their own handoffs
 or spawn more agents. Humans own commits and PRs.
 After each stage, the orchestrator records the agent's rollout token total
 in the handoff (or `unavailable`), and at close-out records its own session total.
+Use [`--per-turn`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/rollout-summary.ts#L6) for per-response token records.
 
 Low handles copy, styling, docs and comments without behaviour changes in the
 main session, with targeted checks and no handoff. Standard handles behaviour

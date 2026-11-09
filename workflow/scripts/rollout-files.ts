@@ -1,16 +1,22 @@
 import { readFile, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { matchesRepository, parseRollout, type RolloutSummary } from "./rollout-parser";
+import { matchesRepository, parseRollout, parseRolloutResponses, type RolloutSummary } from "./rollout-parser";
 
 export interface RolloutFile {
   summary: RolloutSummary;
   inRepository: boolean;
 }
 
+type SelectedRollout = RolloutFile & { path: string; hasEarlierRollout?: boolean };
+
 export async function readRollout(path: string, repository: string, tokenSource: "preferred" | "token_count" = "preferred"): Promise<RolloutFile> {
-  const lines = (await readFile(path, "utf8")).split(/\r?\n/);
+  const lines = await readRolloutLines(path);
   return { summary: parseRollout(lines, tokenSource), inRepository: matchesRepository(lines, repository) };
+}
+
+async function readRolloutLines(path: string) {
+  return (await readFile(path, "utf8")).split(/\r?\n/);
 }
 
 export async function discoverRollouts(directory: string): Promise<string[]> {
@@ -39,26 +45,47 @@ export interface RolloutEnvironment {
 
 export async function summarizeRollouts(
   selection: Selection,
+  env?: RolloutEnvironment,
+  repository?: string,
+): Promise<RolloutSummary[]> {
+  return (await selectRollouts(selection, env, repository)).map(file => file.summary);
+}
+
+export async function readRolloutResponses(selection: Pick<Selection, "id" | "path">) {
+  if (selection.path) return parseRolloutResponses(await readRolloutLines(selection.path));
+  const [file] = await selectRollouts(selection);
+  return file && parseRolloutResponses(await readRolloutLines(file.path), file.hasEarlierRollout);
+}
+
+async function selectRollouts(
+  selection: Selection,
   env: RolloutEnvironment = {
     CODEX_HOME: process.env.CODEX_HOME,
     CODEX_THREAD_ID: process.env.CODEX_THREAD_ID,
     CODEX_SESSION_ID: process.env.CODEX_SESSION_ID,
   },
   repository = process.cwd(),
-): Promise<RolloutSummary[]> {
+): Promise<SelectedRollout[]> {
   const repo = resolve(repository);
-  if (selection.path) return [(await readRollout(selection.path, repo, selection.tokenSource)).summary];
+  if (selection.path) {
+    return [{ path: selection.path, ...await readRollout(selection.path, repo, selection.tokenSource) }];
+  }
   const paths = await discoverRollouts(join(env.CODEX_HOME || join(homedir(), ".codex"), "sessions"));
-  const candidates: RolloutFile[] = [];
+  const candidates: SelectedRollout[] = [];
   for (const path of paths) {
     // A disappearing or unreadable rollout must not leak a filesystem error/path.
-    try { candidates.push(await readRollout(path, repo, selection.tokenSource)); }
+    try { candidates.push({ path, ...await readRollout(path, repo, selection.tokenSource) }); }
     catch { /* Ignore inaccessible candidates. */ }
   }
   const time = (file: RolloutFile) => Date.parse(file.summary.endTime) || Date.parse(file.summary.startTime) || 0;
-  const recent = (values: RolloutFile[]) => values.sort((a, b) => time(b) - time(a));
+  const recent = (values: typeof candidates) => values.sort((a, b) => time(b) - time(a));
+  const single = (file: SelectedRollout) => [{
+    ...file,
+    hasEarlierRollout: file.summary.threadId !== "unknown" && candidates.some(candidate =>
+      candidate.summary.threadId === file.summary.threadId && time(candidate) < time(file)),
+  }];
   if (selection.list !== undefined) {
-    return recent(candidates.filter(file => file.inRepository)).slice(0, selection.list).map(file => file.summary);
+    return recent(candidates.filter(file => file.inRepository)).slice(0, selection.list);
   }
   const thread = selection.id || env.CODEX_THREAD_ID;
   const session = selection.id || env.CODEX_SESSION_ID;
@@ -68,9 +95,10 @@ export async function summarizeRollouts(
   if (matches.length) {
     if (new Set(matches.map(file => file.summary.threadId)).size > 1) throw new Error();
     // Split rollouts may already have cumulative totals; select one, never sum them.
-    return [(matches.find(file => file.summary.tokens.total_tokens !== "unknown") ?? matches[0]).summary];
+    return single(matches.find(file => file.summary.tokens.total_tokens !== "unknown") ?? matches[0]);
   }
   // An explicit or environment-provided identity must never silently select another session.
   if (thread || session) return [];
-  return recent(candidates.filter(file => file.inRepository)).slice(0, 1).map(file => file.summary);
+  const [latest] = recent(candidates.filter(file => file.inRepository));
+  return latest ? single(latest) : [];
 }
