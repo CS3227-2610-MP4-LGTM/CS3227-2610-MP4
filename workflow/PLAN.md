@@ -306,6 +306,95 @@ the limits above remain unchanged.
 - **Depends on:** T-01, T-03
 - **Status:** done
 
+### T-05: Live SoC provider at the shared LLM boundary
+
+- **Issue:** #66
+- **Covers:** SEC-04 and SEC-04.1–04.5, SYS-13.3, SYS-15 and SYS-15.1
+  (LLM configuration), SYS-18.1, and all four INTEGRATION-SPEC §4 contracts,
+  including the independent `assess_review` credit levels. Preserve T-04's
+  SEC-04.1–04.2 enforcement and SEC-05 settlement and retry rules.
+- **Route:** high
+- **Reads:** `workflow/specs/AI-SECURITY-SPEC.md` SEC-02 — Validate model output
+  before use, SEC-03 — Protect learner-facing hints and feedback, SEC-04 — Bound
+  SoC requests and usage, and SEC-05 — Reserve and settle usage atomically;
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-13 — Environment isolation, SYS-15 —
+  Configuration and hosted Auth (LLM rows and SYS-15.1), and SYS-18 — Resource
+  use; `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions,
+  §2 Domain model and publication lifecycle → Code, proposals and locations,
+  §3 API contracts → Transport, concurrency and errors, §4 Server-only LLM
+  contracts (all four operations), and §6 Shared deterministic seed fixtures.
+- **Tests:** unit (`tests/unit/server/llm/soc-provider.test.ts` and
+  `tests/unit/server/llm/soc-smoke.test.ts`, with regressions in
+  `tests/unit/server/llm/` and `tests/unit/llm-internal/`). Exercise the shared
+  boundary's hosted selection and accounting with simulated SoC transport and
+  fake accounting/clock. Cover exact wire requests, contract-derived
+  operation instructions and the assessment credit rubric, default fake and
+  explicit live selection for each hosted environment, named safe errors,
+  denied isolation/limit/model configurations, input/context preflight,
+  lower effective limits, byte/time cutoff, empty and length-truncated output
+  with both verified usage and the uncertain charge, invalid-output retry,
+  transport failure without retry, and reasoning exclusion from application
+  outputs and diagnostics. Exercise the script
+  with simulated transport/clock for opt-in, fixture validation, retained-flaw
+  checks, the five-flaw stress input, repeat and override options (including
+  the SEC-04 output ceiling), four-second start spacing and the run cap.
+  Verify CSV rows include the requested token cap, failures and parsed
+  assessment credits without raw request, response or reasoning text. Retain
+  the existing local Supabase accounting regression suite
+  (`tests/integration/llm/`) and keep all automated tests offline from SoC.
+- **Config paths:** `src/server/llm/config.ts`. Use existing dependencies and
+  test configuration.
+- **Constraints:** One implementer run. Add an environment-backed provider
+  selection path at the shared server boundary and preserve injected fake
+  callers. Hosted development defaults to fake. Development and production
+  may explicitly select live with `AI_PROVIDER=soclaas` and their separate
+  `SOCLAAS_API_KEY`. Keep the exact SEC-04 HTTPS destination,
+  reject redirects and aliases, and fail closed if model, context, settings or
+  enforceable limits are invalid. Check the complete serialized provider
+  request plus framing and the actual operation cap before reservation and
+  dispatch. Reserve and settle through existing accounting. Treat empty or
+  length-truncated answers as invalid output, preserving verified usage for
+  settlement when available. Verify prompt and all completion tokens against
+  the reservation, with no cached-token adjustment. Unverifiable usage takes
+  the uncertain charge. Discard reasoning text and keep provider metadata out
+  of app results and diagnostics. Derive the shape in each system instruction
+  from the existing operation output contract and keep its semantic guidance,
+  including independent `0`, `0.5` and `1` assessments, aligned with §4.
+  Keep untrusted inputs separate from system instructions. Preserve the
+  existing boundary, fake behavior, contracts and accounting except for
+  SEC-04 changes. Leave role entry points and deployment workflows out of scope.
+
+  In `src/server/llm/config.ts`, pin `qwen3.5:9b` and `none` effort for
+  all operations, with live output caps of `inject_flaws` 1,280,
+  `generate_hints` 384, `assess_review` 576 and `summarize_learner` 1,024 tokens.
+  Size caps for realistic output so only a slow attempt hits the 15-second
+  deadline and ends without retrying, avoiding predictable length finishes
+  that consume the invalid-output retry.
+
+  Provide `workflow/scripts/soc-smoke.ts` and §6-based input files for all
+  four operations under `workflow/scripts/fixtures/soc-smoke/`. Accept an
+  explicit live flag, operation, input files of payloads with optional case
+  IDs, repeat count, and script-only effort and `--max-tokens` overrides.
+  Bound `--max-tokens` by the SEC-04 output ceiling and keep app caps as
+  constants. Add one separately labeled `inject_flaws` stress input that
+  requests five flaws across several categories on working code long enough
+  to accommodate them. Record a stress-case timeout as evidence for Taia's
+  SEC-04 timing decision. T-05 follows the existing timing limits. Use the dev
+  key from the operator's shell and invoke Bun with automatic environment file
+  loading disabled. Pace call starts at least four seconds apart and cap a run
+  at 30 calls. Use the same adapter protocol and app validators. Keep the
+  complete retained-flaw context for hint and assessment safety checks,
+  including unmatched flaws, separate from provider input. Write one CSV row
+  per call with case ID, operation, effort, `max_tokens`, latency,
+  prompt/completion tokens, finish reason, reasoning character count, validity,
+  rejection reason and parsed assessment credits. Use safe rejection reasons, omit raw reasoning,
+  and keep the key and model text out of diagnostics. Never read `.env*` or
+  call the portal from code. Only the human runs live smoke. Update the
+  developer guide with hosted opt-in and smoke invocation, linking SEC-04 and
+  SYS-15 for limits and configuration requirements.
+- **Depends on:** T-04
+- **Status:** todo
+
 ## Learner
 
 ### T-10: Browse challenges and view a challenge as a PR
