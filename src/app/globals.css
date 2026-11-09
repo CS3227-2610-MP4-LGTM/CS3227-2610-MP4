@@ -99,3 +99,15 @@ input[aria-invalid], select[aria-invalid] { border-color: #a12d26; }
 .review-editor { margin-top: .75rem; padding: .75rem; border: 1px solid var(--border); border-radius: .45rem; }
 .review-editor textarea { width: 100%; min-height: 5rem; padding: .5rem; border: 1px solid #788a7e; border-radius: .4rem; resize: vertical; }
 .review-editor textarea[aria-invalid="true"] { border-color: #a12d26; }
+
+.ta-evidence { min-width: 0; overflow-wrap: anywhere; }
+.ta-evidence dd { margin-inline-start: 0; margin-block-end: .75rem; }
+.ta-evidence dt { font-weight: 700; }
+.ta-evidence pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ta-return-links { display: flex; flex-wrap: wrap; gap: 1rem; }
+
+.ta-moderation section { margin-block: 1.5rem; }
+.moderation-form { max-width: 38rem; margin-block: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; }
+.moderation-form textarea { font: inherit; width: 100%; min-width: 0; min-height: 8rem; padding: .65rem .75rem; color: var(--foreground); background: white; border: 1px solid #788a7e; border-radius: .4rem; resize: vertical; }
+.moderation-form textarea[aria-invalid] { border-color: #a12d26; }
+.moderation-form .button { margin-block-start: .75rem; margin-inline-end: .5rem; }

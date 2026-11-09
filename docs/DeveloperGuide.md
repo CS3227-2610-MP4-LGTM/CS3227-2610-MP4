@@ -320,6 +320,174 @@ and the [Learner projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610
   Supabase to exercise filter URL history, access outcomes, first-attempt
   links, account switching and keyboard access at 320 CSS pixels.
 
+### TA submission inspection
+
+Sign in as a TA to open **Submissions** at `/ta/submissions`. Each attempt has
+its own card with the learner's display name and ID, challenge title, attempt
+number, UTC submission time, grading status, effective score and open flag count.
+Use **Learner ID** and **Challenge ID** (UUIDs), and **Grading status** to filter,
+then choose **Apply filters**. Filters combine with AND and start at the first
+page. **Clear filters** resets the list. The URL preserves applied filters and
+pagination for reload and browser Back or Forward. **Next page** and **First
+page** keep the applied filters.
+
+“No submissions yet.” is the unfiltered empty state; “No submissions match
+these filters.” is the filtered empty state. Invalid IDs show “Enter a valid
+ID.” An invalid URL or cursor shows “This submissions page isn't valid.”;
+use **First page** or **Clear filters** to recover. Loading announces “Loading
+submissions…”. A read failure offers **Try again** for the current request.
+
+Choose **View submission** to open `/ta/submissions/:id`. The **Submission**
+view shows the attempt's pinned revision through the shared read-only diff
+renderer and its ordered **Submitted comments**, including line numbers,
+matching, duplicate/unmatched status, explanation and fix credit, and feedback.
+**Original assessment** shows the stored AI score, pass/fail result, pass mark
+60, point breakdown and matched/missed counts. **Current grade** separately
+shows the effective score and whether it comes from the original AI assessment
+or a stored TA override. **Private answer key** shows each flaw's locations,
+original/replacement snippets, explanation, fix and per-flaw assessment.
+**Override history** and **Resolution history** show stored moderation decisions.
+
+Pending, running and failed grading have no available score; a completed zero
+is displayed as `0 / 100`. **Refresh submission** rereads stored evidence without
+starting grading or changing moderation records. Reopening a submission retains
+its pinned evidence after challenge edits, republication, unpublication or
+archiving. Code, snippets and comments are displayed as text and never executed.
+
+Loading announces “Loading submission…”. A missing record shows “Submission
+not found.”; a read failure offers **Try again**. **Back to submissions** is
+always available. Valid page context `from=flags` adds **Back to flagged
+submissions**; `from=learner&learnerId=<matching learner UUID>` adds **Back to
+learner**. The learner detail destination remains a separate feature. Account
+and role failures use the shared workspace recovery described above.
+
+#### TA read contracts
+
+| Endpoint | Request and success data |
+| --- | --- |
+| `GET /api/v1/ta/submissions` | Optional `learnerId`, `challengeId`, `gradingState`, `cursor` and `limit`. Returns `{ items, nextCursor }`; default limit 20, API limits 1–50. Grading states are `pending`, `running`, `failed`, `completed`. |
+| `GET /api/v1/ta/submissions/:id` | UUID path parameter, no query parameters. Returns the pinned submission, comments, private answer key, matching, per-flaw `assessments`, original/effective grades and stored override/flag/resolution records. Page return context is not sent to this endpoint. |
+
+Both endpoints verify identity and the stored TA role before reading through
+the signed-in user's Supabase client and RLS. Projections expose learner IDs
+and display names without email addresses. Responses use `{ data }` or
+`{ error: { code, message } }` and `Cache-Control: private, no-store`.
+Invalid inputs return 400, missing sessions 401, wrong roles or unusable profiles
+403, absent detail records 404 and unavailable reads 503. Unknown or duplicate
+query fields are rejected. The list sorts by descending submission time and
+ascending submission ID; cursors are bounded and bound to the same filters.
+Protected page shells defer account reads behind Suspense and `connection()`;
+protected results have no cache scopes.
+
+See the [TA server readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/submissions.ts)
+and [list migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108090000_ta_submission_page.sql).
+
+#### TA inspection checks
+
+- `bun run test tests/unit/ta/inspection` covers validation, filter-bound
+  cursors, list/detail rendering, stored assessment states and recovery.
+- With local Supabase running,
+  `bun run test:integration tests/integration/ta/inspection/reads.test.ts`
+  checks protected reads, direct RLS access, retained revision evidence and
+  GET-only behavior with fixture records.
+- `bun run test:e2e tests/e2e/ta/inspection` uses the production build and local
+  Supabase for URL history, refresh/retry, account transitions, return links,
+  keyboard access and 320 CSS pixel width.
+
+### TA flag resolution and grade overrides
+
+Open **Flagged submissions** at `/ta/flags`. The queue defaults to **Open**;
+choose **Resolved** under **Status** to inspect prior decisions. **Flag reason**
+offers **All**, **Score near the pass mark**, **AI grading output needed a retry**,
+**Location match and AI assessment disagree**, and **Learner reported an unmatched
+comment**. **Apply filters** combines status and reason and starts at the first
+page. Applied filters and pagination stay in the URL for reload and browser
+Back or Forward; **Next page** and **First page** retain filters. Each entry
+shows the submission ID, reason, status and recorded time. **View submission**
+opens its pinned evidence and marks the **Selected flag**.
+
+An empty default queue shows “No flagged submissions.”; a filtered empty queue
+shows “No flags match these filters.” with **Show open flags**. Loading announces
+“Loading flagged submissions…”. A failed read offers **Try again**; an invalid
+queue URL shows “This queue page isn't valid.” with **First page** recovery.
+
+On the submission, choose **Resolve flag**, select **Upheld** or **Dismissed**
+under **Disposition**, enter a **Reason**, then choose **Save resolution**.
+Either disposition resolves the flag without changing its grade. **Add correction**
+appends another resolution to a resolved flag; earlier entries remain visible.
+**Resolution history** shows each TA's ID, UTC time, disposition and reason,
+with the latest marked **Latest resolution**. A missing selected flag shows
+“Flag not found.” and **Back to flagged submissions**.
+
+For a completed assessment, choose **Override grade**, enter a **Replacement
+score** (a whole number from 0 to 100) and **Reason**, then **Save override**.
+Both forms require a reason of 1–2,000 Unicode code points after trimming.
+**Current grade** uses the latest override and the pass mark of 60;
+**Original assessment** remains unchanged. **Override history** retains each
+TA's ID, time, score and reason and marks **Current override**. To correct a
+score, append another override. Overrides do not change matching, per-flaw
+credit, hints, category evidence or flags, and do not rerun AI grading.
+The form identifies override reasons as learner-visible; learner result/history
+screens remain outside this implementation.
+
+Saving disables the forms and **Refresh submission**. A successful save announces
+“Resolution saved.” or “Grade override saved.”. Validation focuses the first
+invalid field. After a temporary save failure, **Try again** explicitly retries
+the same unchanged action safely, including after **Refresh submission**; refresh
+only rereads stored evidence. A state or conflict rejection requires refreshing
+and starting a new action. Session expiry opens sign-in; role/profile/account
+failures replace protected content with the shared recovery screen. Returning
+after sign-in or account recovery never automatically resubmits a decision.
+
+#### Moderation contracts and persistence
+
+| Endpoint | Request and success data |
+| --- | --- |
+| `GET /api/v1/ta/flags` | Optional `status` (`open` by default, or `resolved`), `kind`, `cursor`, `limit` (default 20, range 1–50). Returns `{ items, nextCursor }`. Kinds are `near_pass_mark`, `grading_output_retried`, `assessment_disagreement`, `learner_report`. |
+| `POST /api/v1/ta/submissions/:id/overrides` | UUID ID and UUID `Idempotency-Key`; strict JSON `{ score, reason }`. Returns `{ override, grading }` with status 201. |
+| `POST /api/v1/ta/flags/:id/resolutions` | UUID ID and UUID `Idempotency-Key`; strict JSON `{ disposition, reason }`, disposition `upheld` or `dismissed`. Returns the updated flag with status 201. |
+
+These contracts verify identity and stored TA role through the user-scoped
+client. They use the same private, no-store envelopes and access recovery as
+TA inspection. Queue ordering is descending flag time, then ascending ID;
+cursors bind to filters and unknown/duplicate query fields are rejected.
+POSTs require a same-origin `Origin`, cap bodies at 32 KiB and validate fields
+with Zod and again in the database. Invalid requests return 400, missing records
+404, oversized bodies 413, and unavailable operations 503. State and idempotency
+conflicts return 409 (`INVALID_STATE`, `VERSION_CONFLICT` or
+`IDEMPOTENCY_CONFLICT`). An override requires a completed stored assessment.
+
+The [moderation migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108150000_ta_moderation.sql)
+grants authenticated callers only constrained moderation RPC execution; the RPC
+checks the TA role. Direct forged inserts, updates and deletes remain denied;
+human moderation never uses the admin client. Actor, timestamp and submission-wide
+`auditOrder` are database-derived. Both append operations lock the same submission
+so concurrent decisions survive with unique audit order, including tied timestamps.
+The highest override audit order determines the effective grade; any resolution
+makes a flag resolved. Historical submissions remain moderatable after challenge
+publication changes. The shared
+[effective-grade projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/grading/effective-grade.ts)
+also supports owning-Learner-authorized stored rows without exposing private keys.
+
+Idempotency is scoped to actor, operation, resource and key. Replaying the same
+canonical payload returns its saved result; changing the payload with that key
+conflicts. The validated incomplete-assessment rejection is retained even if
+grading later completes: a new explicit action needs a new key. Keys/results
+are private, with RLS enabled and table access revoked. Audit append and saved
+result are atomic, so a lost response can be retried without duplicate history.
+
+#### Moderation checks
+
+- `bun run test tests/unit/ta/moderation` covers filters, forms, validation,
+  access recovery and effective-grade projection. Supplementary recovery tests
+  are in `tests/unit/ta/moderation-recovery.test.tsx`.
+- `bun run test:integration tests/integration/ta/moderation/writes.test.ts`
+  uses local Supabase for protected reads/writes, append ordering, idempotency,
+  retained evidence and direct database boundaries.
+- `bun run test:e2e tests/e2e/ta/moderation` exercises queue/detail decisions,
+  retries, session recovery, keyboard access and phone width against a production
+  build with local Supabase and the fake provider.
+
 ### Auth tests and settings
 
 `bun run test` runs unit tests without Supabase. Start the local stack before
