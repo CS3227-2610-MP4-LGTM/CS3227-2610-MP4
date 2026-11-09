@@ -17,7 +17,7 @@ look, not replacement policy. Mark inapplicable checks with a reason.
 | --- | --- |
 | Server entry points | SYS-08, SYS-16; SEC-01 for AI. Trace caller identity, role, Zod validation and authorization at every changed server entry point, including direct invocation. |
 | Sessions and roles | SYS-05–SYS-09, SYS-11 for auth. Trace cookie/session transitions, provisioning, immutable roles, cache boundaries and denied-access tests. |
-| Database and admin client | SYS-10. Inspect migrations, grants and RLS; trace every privileged operation back to an authorized caller and test bypass attempts. |
+| Database and admin client | SYS-10. Inspect migrations, grants and RLS; trace every privileged operation back to an authorized caller and test bypass attempts. Independently apply the [review rule for privileged database surfaces](../sdd-review/SKILL.md#review). |
 | Record access | SYS-12; SEC-01, SEC-03 for AI. Compare reads/writes, ownership, audit and learner-visible output with permitted records and tests for other users' records. |
 | Prompt injection | SYS-02, SYS-16; SEC-01, SEC-03. Trace untrusted submitted code and other data through prompts, tool boundaries and rendered output; check attack-path tests. |
 | Model output | SYS-03; SEC-02, SEC-03. Trace schema validation before persistence/display and malformed or leaking output tests. |
