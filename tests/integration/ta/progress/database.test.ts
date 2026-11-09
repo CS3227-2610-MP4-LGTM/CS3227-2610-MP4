@@ -15,7 +15,7 @@ it("SYS-10.1 SYS-10.2 SYS-12.1 SYS-12.2 TA-04.1 direct profile columns and evide
       const emails = await client.from("profiles").select(columns).in("id", [id(11), id(12)]);
       expect(JSON.stringify(emails.data)).not.toMatch(/email|@example\.test/);
     }
-    const grades = await client.from("submissions").select("id,ai_grades(ai_grade_assessments(flaw_id,comment_id))").in("id", [id(501), id(503)]);
+    const grades = await client.from("submissions").select("id,ai_grades(ai_grade_evidence(ai_grade_assessments(flaw_id,comment_id)))").in("id", [id(501), id(503)]);
     if (role.startsWith("ta")) {
       expect(grades.error).toBeNull(); expect(grades.data).toHaveLength(2);
       expect(JSON.stringify(grades.data)).toContain(id(301));
