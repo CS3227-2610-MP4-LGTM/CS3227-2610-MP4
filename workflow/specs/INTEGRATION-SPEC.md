@@ -349,6 +349,18 @@ identification or match a different comment. With no matches the server produces
 the grade without calling the provider. Failure leaves no original grade;
 retry operates on the identical pinned submission and key.
 
+Assess `explanationCredit` and `fixCredit` independently against the matched flaw.
+
+- `explanationCredit` is `1` if the comment states what goes wrong and its
+  consequence, `0.5` if it names the right problem but leaves the consequence
+  vague or partly wrong, and `0` if it gives no explanation or does not describe
+  the matched flaw's problem. A correct point about a different problem earns
+  zero explanation credit.
+- `fixCredit` is `1` for an actionable change that would correct the flaw,
+  `0.5` for a change that points in the right direction but is incomplete or
+  unspecific, and `0` if the comment gives no fix or proposes a change that
+  would not correct the flaw.
+
 ### TA performance summary: `operation: summarize_learner`
 
 Input payload: `{ submissions: { submissionId, revisionId, attemptNumber,
