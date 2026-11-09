@@ -251,10 +251,9 @@ Local development and test/CI use local Supabase and fake AI. Vercel Preview use
   access; CI holds no hosted database or SoC key.
 - **SYS-13.2:** Hosted settings review verifies separate projects/keys; users, sessions
   and records cannot cross environments.
-- **SYS-13.3:** Provider selection is explicit via
-  [SYS-15](#sys-15--configuration-and-hosted-auth): local/test/CI always uses fake, hosted
-  development defaults to fake, and hosted live use requires
-  [SYS-18](#sys-18--resource-use).
+- **SYS-13.3:** Verify hosted development and production can each explicitly
+  select live SoC via `AI_PROVIDER` under [SYS-15](#sys-15--configuration-and-hosted-auth)
+  when [SYS-18](#sys-18--resource-use) holds. Hosted development defaults to fake.
 
 ### SYS-14 — Delivery and database evolution
 
@@ -276,8 +275,9 @@ Hosted migrations run only through deployment workflows, before application buil
 
 ### SYS-15 — Configuration and hosted Auth
 
-Validate configuration on use without printing values. The spec introducing the first AI
-feature adds any SoC settings beyond the API key; names and scopes must be recorded here.
+Validate configuration on use without printing values. Keep the pinned SoC model ID,
+per-operation reasoning effort and per-operation output caps as versioned constants
+in `src/server/llm/config.ts`, outside environment settings.
 
 | Name | Scope | Environments and purpose |
 | --- | --- | --- |
@@ -286,7 +286,7 @@ feature adds any SoC settings beyond the API key; names and scopes must be recor
 | `SUPABASE_SECRET_KEY` | Server-only secret | Environments using approved privileged operations; local keys only in local/test/CI. |
 | `APP_ENV` | Server-only | Local, test/CI, hosted development/production; isolation classification. |
 | `AI_PROVIDER` | Server-only | Same environments; provider selection under [SYS-13](#sys-13--environment-isolation). |
-| `SOCLAAS_API_KEY` | Server-only secret | Hosted environments selecting live SoC only. |
+| `SOCLAAS_API_KEY` | Server-only secret | Separate key for each hosted environment selecting live SoC. |
 | `SUPABASE_DB_URL` | GitHub environment secret | Development/production deployment workflows; migrations. |
 | `VERCEL_TOKEN` | GitHub environment secret | Development/production deployment workflows; deployment authentication. |
 | `VERCEL_ORG_ID` | GitHub environment variable | Development/production deployment workflows; target organisation. |
@@ -335,11 +335,12 @@ own screen behavior.
 
 ### SYS-18 — Resource use
 
-SoC request/token/concurrency budgets, enforcement and AI security tests belong to
-`AI-SECURITY-SPEC.md`.
+SoC deployment requirements, usage limits and their acceptance checks belong to
+[SEC-04](AI-SECURITY-SPEC.md#sec-04--bound-soc-requests-and-usage).
 
-- **SYS-18.1:** Live use is blocked until limits are specified/enforceable; fake tests
-  verify bounded input/output, timeouts, retries and concurrency without live calls.
+- **SYS-18.1:** Use a simulated SoC transport to verify hosted live dispatch
+  is permitted only when the [SEC-04](AI-SECURITY-SPEC.md#sec-04--bound-soc-requests-and-usage)
+  deployment requirements hold.
 - **SYS-18.2:** Provider failure/invalid output leaves no successful AI result; grading
   retries cannot duplicate original grades.
 
