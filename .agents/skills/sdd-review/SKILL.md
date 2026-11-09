@@ -15,6 +15,10 @@ Check observable behaviour, regressions, failure paths and whether tests
 would catch a broken implementation. Run relevant targeted tests if useful
 without altering files. A setup failure is unverified evidence, not a pass.
 
+In your summary, list every [privileged database surface](../sdd-test/SKILL.md#write-tests)
+in the diff and cite its defining test in a human-approved test commit. Flag
+each surface without such a test as a blocking finding.
+
 Assign stable `REV-nn` finding IDs, P0–P3 priority and exact path:line evidence;
 cite the affected criterion and a concrete fix direction. Preserve IDs across
 rereviews and verify resolutions. Explain any lower-priority blocking finding.
