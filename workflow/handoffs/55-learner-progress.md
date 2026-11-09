@@ -16,17 +16,54 @@ with the protected read, identity and UI controls cited by T-32.
 
 | Stage | Agent and effort | Status | Evidence | Tokens |
 | --- | --- | --- | --- | --- |
-| Ready | main | done | GitHub issue #55 OPEN; fetched upstream master directly by repository URL because only origin is configured. FETCH_HEAD and initial clean HEAD equal the base above; local upstream/master is stale. Created requested feat branch. T-30 marked done. Cited requirements exist at base. Route high. | unavailable |
-| Plan / G1 | main | done | Existing approved T-32 task at base; no new plan needed. | unavailable |
-| Tests / G2 | test-writer / medium; main verification | done | Human original test commit 9bff74de7c1150ae06205d021fe15197f4a2ad3e and correction 5984558 verified; correction contains exactly approved G2-01 line, all ten HEAD/index/working files match. Main local integration: role-matrix case passes, 13 expected missing-interface failures; fixtures pass. Scoped lint/formatting pass. Four unit missing-module failures, typecheck missing interfaces and nine discovered browser journeys recorded. Supplementary blob below. | unavailable |
-| Implement | implementer / medium; main verification | done | Implementer completed in scoped files. Main: all 52 local TA integrations, 188 TA units, typecheck, full lint and formatting pass; production build and all 9 T-32 browser journeys pass. cd30f5a6ae2fd356a6aeadf2f600e6ce97370849 verified exactly approved browser correction; all four committed acceptance baselines/index/working files match. | unavailable |
-| Review | reviewer / medium; security-reviewer / high | done | Initial evaluations completed with three blocking findings: REV-01, SEC-REV-01, SEC-REV-02. Correctness passed 78 units, scoped lint/typecheck; security passed 26 units and reproduced query bypass. Before/after digests matched. Approved regressions and fix round 1 follow below; initial reviews alone did not pass the gate. | unavailable |
-| Review regression tests / G2 | test-writer / medium; main verification | done | User approved and committed c52e538; main verified exactly three test files and all recorded blobs, no staged/working acceptance changes. Failing-first: access unit 7 pass/4 expected bypass failures; progress integration 12 pass/3 expected failures for validation, card contract and timestamp permissions. Fixtures/scoped lint/typecheck/formatting pass. No new interfaces/privileged surfaces. | unavailable |
-| Fix round 1 | implementer / medium; main verification | done | Implementer completed all three fixes in scoped files; main applied grant delta locally. Main 192 TA units, full lint/typecheck/formatting, 53 TA integrations and 31 auth integrations pass. Human c35f30d5d9d33af64aa8da1eb134ebfc4cd0d654 verified exactly approved auth projection correction; all baselines/index/working tests unchanged. Production rebuild and all 9 browser journeys pass. | unavailable |
-| Rereview 1 | reviewer / medium; security-reviewer / high | done | Both independently resolved all original IDs; no new findings/blockers. Correctness passed 131 progress/inspection/auth units, scoped lint/typecheck; security passed 30 progress units. Before/after tree and untracked-byte digests matched (below). Reviewer DB/browser execution was reserved to main, whose passing runtime evidence is above. Fix rounds used: 1. | unavailable |
-| Docs | docs / low; main verification | done | Only README.md and docs/DeveloperGuide.md changed. Main checked wording against implemented screens/contracts and validated all four added link targets/anchors; diff formatting passes. Non-doc runtime/spec/test digest unchanged: d12f7c4d01335588d9e233b38751bcebe22bd99883db3f758841810240d16b80. | unavailable |
-| Close-out / G4 | main | awaiting-decision | All agent gates pass; task/handoff done. Main 192 TA units, 53 TA +31 auth integrations, nine production browser journeys, lint/typecheck/build/formatting pass. Both independent rereviews pass; all committed acceptance baselines preserved. Human full verify/full e2e, feature/docs/log commits and fork-to-upstream PR remain unverified. Usable rollout IDs/totals are not exposed by this session, so token counts remain unavailable rather than estimated. | unavailable |
-| G4 validation recovery | main; test-writer / medium | awaiting-decision | User full verify: 755/759 pass with four timeouts; full e2e: 44/45 pass including nine T-32 journeys. User approved G4-01; only account browser navigation assertion changed. Main production rebuild/affected TA account journey pass, scoped lint/formatting pass. Three timed-out unit files pass 48/48 both default and temporary two-worker runs. Full-suite timeout cause/retry remains unverified; no runtime/config/timeout changes. Supplementary browser-test commit pending. | unavailable |
+| Ready | main | done | GitHub issue #55 OPEN; fetched upstream master directly by repository URL because only origin is configured. FETCH_HEAD and initial clean HEAD equal the base above; local upstream/master is stale. Created requested feat branch. T-30 marked done. Cited requirements exist at base. Route high. | included in main snapshot |
+| Plan / G1 | main | done | Existing approved T-32 task at base; no new plan needed. | included in main snapshot |
+| Tests / G2 | test-writer / medium; main verification | done | Human original test commit 9bff74de7c1150ae06205d021fe15197f4a2ad3e and correction 5984558 verified; correction contains exactly approved G2-01 line, all ten HEAD/index/working files match. Main local integration: role-matrix case passes, 13 expected missing-interface failures; fixtures pass. Scoped lint/formatting pass. Four unit missing-module failures, typecheck missing interfaces and nine discovered browser journeys recorded. Supplementary blob below. | 6026420 (test-writer cumulative) |
+| Implement | implementer / medium; main verification | done | Implementer completed in scoped files. Main: all 52 local TA integrations, 188 TA units, typecheck, full lint and formatting pass; production build and all 9 T-32 browser journeys pass. cd30f5a6ae2fd356a6aeadf2f600e6ce97370849 verified exactly approved browser correction; all four committed acceptance baselines/index/working files match. | 2916992 (implementer cumulative) |
+| Review | reviewer / medium; security-reviewer / high | done | Initial evaluations completed with three blocking findings: REV-01, SEC-REV-01, SEC-REV-02. Correctness passed 78 units, scoped lint/typecheck; security passed 26 units and reproduced query bypass. Before/after digests matched. Approved regressions and fix round 1 follow below; initial reviews alone did not pass the gate. | reviewer 1230641; security 1267935 (cumulative) |
+| Review regression tests / G2 | test-writer / medium; main verification | done | User approved and committed c52e538; main verified exactly three test files and all recorded blobs, no staged/working acceptance changes. Failing-first: access unit 7 pass/4 expected bypass failures; progress integration 12 pass/3 expected failures for validation, card contract and timestamp permissions. Fixtures/scoped lint/typecheck/formatting pass. No new interfaces/privileged surfaces. | same test-writer snapshot; not additive |
+| Fix round 1 | implementer / medium; main verification | done | Implementer completed all three fixes in scoped files; main applied grant delta locally. Main 192 TA units, full lint/typecheck/formatting, 53 TA integrations and 31 auth integrations pass. Human c35f30d5d9d33af64aa8da1eb134ebfc4cd0d654 verified exactly approved auth projection correction; all baselines/index/working tests unchanged. Production rebuild and all 9 browser journeys pass. | same implementer snapshot; not additive |
+| Rereview 1 | reviewer / medium; security-reviewer / high | done | Both independently resolved all original IDs; no new findings/blockers. Correctness passed 131 progress/inspection/auth units, scoped lint/typecheck; security passed 30 progress units. Before/after tree and untracked-byte digests matched (below). Reviewer DB/browser execution was reserved to main, whose passing runtime evidence is above. Fix rounds used: 1. | same reviewer snapshots; not additive |
+| Docs | docs / low; main verification | done | Only README.md and docs/DeveloperGuide.md changed. Main checked wording against implemented screens/contracts and validated all four added link targets/anchors; diff formatting passes. Non-doc runtime/spec/test digest unchanged: d12f7c4d01335588d9e233b38751bcebe22bd99883db3f758841810240d16b80. | 305838 (docs) |
+| Close-out / G4 | main | awaiting-decision | All agent gates pass; task/handoff done. Main 192 TA units, 53 TA +31 auth integrations, nine production browser journeys, lint/typecheck/build/formatting pass. Both independent rereviews pass; all committed acceptance baselines preserved. Human full verify/full e2e, feature/docs/log commits and fork-to-upstream PR remain unverified. Confirmed cumulative rollout totals are recorded in Token accounting below. | 49023515 (main snapshot) |
+| G4 validation recovery | main; test-writer / medium | awaiting-decision | User full verify: 755/759 pass with four timeouts; full e2e: 44/45 pass including nine T-32 journeys. User approved G4-01; only account browser navigation assertion changed. Main production rebuild/affected TA account journey pass, scoped lint/formatting pass. Three timed-out unit files pass 48/48 both default and temporary two-worker runs. Full-suite timeout cause/retry remains unverified; no runtime/config/timeout changes. Supplementary browser-test commit pending. | included in main/test-writer snapshots |
+
+## Token accounting
+
+Recovered using the approved summary CLI, without inspecting raw rollouts:
+
+```sh
+bun --no-env-file workflow/scripts/rollout-summary.ts --list 12
+bun --no-env-file workflow/scripts/rollout-summary.ts --id <thread-id>
+```
+
+All threads below share session ID `01a1c091-374c-7eb3-a1cb-f9bed4b9edae`.
+Specialist roles match this feature's creation sequence, configured effort and
+follow-up turn counts. Each number is copied verbatim from that thread's
+`tokens` fields. Earlier unavailable entries were an accounting omission;
+readable rollouts and confirmed totals exist.
+
+These are latest **cumulative per-thread snapshots**, not separate stage costs.
+Historical stage-end snapshots were not captured. Reused specialist totals cover
+initial work, fixes, rereviews and recovery follow-ups; do not add repeated stage
+references together. Main includes orchestration and verification across the
+session. No cross-thread total has been estimated or computed.
+
+| Role | Thread ID | Input | Cached input | Output | Reasoning output | Total |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Main | 01a1c091-374c-7eb3-a1cb-f9bed4b9edae | 48925403 | 48611584 | 98112 | 39601 | 49023515 |
+| Test-writer | 01a1c092-76ff-71f2-83fe-8b15df783b4b | 5986885 | 5835776 | 39535 | 6413 | 6026420 |
+| Implementer | 01a1c0ab-ef28-7fb0-be8e-2d465205397b | 2900563 | 2797824 | 16429 | 2245 | 2916992 |
+| Correctness reviewer | 01a1c0f1-1388-7b33-adce-e600c306c926 | 1224241 | 1122944 | 6400 | 1285 | 1230641 |
+| Security reviewer | 01a1c0f1-528e-7292-973d-81efb399f173 | 1261045 | 1160192 | 6890 | 1821 | 1267935 |
+| Docs | 01a1c103-73ab-7cd3-a471-44dae43bb202 | 302983 | 259328 | 2855 | 60 | 305838 |
+| codex-auto-review (separate platform thread) | 01a1c091-e43d-70d3-a2ca-f93ee267bc62 | 2860376 | 2673536 | 3241 | 1035 | 2863617 |
+
+Cache-write input is `0` for every snapshot. Cached input is already included
+in input; reasoning output is already included in output. Main's snapshot is
+through `2026-11-10 00:28:11 SGT` (`2026-11-09T16:28:11.137Z`); this active
+session's totals can increase after capture. The platform auto-review thread is
+listed separately and is not assigned to a specialist stage.
 
 ## Decisions
 
