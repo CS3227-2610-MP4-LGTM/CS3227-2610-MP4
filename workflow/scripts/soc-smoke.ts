@@ -24,14 +24,26 @@ type Dependencies = {
 };
 const maxCalls = 30;
 const spacingMs = 4000;
-const fixtureSchema = z.array(z.strictObject({
-    caseId: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,79}$/i).optional(),
+const caseIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,79}$/i);
+const fixture = z.strictObject({
+    caseId: caseIdSchema.optional(),
     payload: z.unknown(),
     retainedFlaws: retainedContextSchema.optional(),
-})).min(1).max(maxCalls);
+});
+const fixtureSchema = z.array(fixture.transform(value => ({ ...value, labels: undefined }))).min(1).max(maxCalls);
+const credit = z.literal([0, 0.5, 1]);
+const labelledFixtureSchema = z.array(fixture.extend({
+    caseId: caseIdSchema,
+    explanation_label: credit,
+    fix_label: credit,
+}).transform(({ explanation_label, fix_label, ...value }) => ({
+    ...value,
+    labels: { explanation_label, fix_label },
+}))).min(1).max(maxCalls);
 const columns = [
     "case_id", "operation", "effort", "max_tokens", "latency_ms", "prompt_tokens", "completion_tokens",
     "finish_reason", "reasoning_chars", "answer_chars", "valid", "rejection_reason", "rejection_detail", "assessment_credits",
+    "explanation_label", "fix_label", "exact_agreement",
 ];
 
 function positiveInteger(value: string, max: number, option: string) {
@@ -53,19 +65,24 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
             live: { type: "boolean" },
             operation: { type: "string" },
             input: { type: "string", multiple: true },
+            "labelled-input": { type: "string" },
             repeat: { type: "string", default: "1" },
             effort: { type: "string" },
             "max-tokens": { type: "string" },
         } }));
     } catch {
-        throw new Error("Use --live --operation --input [--repeat] [--effort] [--max-tokens]");
+        throw new Error("Use --live --operation (--input or --labelled-input) [--repeat] [--effort] [--max-tokens]");
     }
     if (!values.live) throw new Error("--live is required");
     const key = getSocKey(deps.env);
     if (!values.operation || !Object.hasOwn(socOperationSettings, values.operation))
         throw new Error("--operation is missing or invalid");
     const operation = values.operation as InputEnvelope["operation"];
-    if (!values.input?.length) throw new Error("--input is required");
+    const labelledInput = values["labelled-input"];
+    if (labelledInput !== undefined && (operation !== "assess_review" || values.input?.length))
+        throw new Error("--labelled-input requires assess_review and cannot be combined with --input");
+    const inputPaths = labelledInput === undefined ? values.input : [labelledInput];
+    if (!inputPaths?.length) throw new Error("--input or --labelled-input is required");
     const repeat = positiveInteger(values.repeat, maxCalls, "--repeat");
     const defaults = socOperationSettings[operation];
     const effort = z.enum(socEfforts).safeParse(values.effort ?? defaults.effort);
@@ -75,10 +92,11 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
     const client = createSocClient({ ...reviewedSocDeployment, fetch: deps.fetch }, key, ceilings);
 
     const cases = [];
-    for (const path of values.input) {
+    const inputSchema = labelledInput === undefined ? fixtureSchema : labelledFixtureSchema;
+    for (const path of inputPaths) {
         let fixtures;
         try {
-            fixtures = fixtureSchema.parse(JSON.parse(await deps.readFile(path)));
+            fixtures = inputSchema.parse(JSON.parse(await deps.readFile(path)));
         } catch {
             fail("VALIDATION_ERROR");
         }
@@ -86,7 +104,8 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
             throw new Error("A run allows at most 30 calls");
         for (const fixture of fixtures) {
             const snapshot = validateInput({ schemaVersion: 1, operation, payload: fixture.payload });
-            if (snapshot.operation === "assess_review" && !snapshot.payload.matches.length)
+            if (snapshot.operation === "assess_review" &&
+                (fixture.labels ? snapshot.payload.matches.length !== 1 : !snapshot.payload.matches.length))
                 fail("VALIDATION_ERROR");
             validateRetainedContext(snapshot, fixture.retainedFlaws);
             const prepared = client.prepare(snapshot, { effort: effort.data, maxOutputTokens });
@@ -95,6 +114,7 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
                 snapshot,
                 retainedFlaws: fixture.retainedFlaws ?? [],
                 prepared,
+                labels: fixture.labels,
             });
         }
     }
@@ -102,7 +122,7 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
     const rows = [columns.join(",")];
     let lastStart: number | undefined;
     for (let run = 0; run < repeat; run++) {
-        for (const { caseId, prepared, snapshot, retainedFlaws } of cases) {
+        for (const { caseId, prepared, snapshot, retainedFlaws, labels } of cases) {
             while (lastStart !== undefined && deps.clock() - lastStart < spacingMs)
                 await deps.sleep(spacingMs - (deps.clock() - lastStart));
             const start = deps.clock();
@@ -111,6 +131,7 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
             let rejectionReason = "";
             let rejectionDetail = "";
             let credits: string | undefined;
+            let exactAgreement: boolean | undefined;
             const controller = new AbortController();
             let timer: ReturnType<typeof setTimeout> | undefined;
             try {
@@ -129,9 +150,15 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
                 }
                 try {
                     const output = validateOutput(snapshot, response.output, { retainedFlaws });
-                    if (output.operation === "assess_review")
-                        credits = JSON.stringify(output.payload.assessments.map(({ explanationCredit, fixCredit }) =>
-                            ({ explanationCredit, fixCredit })));
+                    if (output.operation === "assess_review") {
+                        const assessments = output.payload.assessments.map(({ explanationCredit, fixCredit }) =>
+                            ({ explanationCredit, fixCredit }));
+                        credits = JSON.stringify(assessments);
+                        if (labels) {
+                            const [{ explanationCredit, fixCredit }] = assessments;
+                            exactAgreement = explanationCredit === labels.explanation_label && fixCredit === labels.fix_label;
+                        }
+                    }
                 } catch (error) {
                     rejectionDetail = error instanceof UnsafeLearnerText ? "safety" : "contract";
                     fail("INVALID_AI_OUTPUT");
@@ -149,6 +176,7 @@ export async function runSocSmoke(args: string[], deps: Dependencies): Promise<s
                 result?.usage?.inputTokens, result?.usage?.outputTokens, result?.stats.finishReason,
                 result?.stats.reasoningChars, result?.stats.answerChars, !rejectionReason,
                 rejectionReason, rejectionDetail, credits,
+                labels?.explanation_label, labels?.fix_label, exactAgreement,
             ].map(csvCell).join(","));
         }
     }

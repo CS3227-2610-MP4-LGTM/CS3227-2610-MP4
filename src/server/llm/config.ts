@@ -1,7 +1,7 @@
 import "server-only";
 import type { InputEnvelope } from "./contracts";
 
-export const socModel = "qwen3.5:9b";
+export const socModel = "qwen3.6:35b";
 export const socDestination = "https://soclaas-api.comp.nus.edu.sg/v1/chat/completions";
 export const socEfforts = ["none", "low", "medium", "high"] as const;
 export type SocEffort = typeof socEfforts[number];
@@ -14,7 +14,7 @@ export const socOperationSettings = {
 
 // Checked against the model listing and the separate hosted allocations during
 // T-05 configuration review. Recheck when credentials, model or ceilings change.
-export const reviewedSocDeployment = { contextTokens: 65536, verifiedLimits: true } as const;
+export const reviewedSocDeployment = { contextTokens: 262144, verifiedLimits: true } as const;
 
 export const ceilings = {
     inputTokens: 32768,

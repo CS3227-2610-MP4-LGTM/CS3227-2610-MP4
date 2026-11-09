@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { validateInput, validateRetainedContext } from "@/server/llm/contracts";
 import type { RetainedFlaw } from "@/server/llm/safety";
@@ -7,7 +7,14 @@ import { envelope, inputs, operations, outputs, retainedFlaws, uid, type Operati
 
 vi.mock("server-only", () => ({}));
 
-type SmokeCase = { caseId?: string; payload: unknown; retainedFlaws?: RetainedFlaw[] };
+type SmokeCase = {
+  caseId?: string;
+  payload: unknown;
+  retainedFlaws?: RetainedFlaw[];
+  explanation_label?: number;
+  fix_label?: number;
+};
+type LabelledSmokeCase = SmokeCase & { caseId: string; explanation_label: number; fix_label: number };
 type SmokeDependencies = {
   env: Record<string, string | undefined>;
   readFile: (path: string) => Promise<string>;
@@ -116,8 +123,9 @@ it.each(operations)("INTEGRATION-SPEC §6 smoke has a valid C1-derived %s payloa
   expect(new Headers(request?.headers).get("authorization")).toBe("Bearer " + key);
   const wire = JSON.parse(String(request?.body));
   expect(wire).toMatchObject({
-    model: "qwen3.5:9b", reasoning_effort: "none", max_tokens: appCaps[operation],
-    response_format: { type: "json_object" }, messages: [{ role: "system" }, { role: "user" }],
+    model: "qwen3.6:35b", reasoning_effort: "none", max_tokens: appCaps[operation],
+    response_format: { type: "json_schema", json_schema: { strict: true, schema: expect.any(Object) } },
+    messages: [{ role: "system" }, { role: "user" }],
   });
   expect(wire).not.toHaveProperty("tools");
   expect(wire).not.toHaveProperty("tool_choice");
@@ -239,6 +247,7 @@ it("SEC-04 smoke emits safe CSV rows for parsed credits, invalid output and tran
   expect(rows[0]).toMatchObject({
     valid: "true", prompt_tokens: "101", completion_tokens: "51", finish_reason: "stop",
     reasoning_chars: String(reasoning.length), rejection_reason: "",
+    explanation_label: "", fix_label: "", exact_agreement: "",
   });
   expect(JSON.parse(rows[0].assessment_credits)).toMatchObject([{ explanationCredit: 0.5, fixCredit: 1 }]);
   expect(rows[1]).toMatchObject({
@@ -247,6 +256,79 @@ it("SEC-04 smoke emits safe CSV rows for parsed credits, invalid output and tran
   expect(rows[2]).toMatchObject({ valid: "false", rejection_reason: "AI_UNAVAILABLE", assessment_credits: "" });
   for (const secret of [reasoning, upstream, key, "raw-provider-id-sentinel", "raw response text sentinel",
     "This returns the discount rather than the payable amount"]) expect(csv).not.toContain(secret);
+});
+
+const labelledCli = (operation: Operation = "assess_review") =>
+  ["--live", "--operation", operation, "--labelled-input", "labelled.json"];
+
+it("SYS-19.4 smoke reports both labels and exact agreement only for valid labelled assessments", async () => {
+  const runSmoke = await loadSmoke();
+  const cases = [
+    { ...defaultCase("assess_review"), caseId: "exact", explanation_label: 0.5, fix_label: 0 },
+    { ...defaultCase("assess_review"), caseId: "different-explanation", explanation_label: 1, fix_label: 0 },
+    { ...defaultCase("assess_review"), caseId: "different-fix", explanation_label: 0.5, fix_label: 1 },
+    { ...defaultCase("assess_review"), caseId: "invalid", explanation_label: 0.5, fix_label: 0 },
+  ] satisfies LabelledSmokeCase[];
+  const { deps, fetch } = setup("assess_review", { "labelled.json": cases });
+  const matchingOutput = envelope("assess_review", { assessments: [{
+    key: uid(301), commentId: uid(601), explanationCredit: 0.5, fixCredit: 0,
+    feedback: "Explain the consequence and propose an actionable change.",
+  }] });
+  for (const fixture of cases) {
+    fetch.mockResolvedValueOnce(completion(matchingOutput, fixture.caseId === "invalid" ? "length" : "stop"));
+  }
+  const rows = csvRecords(await runSmoke(labelledCli(), deps));
+  expect(rows).toEqual([
+    expect.objectContaining({ case_id: "exact", valid: "true", explanation_label: "0.5", fix_label: "0", exact_agreement: "true" }),
+    expect.objectContaining({ case_id: "different-explanation", valid: "true", explanation_label: "1", fix_label: "0", exact_agreement: "false" }),
+    expect.objectContaining({ case_id: "different-fix", valid: "true", explanation_label: "0.5", fix_label: "1", exact_agreement: "false" }),
+    expect.objectContaining({ case_id: "invalid", valid: "false", explanation_label: "0.5", fix_label: "0", exact_agreement: "" }),
+  ]);
+  expect(fetch).toHaveBeenCalledTimes(4);
+  for (const [, request] of fetch.mock.calls) {
+    const body = JSON.parse(String(request?.body));
+    expect(JSON.parse(body.messages[1].content)).toEqual(inputs.assess_review);
+    expect(String(request?.body)).not.toMatch(/explanation_label|fix_label/);
+  }
+});
+
+it.each([{ explanation_label: 0.25, fix_label: 1 }, { explanation_label: 0 }])(
+  "SYS-19.4 smoke rejects missing or invalid labelled credits before dispatch (%j)", async labels => {
+    const runSmoke = await loadSmoke();
+    const { deps, fetch } = setup("assess_review", { "labelled.json": [
+      { ...defaultCase("assess_review", "first"), explanation_label: 1, fix_label: 1 },
+      { ...defaultCase("assess_review", "invalid"), ...labels },
+    ] });
+    await expect(runSmoke(labelledCli(), deps)).rejects.toThrow(/VALIDATION_ERROR/);
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+
+it("SYS-19.4 smoke rejects labelled input for a different operation", async () => {
+  const runSmoke = await loadSmoke();
+  const { deps, fetch } = setup("generate_hints", { "labelled.json": [
+    { ...defaultCase("generate_hints", "labelled-hint"), explanation_label: 1, fix_label: 1 },
+  ] });
+  await expect(runSmoke(labelledCli("generate_hints"), deps)).rejects.toThrow(/assess_review|VALIDATION_ERROR/);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("SYS-19.4 the E6 fixture has all 21 valid assessment inputs and their supplied labels", () => {
+  const path = new URL("../../../../workflow/scripts/fixtures/soc-smoke/assess-review-e6.json", import.meta.url);
+  expect(existsSync(path), "missing labelled E6 assessment fixture").toBe(true);
+  const cases = JSON.parse(readFileSync(path, "utf8")) as LabelledSmokeCase[];
+  const credits = [
+    [1, 1], [1, 0], [0, 1], [0, 0], [0, 0], [0.5, 0.5], [1, 0], [1, 1], [1, 0], [0, 1],
+    [0.5, 0.5], [0, 0], [0.5, 1], [1, 1], [1, 0], [0, 1], [0, 0], [0.5, 0], [0, 0], [1, 0], [0, 0],
+  ];
+  expect(cases.map(({ caseId, explanation_label, fix_label }) => [caseId, explanation_label, fix_label])).toEqual(
+    credits.map(([explanation, fix], index) => [`E${String(index + 1).padStart(2, "0")}`, explanation, fix]),
+  );
+  for (const fixture of cases) {
+    const input = validateInput(envelope("assess_review", fixture.payload));
+    expect(input).toMatchObject({ payload: { matches: [expect.objectContaining({ comment: expect.any(Object) })] } });
+    validateRetainedContext(input, fixture.retainedFlaws);
+  }
 });
 
 it("SEC-04 smoke reports a timeout on a separately labeled, five-flaw, multi-category stress case", async () => {
