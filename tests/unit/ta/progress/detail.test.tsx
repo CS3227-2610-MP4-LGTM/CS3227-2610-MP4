@@ -4,7 +4,7 @@ import { LearnerDetail } from "@/components/ta/learner-detail";
 import { challenge, deferred, id, labels, progress } from "./evidence";
 const okProgress = (value = progress()) => ({ status: "ok" as const, progress: value });
 const recommendations = () => ({ status: "ok" as const, recommendations: { items: [{ challenge: challenge(6001, ["logic_bug", "edge_case", "security"]), targetCategories: ["edge_case"] }] } });
-function setup(options: { readLearner?: ReturnType<typeof vi.fn>; readProgress?: ReturnType<typeof vi.fn>; readRecommendations?: ReturnType<typeof vi.fn> } = {}) {
+function setup(options: Partial<Pick<Parameters<typeof LearnerDetail>[0], "readLearner" | "readProgress" | "readRecommendations">> = {}) {
   const props = { learnerId: id(11), readLearner: vi.fn().mockResolvedValue({ status: "ok", learner: { id: id(11), displayName: "Learner A" } }),
     readProgress: vi.fn().mockResolvedValue(okProgress()), readRecommendations: vi.fn().mockResolvedValue(recommendations()),
     summarySlot: <p>Summary composition sentinel</p>, ...options };
@@ -18,11 +18,13 @@ it("TA-04.1 TA-05.1 TA-05.3 TA-05.7 composes permitted identity, separate summar
   expect(screen.getByRole("link", { name: "View submissions" }).getAttribute("href")).toBe(`/ta/submissions?learnerId=${id(11)}`);
   expect(screen.getByRole("link", { name: "Back to learners" }).getAttribute("href")).toBe("/ta/learners");
   const table = await screen.findByRole("region", { name: "Category progress" });
+  await within(table).findByText("100.00%");
   for (const label of ["Category", "Identified flaws", "Total flaws", "Identification rate", "Completed first attempts", ...labels]) expect(within(table).getAllByText(label).length).toBeGreaterThan(0);
   expect(within(table).getByText("100.00%")).toBeTruthy(); expect(within(table).getByText("0.00%")).toBeTruthy();
   expect(within(table).getAllByText("Not observed")).toHaveLength(3);
   expect(screen.getByText("Progress uses completed first attempts. Retries and grade overrides do not change these identification counts.")).toBeTruthy();
   const rec = screen.getByRole("region", { name: "Recommended challenges" });
+  await within(rec).findByText("Practice 6001");
   for (const label of ["Challenge", "Language", "Difficulty", "Practice categories", "TypeScript", "Easy", "Edge case"]) expect(within(rec).getAllByText(label).length).toBeGreaterThan(0);
   expect(within(rec).queryByText("Security")).toBeNull(); expect(within(rec).queryByText("Logic bug")).toBeNull();
   expect(screen.getByText("Rule-based recommendations from observed category progress.")).toBeTruthy();
