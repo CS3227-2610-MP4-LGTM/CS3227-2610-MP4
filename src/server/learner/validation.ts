@@ -1,20 +1,14 @@
 import "server-only";
 import { z } from "zod";
-import { categoryLabels, difficultyLabels, languageLabels } from "@/lib/learner/challenges";
+import { challengeIdSchema, difficultySchema, categorySchema, languageSchema, timestampSchema } from "@/lib/learner/challenge-schema";
 
-export const languageSchema = z.enum(Object.keys(languageLabels) as (keyof typeof languageLabels)[]);
-export const difficultySchema = z.enum(Object.keys(difficultyLabels) as (keyof typeof difficultyLabels)[]);
-export const categorySchema = z.enum(Object.keys(categoryLabels) as (keyof typeof categoryLabels)[]);
+export { challengeIdSchema, difficultySchema, categorySchema, languageSchema, timestampSchema };
 const filtersSchema = z.strictObject({
   language: languageSchema.optional(),
   difficulty: difficultySchema.optional(),
   category: categorySchema.optional(),
 });
 
-export const challengeIdSchema = z.uuid();
-export const timestampSchema = z.iso.datetime({ offset: true }).refine(
-  value => !value.startsWith("0000") && /(?:Z|\+00:00)$/.test(value),
-);
 const anchorSchema = z.strictObject({
   publishedAt: timestampSchema,
   challengeId: challengeIdSchema,

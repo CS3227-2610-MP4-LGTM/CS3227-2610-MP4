@@ -111,6 +111,20 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"submission_create_requests": {
+                  Row: {
+                    "actor_id": string,"challenge_id": string,"fingerprint": string,"idempotency_key": string,"invalid_comment_index": number | null,"outcome": string,"submission_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_id": string,"challenge_id": string,"fingerprint": string,"idempotency_key": string,"invalid_comment_index"?: number | null,"outcome": string,"submission_id"?: string | null
+                  }
+                  Update: {
+                    "actor_id"?: string,"challenge_id"?: string,"fingerprint"?: string,"idempotency_key"?: string,"invalid_comment_index"?: number | null,"outcome"?: string,"submission_id"?: string | null
+                  }
+                  Relationships: [
+
+                  ]
                 }
           }
           Views: {
@@ -125,6 +139,9 @@ isOneToOne: false
                            },
 "learner_revision_categories":
 { Args: { "p_revision_id": string }; Returns: (string)[]
+                           },
+"learner_submission_projection":
+{ Args: { "p_submission_id": string }; Returns: Json
                            },
 "normalize_display_name":
 { Args: { "value": string }; Returns: string
@@ -143,6 +160,9 @@ isOneToOne: false
                            },
 "valid_revision_diff":
 { Args: { "diff": Json,"flawed_code": string,"language": Database["public"]['Enums']["challenge_language"],"working_code": string }; Returns: boolean
+                           },
+"valid_submission_uuid":
+{ Args: { "value": string }; Returns: boolean
                            },
 "valid_summary_output":
 { Args: { "summary": Json }; Returns: boolean
@@ -709,6 +729,9 @@ isOneToOne: false
             "challenge_generation_access":
 { Args: { "resource_id": string }; Returns: string
                            },
+"create_learner_submission":
+{ Args: { "p_challenge_id": string,"p_idempotency_key": string,"p_payload": Json }; Returns: Json
+                           },
 "list_learner_challenges":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_category"?: Database["public"]['Enums']["flaw_category"],"p_difficulty"?: Database["public"]['Enums']["challenge_difficulty"],"p_language"?: Database["public"]['Enums']["challenge_language"],"p_limit": number }; Returns: Json
                            },
@@ -720,6 +743,9 @@ isOneToOne: false
                            },
 "read_learner_challenge":
 { Args: { "p_challenge_id": string }; Returns: Json
+                           },
+"read_learner_submission":
+{ Args: { "p_submission_id": string }; Returns: Json
                            }
           }
           Enums: {

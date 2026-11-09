@@ -16,6 +16,6 @@ async function RequestedChallenge({ params }: { params: Promise<{ id: string }> 
   await connection();
   const { id } = await params;
   return <WorkspacePage role="learner">{accountId =>
-    <WorkspaceRoute key={accountId} challengeId={id} readFirstAttemptAction={readFirstAttemptAction} />
+    <WorkspaceRoute key={accountId} accountId={accountId} challengeId={id} readFirstAttemptAction={readFirstAttemptAction} />
   }</WorkspacePage>;
 }

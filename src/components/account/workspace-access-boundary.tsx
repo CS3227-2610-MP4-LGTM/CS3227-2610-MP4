@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { WorkspaceAccessStatus } from "@/lib/auth/workspace-access";
 import { AccessScreen } from "./access-screen";
+import { WorkspaceNavigationProvider } from "./workspace-navigation";
 
 const AccessFailureContext = createContext<(status: WorkspaceAccessStatus) => void>(() => {});
 
@@ -30,5 +31,7 @@ export function WorkspaceAccessBoundary({ children, signOutAction }: {
 
   // Re-enter through the server gate so a role denial uses the current role's workspace.
   if (status) return null;
-  return <AccessFailureContext.Provider value={reportFailure}>{children}</AccessFailureContext.Provider>;
+  return <AccessFailureContext.Provider value={reportFailure}>
+    <WorkspaceNavigationProvider>{children}</WorkspaceNavigationProvider>
+  </AccessFailureContext.Provider>;
 }

@@ -1,26 +1,29 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { AccessScreen } from "@/components/account/access-screen";
 import { useReportWorkspaceAccessFailure } from "@/components/account/workspace-access-boundary";
+import { WorkspaceLink } from "@/components/account/workspace-navigation";
 import { CodeDiffView } from "@/components/code-diff";
 import { isWorkspaceAccessFailure, type WorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { catalogueHref, type AttemptResult, type ChallengeResult, type ChallengeView, type ReadFailure } from "@/lib/learner/challenges";
 import { ChallengeMetadata } from "./challenge-metadata";
+import { ReviewDraft } from "./review-draft";
 
 type WorkspaceProps = {
+  accountId?: string;
   challengeId: string;
   readChallenge: (id: string) => Promise<ChallengeResult>;
   readFirstAttempt: (id: string) => Promise<AttemptResult>;
+  openSubmission?: (href: string) => void;
 };
 type WorkspaceResult = { status: "ok"; challenge: ChallengeView; submissionId: string | null } | ReadFailure;
 
 export function ChallengeWorkspace(props: WorkspaceProps) {
-  return <ReviewWorkspace key={props.challengeId} {...props} />;
+  return <ReviewWorkspace key={`${props.accountId ?? ""}:${props.challengeId}`} {...props} />;
 }
 
-function ReviewWorkspace({ challengeId, readChallenge, readFirstAttempt }: WorkspaceProps) {
+function ReviewWorkspace({ accountId, challengeId, readChallenge, readFirstAttempt, openSubmission = href => window.location.assign(href) }: WorkspaceProps) {
   const [result, setResult] = useState<WorkspaceResult>();
   const [retry, setRetry] = useState(0);
   const reportAccessFailure = useReportWorkspaceAccessFailure();
@@ -59,7 +62,7 @@ function ReviewWorkspace({ challengeId, readChallenge, readFirstAttempt }: Works
   if (!result) return <p role="status">Loading challenge…</p>;
   if (result.status === "forbidden") return <AccessScreen kind="record-denied" workspaceHref={catalogueHref} />;
 
-  const backLink = <Link href={catalogueHref}>Back to challenges</Link>;
+  const backLink = <WorkspaceLink href={catalogueHref}>Back to challenges</WorkspaceLink>;
   if (result.status === "not_found" || result.status === "invalid") {
     return <section className="recovery-card">
       <h1 ref={focusHeading} tabIndex={-1}>Challenge not found</h1>
@@ -84,10 +87,12 @@ function ReviewWorkspace({ challengeId, readChallenge, readFirstAttempt }: Works
       <h1 ref={focusHeading} tabIndex={-1}>{result.challenge.title}</h1>
       <ChallengeMetadata challenge={result.challenge} />
     </header>
-    <CodeDiffView code={result.challenge.code} />
-    {result.submissionId && <div className="notice">
-      <p>You have already submitted a review of this challenge.</p>
-      <Link href={`/learner/history/${result.submissionId}`}>View first attempt</Link>
-    </div>}
+    {result.submissionId ? <>
+      <CodeDiffView code={result.challenge.code} />
+      <div className="notice">
+        <p>You have already submitted a review of this challenge.</p>
+        <WorkspaceLink href={`/learner/history/${result.submissionId}`}>View first attempt</WorkspaceLink>
+      </div>
+    </> : <ReviewDraft accountId={accountId} challenge={result.challenge} openSubmission={openSubmission} />}
   </article>;
 }

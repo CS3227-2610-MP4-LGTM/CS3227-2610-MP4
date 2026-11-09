@@ -85,3 +85,17 @@ input[aria-invalid], select[aria-invalid] { border-color: #a12d26; }
 .source-line[data-kind="added"] { background: #edf7ed; }
 .source-line[data-kind="removed"] { background: #fff0ed; }
 .source-number { text-align: end; color: var(--muted); user-select: none; }
+
+.confirmation-dialog { margin: auto; width: min(30rem, calc(100% - 2rem)); max-height: calc(100% - 2rem); overflow: auto; padding: 1.25rem; border: 1px solid var(--border); border-radius: .75rem; color: var(--foreground); background: white; }
+.confirmation-dialog::backdrop { background: #19251f80; }
+.confirmation-dialog h2 { margin-bottom: .65rem; }
+.source-hunk[data-line-details] { min-width: 0; }
+.source-hunk[data-line-details] .source-line { min-width: max-content; }
+.review-line { position: sticky; left: 0; padding: .35rem .75rem .6rem; font-family: var(--font-sans); }
+.review-line > .button { min-height: 2rem; padding: .3rem .6rem; }
+.review-comment { margin-top: .5rem; border: 1px solid var(--border); border-radius: .45rem; background: white; padding: .5rem .75rem; }
+.review-comment-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.review-editor { margin-top: .75rem; padding: .75rem; border: 1px solid var(--border); border-radius: .45rem; }
+.review-editor textarea { width: 100%; min-height: 5rem; padding: .5rem; border: 1px solid #788a7e; border-radius: .4rem; resize: vertical; }
+.review-editor textarea[aria-invalid="true"] { border-color: #a12d26; }
