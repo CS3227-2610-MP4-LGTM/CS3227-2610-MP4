@@ -709,12 +709,17 @@ printing their values. Configure the provider independently in each environment.
 | Hosted development (Vercel Preview) | Set `APP_ENV=development`. The provider defaults to fake. To opt in, set `AI_PROVIDER=soclaas` and the development `SOCLAAS_API_KEY`. |
 | Hosted production (Vercel Production) | Set `APP_ENV=production` and select `AI_PROVIDER=fake` explicitly or opt in with `AI_PROVIDER=soclaas` and the separate production `SOCLAAS_API_KEY`. |
 
-Keep both SoC keys server-only. The app pins `qwen3.5:9b` and uses
-`reasoning_effort=none` for each operation. Completion tokens cover both
-answer and reasoning. See the per-operation output caps in
+Keep both SoC keys server-only. The app pins `qwen3.6:35b` with a reviewed
+262,144-token context and uses `reasoning_effort=none` for each operation.
+Completion tokens cover both answer and reasoning. See the per-operation
+output caps in
 [`src/server/llm/config.ts`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/config.ts)
 and the configuration requirements in
 [SYS-15](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-15--configuration-and-hosted-auth).
+
+Each request sends a strict `json_schema` response format derived from the
+operation's output contract and the captured input. Input preflight counts
+the serialized schema. The app validates the response before accepting it.
 
 Repeat the configuration review in
 [SEC-04](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md#sec-04--bound-soc-requests-and-usage)
@@ -748,11 +753,27 @@ retained flaw set in `retainedFlaws`, including unmatched flaws for
 for protected text and sends only the operation payload in the model's
 input envelope.
 
+Run the 21 labelled E6 assessment cases with the app's default effort and cap.
+
+```bash
+bun --no-env-file --conditions=react-server workflow/scripts/soc-smoke.ts \
+  --live --operation assess_review \
+  --labelled-input workflow/scripts/fixtures/soc-smoke/assess-review-e6.json
+```
+
+Use `--labelled-input` on its own with `assess_review`. Each labelled case
+requires a `caseId`, a payload with one matched comment, and
+`explanation_label` and `fix_label` values of `0`, `0.5`, or `1`.
+Labels stay local to the smoke runner.
+
 The script writes one CSV row per call with case and settings, latency,
 token counts when available, finish reason, answer and reasoning character
 counts, validation outcome, rejection reason and detail, and parsed
-assessment credits when applicable. The CSV omits credentials and raw
-model text.
+assessment credits when applicable. Labelled rows include both labels.
+`exact_agreement` is `true` when both credits match on a valid assessment
+and `false` when either differs. It is blank on invalid or unlabelled rows.
+Report how many E6 responses are valid and how many valid responses agree
+exactly. The CSV omits credentials and raw model text.
 
 ### Fake provider and targeted tests
 

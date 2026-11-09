@@ -436,7 +436,7 @@ the limits above remain unchanged.
   `docs/DeveloperGuide.md` for the new pinned model, labelled smoke invocation
   and CSV results, with SEC-04 and SYS-15 links for limits and configuration.
 - **Depends on:** T-04
-- **Status:** in-progress
+- **Status:** done
 
 ## Learner
 
