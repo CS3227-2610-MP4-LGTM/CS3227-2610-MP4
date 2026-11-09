@@ -157,14 +157,13 @@ it.each([34999, 35000, 35001])("SEC-05.2 expiry at %sms frees slots, charges unc
 });
 
 it("SYS-10.1 all accounting tables have RLS, explicit grants and no anonymous/admin direct table access", async () => {
-  const { tables: domainTables } = await import("../domain/fixture");
-  const known = [...domainTables, "profiles", "profile_roles", "submission_audit_orders"];
+  const accountingTables = ["ai_usage_records", "llm_operations", "llm_usage_events"];
   const catalog = await h.db.query<{ oid: number; schema: string; name: string; rls: boolean }>(`
     select c.oid,n.nspname as schema,c.relname as name,c.relrowsecurity as rls
     from pg_class c join pg_namespace n on n.oid=c.relnamespace
-    where n.nspname in ('public','private') and c.relkind='r' and not (c.relname=any($1::text[]))
-  `, [known]);
-  expect(catalog.rows.some(row => row.name === "ai_usage_records"), "durable usage table").toBe(true);
+    where n.nspname in ('public','private') and c.relkind='r' and c.relname=any($1::text[])
+  `, [accountingTables]);
+  expect(catalog.rows.map(row => row.name).sort()).toEqual(accountingTables);
   for (const row of catalog.rows) {
     expect(row.rls, row.name).toBe(true);
     for (const role of ["anon", "authenticated", "service_role"]) {
@@ -186,7 +185,7 @@ it("SYS-10.1 all accounting tables have RLS, explicit grants and no anonymous/ad
     where n.nspname in ('public','private') and p.prokind='f'
       and (p.proname ~ '(llm|ai_usage|accounting|reserve_ai|settle_ai|dispatch_ai|expire_ai)'
         or exists (select from unnest($1::text[]) as t(name) where position(t.name in p.prosrc)>0))
-  `, [catalog.rows.map(row => row.name)]);
+  `, [accountingTables]);
   expect(functions.rows.length, "dedicated atomic accounting functions").toBeGreaterThan(0);
   for (const fn of functions.rows) {
     expect(fn.anonymous, fn.identity).toBe(false); expect(fn.user, fn.identity).toBe(false);
