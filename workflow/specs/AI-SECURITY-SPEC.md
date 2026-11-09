@@ -119,13 +119,38 @@ mitigate these risks but do not eliminate them.
 
 ### SEC-04 — Bound SoC requests and usage
 
-These are LGTM ceilings shared by fake and live enforcement. A deployment uses
-the lower of these ceilings and the confirmed SoC model, context and allocation
-limits. Before enabling live use, verify the selected endpoint and model support
-input measurement, output limits and the effective time budget. Confirm the
-allocation covers the configured environment budget, including other consumers
-of the allocation. If these limits cannot be established or enforced, live
-requests fail closed before dispatch. Keep the provider key under SYS-15.
+Send live provider requests only as stateless POSTs to the OpenAI-compatible
+SoCLaaS endpoint `https://soclaas-api.comp.nus.edu.sg/v1/chat/completions`, with
+Bearer authentication using the key under
+[SYS-15](TECHNICAL-SPEC.md#sys-15--configuration-and-hosted-auth). Omit `tools`
+and `tool_choice`. Pin a concrete model ID listed by `GET /v1/models` with a context
+window of at least 65,536 tokens. Operator aliases such as `default` and `coder`
+can be repointed and are prohibited.
+
+For each operation, send its explicit `reasoning_effort`, set `max_tokens` to
+its output cap within the ceiling below and request JSON with `response_format`.
+Validate the answer against the [LLM contracts](INTEGRATION-SPEC.md#4-server-only-llm-contracts).
+Treat empty answers and answers with a length finish reason as invalid output. Discard
+`message.reasoning` before persistence, logging, tracing or display. Settle
+using verified `prompt_tokens` and `completion_tokens` without a cached-token
+adjustment, under [SEC-05](#sec-05--reserve-and-settle-usage-atomically).
+Completion tokens include reasoning, so `max_tokens` bounds reasoning and
+answer generation together.
+
+Enforce LGTM's ceilings below for fake and live use, with environment budgets
+scoped to each environment's key for live use. During configuration review, read
+the key's limits from `GET https://soclaas-portal.comp.nus.edu.sg/api-key/budget`
+and the pinned model's cost basis from `GET /v1/models`. Whenever the key,
+model or ceilings change, verify that the environment's attempts-per-minute
+ceiling is at or below the key's requests-per-minute limit and that its daily
+token ceiling, priced at the pinned model's output rate, fits within the key's
+daily budget. The app never calls the portal API. SoC budgets reset at 00:00 UTC
+each day for daily budgets and on the first day of each month for monthly budgets.
+
+Treat an upstream `429` (rate or quota exceeded) or `5xx` as a failed
+attempt under the [SEC-05](#sec-05--reserve-and-settle-usage-atomically) transport
+failure rule. Fail closed before live dispatch if the deployment requirements
+or request limits cannot be enforced.
 
 | Scope | Ceiling |
 | --- | --- |
@@ -137,23 +162,35 @@ requests fail closed before dispatch. Keep the provider key under SYS-15.
 | Per environment, across accounts and operations | 4 active operations, 20 attempts per UTC minute, 100 attempts and 1,500,000 combined input/output tokens per UTC day |
 
 Count input with a verified model tokenizer or a conservative upper bound for
-the full request. Bound generation at the provider and stop reading at the
-response byte or time limit. An input that exceeds the effective context or
-input cap returns `413 PAYLOAD_TOO_LARGE` before dispatch. Do not silently
-truncate snapshots. Exhausted attempt, token or concurrency capacity returns
-`429 RATE_LIMITED`. Use the integration contract's provider error categories
-for transport failure and timeout. An oversized, truncated or invalid model
-result cannot be accepted.
+the full request. Check that input plus the operation's output cap fits the
+model context. Stop reading at the response byte or time limit. Reject input
+that exceeds its context or input cap before dispatch without truncating the
+snapshot. Deny dispatch when attempt, token or concurrency capacity is
+exhausted. Use the [integration error contract](INTEGRATION-SPEC.md#transport-concurrency-and-errors)
+for these rejections, transport failures and timeouts. Reject oversized,
+truncated or invalid model results.
 
 - **SEC-04.1:** At and one unit beyond each payload limit, including multibyte
   input, verify preflight rejection or bounded response consumption. With a
   fake clock and provider, verify deadlines, configured lower ceilings, and
-  rejection when live limit enforcement cannot be established. Assert local
-  and CI configurations cannot dispatch to SoC.
+  rejection when live limit enforcement cannot be established. Verify network
+  isolation under [SYS-13.1](TECHNICAL-SPEC.md#sys-13--environment-isolation).
 - **SEC-04.2:** With a fake clock, exhaust each account and environment budget
   independently, including with mixed operation kinds and multiple accounts.
   Verify the next attempt is denied without dispatch and UTC window rollover
   does not reset a still-active concurrency slot.
+- **SEC-04.3:** Capture requests with a simulated SoC transport. For each
+  operation, verify the gateway, method, Bearer authentication, pinned model,
+  reasoning effort, output cap, JSON format and absence of tool parameters.
+  Verify an alias is rejected before dispatch.
+- **SEC-04.4:** Simulate empty content and a length finish reason, including
+  with schema-valid content, and verify both follow the invalid-output rule
+  in [SEC-05](#sec-05--reserve-and-settle-usage-atomically). On a successful
+  response with sentinel reasoning, verify settlement uses prompt tokens and
+  all completion tokens, and that reasoning is absent from stored data, logs,
+  traces and results.
+- **SEC-04.5:** Simulate upstream `429` and `5xx` responses and verify each ends
+  the operation as a transport failure without an automatic retry.
 
 ### SEC-05 — Reserve and settle usage atomically
 
@@ -203,7 +240,8 @@ logs, traces and errors. Apply the same rules to provider exceptions.
   values. Verify the failure preserves previously committed publication,
   grading and summary data.
 
-Run security acceptance tests with the fake provider, local Supabase for
-database authorization and accounting races, and browser checks for rendering.
+Run security acceptance tests with the fake provider or simulated SoC
+transport, local Supabase for database authorization and accounting races,
+and browser checks for rendering.
 Use synthetic payloads and a controlled clock. Verify hosted settings by
 configuration review under SYS-13 and SYS-15.
