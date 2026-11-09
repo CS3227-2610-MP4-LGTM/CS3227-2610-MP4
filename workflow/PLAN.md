@@ -525,7 +525,7 @@ the limits above remain unchanged.
   grade display and grading initiation, including the SYS-10.3 Submission
   grading use, belong to T-12 (LRN-05).
 - **Depends on:** T-10 (with T-02 and T-03 through T-10).
-- **Status:** todo
+- **Status:** done
 
 ## Author
 

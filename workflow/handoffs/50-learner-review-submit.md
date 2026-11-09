@@ -4,7 +4,7 @@
 - **PLAN task:** T-11
 - **Branch:** feat/50-learner-review-submit
 - **Base commit:** 27fd1b02090f426fd66ae13d80530e6365412ee2
-- **Status:** in-progress
+- **Status:** done
 
 ## Goal
 
@@ -26,8 +26,9 @@ and open its pending result under LRN-03.1–03.6 and LRN-04.1–04.6.
 | Scoped rereview, round 1 | reviewer / medium and security-reviewer / high | done | Both tree digests matched. Correctness cleared REV-01–04 and security cleared SEC-REV-01–05. Main independently passed the local integration and browser checks. Neither reviewer found a new issue in scope. | correctness 469108, security 788858 |
 | Origin tests before Docs | test-writer / medium and main | done | The inbound Host fix was present before the round-1 freeze and explicitly checked in the SEC-REV-01 rereview. The five new POST cases and five existing request-boundary cases pass. Targeted lint, typecheck and whitespace pass. Human committed the single new test file in `ffc4d4bf97242cf95cf33252d8488ad8025cd319`, with blob `04c796a7db7da7f8fc6441e5921cf33c48a0a41c`. | 7524984 |
 | Migration order before Docs | main | done | Fetched `upstream/master` at `f5d57f9` and verified the TA migration sequence ends at `20261108150000`. Renamed the T-11 migration with identical SQL. Fresh LGTM-only reset replayed the feature branch migrations. Regenerated types matched byte-for-byte, schema lint passed, and both T-11 integration suites passed all 19 cases. The upstream merge is pending. | — |
-| Docs | docs / low | pending | Awaiting the human implementation commit and upstream merge. | — |
-| Close-out / G4 | main | pending | Human validation unverified. | — |
+| Merge and TA keyboard baseline | main | done | Verified implementation `5192e96`, upstream merge `e33dc9e`, and accounting-test adjustment `bb86a1a`. On the merged tree, schema lint, lint, typecheck, 611 unit tests and 250 local integration tests passed. The production browser matrix passed 31/32. The intermittent TA keyboard failure reproduced with separate production builds and ten repeats each on the merged tree (8/10 passed) and clean upstream `f5d57f9` (4/10 passed). | — |
+| Docs | docs / low | done | Updated README and Developer Guide for draft comments, confirmation, same-key replay, the pending result and the POST contract. Verified guide anchors, source targets and guide-only scope. | 2485531 |
+| Close-out / G4 | main | awaiting-decision | Agent stages complete. Full human verify and e2e, the docs commit, session log and PR are pending. The TA keyboard flake is documented below. | 126544034 |
 
 ## Decisions
 
@@ -91,6 +92,17 @@ The untracked file digest was
 
 None.
 
+## TA keyboard baseline
+
+The phone-width inspection journey at
+`tests/e2e/ta/inspection/journeys.spec.ts:145` is intermittent on upstream
+`f5d57f9` as well as merged `bb86a1a`. Each checkout built and served its own
+production application. Both used Node 24, the same lockfile, Chromium with
+one worker, and LGTM's existing merged local schema. The merged run passed
+8/10, with one Learner ID focus timeout and one focus-visible assertion
+failure. Upstream passed 4/10 and reproduced the same Learner ID focus
+timeout. No TA test or product changes were made for this comparison.
+
 ## Acceptance tests
 
 | G2 test file | Git blob |
@@ -153,9 +165,10 @@ attempt remains.
 
 ## Next action
 
-The human commits the implementation, renamed migration, generated types and
-handoff, then merges `upstream/master`. Docs stays pending. REV-05 remains a
-nonblocking follow-up outside the approved fix round.
+At G4, the human runs `bun run verify` and `bun run test:e2e`, commits the
+README, Developer Guide, PLAN status and handoff, writes the session log and
+opens the feature PR. REV-05 remains a nonblocking follow-up outside the
+approved fix round.
 
 ## Supplemental acceptance tests
 

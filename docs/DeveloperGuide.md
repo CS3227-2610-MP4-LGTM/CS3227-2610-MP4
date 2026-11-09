@@ -259,7 +259,7 @@ after pagination. “No challenges available.” is the unfiltered empty state.
 are no matches. For invalid filters or a stale page, use **Clear filters**.
 For a read failure, **Try again** repeats the current page request.
 
-Choose **View challenge** to open the read-only PR view. The title, **Description**,
+Choose **View challenge** to open the PR view. The title, **Description**,
 **Language**, **Difficulty** and **Flaw categories** appear above **Source**.
 The focusable source region scrolls independently for long lines and displays
 the published source as numbered additions to a single file.
@@ -319,6 +319,78 @@ and the [Learner projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610
 - `bun run test:e2e tests/e2e/learner` uses the production build and local
   Supabase to exercise filter URL history, access outcomes, first-attempt
   links, account switching and keyboard access at 320 CSS pixels.
+
+### Learner first review
+
+On a challenge you have yet to submit, choose **Add comment** on a source line.
+Each line can have multiple comments. Use **Edit** or **Remove** to revise the
+draft, or **Cancel** to close the open editor. Comments are ordered by line,
+then by the order you added them on that line. You can draft up to 50 comments
+with up to 2,000 Unicode code points per comment after trimming. A comment must
+contain text.
+
+Drafts stay in the current page's memory. With draft comments or unsaved editor
+text, leaving in the app opens **Leave this review?**. Choose **Keep reviewing**
+to stay or **Leave review** to discard the draft and continue. Reloading or
+closing the page uses the browser's warning where supported. Successful
+submission and an expired session that cannot refresh bypass the leave dialog.
+
+Finish or cancel the open comment editor before choosing **Submit review**.
+The **Submit review?** dialog shows the comment count and warns when there are
+no comments. **Keep reviewing** returns to the draft.
+**Confirm submission** submits the loaded revision and locks the draft while the
+request is in progress. A confirmed review opens
+`/learner/history/:submissionId` with the pinned **Source**, read-only
+**Submitted comments** and **Grading pending**.
+
+If the app cannot confirm the outcome, the draft stays locked. **Check
+submission** replays the same request. A temporary failure during that check
+keeps the outcome uncertain so you can check again. After a confirmed rejection,
+the draft stays visible. A changed or unavailable revision requires returning
+to **Challenges**, and an attempt-limit rejection points to **Review history**.
+
+#### Learner submission contract
+
+For the POST contract, see “Learner surface” and “Transport, concurrency and
+errors” in [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+Comment lines must be in nondecreasing order.
+
+The workspace sends `X-LGTM-Workspace-Account-Id` with its loaded account UUID
+on both submission and status checks. The header is optional on the POST.
+When present, it must be a UUID that matches the verified account or the route
+rejects the request before the database call. This prevents a stale tab from
+submitting its draft under another account's active session. The verified
+session determines the actor. When an `Origin` is supplied, the route checks
+it against the inbound `Host` and request protocol.
+
+The user-scoped submission function checks the stored Learner role and locks
+the challenge row while checking publication, the live revision and attempt
+eligibility. In one transaction it creates the first attempt, assigns comment
+IDs and zero-based ordinals, and records the outcome in the private submission
+ledger. The ledger keys each request by actor, challenge and idempotency key
+and compares a fingerprint of the validated input. Replays of a recorded request
+return its outcome. Changing the payload under the same key returns
+`409 IDEMPOTENCY_CONFLICT`. A definitive rejection from the publication,
+attempt or revision-line checks is recorded without creating a submission.
+A request rejected by HTTP validation before the database call leaves the
+ledger untouched.
+
+The migration grants both submission and result-read function execution to
+`authenticated`. It keeps direct write grants and ledger access closed.
+Submission creates no grading run. The result function returns the pinned
+code projection and submitted comments only to the owning Learner. See the
+[server submission contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/submissions.ts)
+and [Learner submission migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261109120000_learner_submissions.sql).
+
+#### Learner submission checks
+
+- `bun run test tests/unit/learner` covers draft controls, status checks and
+  HTTP validation without Supabase.
+- `bun run test:integration tests/integration/domain/learner-submission`
+  exercises submission, replay, lifecycle checks and record access against
+  local Supabase.
+- `bun run test:e2e tests/e2e/learner/review.spec.ts` exercises the
+  keyboard review flow and leave warnings on a production build.
 
 ### TA submission inspection
 
