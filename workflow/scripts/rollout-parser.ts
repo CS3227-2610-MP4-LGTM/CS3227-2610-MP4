@@ -8,6 +8,17 @@ export interface TokenTotals {
   reasoning_output_tokens: Known<number>;
   total_tokens: Known<number>;
 }
+const responseTokenFields = [
+  "input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens",
+] as const;
+export const responseColumns = [
+  "timestamp", "seconds_since_previous_response", ...responseTokenFields, "compaction",
+] as const;
+export interface RolloutResponse extends Pick<TokenTotals, typeof responseTokenFields[number]> {
+  timestamp: Known<string>;
+  seconds_since_previous_response: Known<number>;
+  compaction: boolean;
+}
 export interface TurnValues {
   model: Known<string>;
   effort: Known<string>;
@@ -102,6 +113,92 @@ export function rolloutTokenSources(lines: Iterable<string>): {
 function recordedTokens(value: unknown): TokenTotals | undefined {
   const parsed = tokens(value);
   return Object.values(parsed).some(value => value !== "unknown") ? parsed : undefined;
+}
+
+/** Project model responses in rollout order. IDs are used only for internal matching. */
+export function parseRolloutResponses(lines: readonly string[], hasEarlierRollout = false): RolloutResponse[] {
+  // Modern rollouts also write token_count snapshots for the same responses.
+  let hasLedger = false;
+  for (const record of records(lines)) {
+    if (record.type === "token_usage_record") {
+      hasLedger = true;
+      break;
+    }
+  }
+  const responses: RolloutResponse[] = [];
+  const compactionIds = new Map<string, number>();
+  const compactionBoundaries = new Set<number>();
+  const identifiedResponses = new Map<string, RolloutResponse>();
+  let previousTime = NaN;
+  let previousSnapshot: TokenTotals | undefined;
+  const baseline = tokens(undefined);
+  // A later split may inherit usage from an earlier file. Wait for a local baseline.
+  if (!hasEarlierRollout) {
+    for (const field of responseTokenFields) baseline[field] = 0;
+  }
+
+  for (const record of records(lines)) {
+    const payload = object(record.payload);
+    const event = record.type === "event_msg" ? payload.type : undefined;
+    if (record.type === "compacted" || event === "context_compacted") {
+      const id = payload.compaction_response_id;
+      if (hasLedger && typeof id === "string" && id) compactionIds.set(id, responses.length);
+      else compactionBoundaries.add(responses.length);
+      continue;
+    }
+    if (hasLedger ? record.type !== "token_usage_record" : event !== "token_count") continue;
+    const id = hasLedger && typeof payload.response_id === "string" ? payload.response_id : "";
+    if (id && identifiedResponses.has(id)) continue;
+    const info = object(payload.info);
+    const cumulative = tokens(hasLedger ? payload.thread_token_usage : info.total_token_usage);
+    const direct = tokens(hasLedger ? payload.usage : info.last_token_usage);
+    if (!hasLedger) {
+      const hasSnapshot = responseTokenFields.some(field => cumulative[field] !== "unknown");
+      // Rate limit updates can repeat the last usage or have no usage at all.
+      if (hasSnapshot && responseTokenFields.every(field => cumulative[field] === previousSnapshot?.[field])) continue;
+      if (!hasSnapshot && responseTokenFields.every(field => direct[field] === "unknown")) continue;
+      previousSnapshot = hasSnapshot ? cumulative : undefined;
+    }
+
+    const usage = tokens(undefined);
+    for (const field of responseTokenFields) {
+      const previous = baseline[field];
+      const current = cumulative[field];
+      const reported = direct[field];
+      usage[field] = reported !== "unknown" ? reported
+        : current !== "unknown" && previous !== "unknown" ? number(current - previous) : "unknown";
+      baseline[field] = current !== "unknown" ? current
+        : previous !== "unknown" && reported !== "unknown" ? number(previous + reported) : "unknown";
+    }
+    const recordedTime = timestamp(record.timestamp);
+    const currentTime = Date.parse(recordedTime);
+    const elapsed = currentTime - previousTime;
+    const response: RolloutResponse = {
+      timestamp: recordedTime === "unknown" ? "unknown" : new Date(currentTime).toISOString(),
+      seconds_since_previous_response: elapsed >= 0 ? elapsed / 1000 : "unknown",
+      input_tokens: usage.input_tokens,
+      cached_input_tokens: usage.cached_input_tokens,
+      output_tokens: usage.output_tokens,
+      reasoning_output_tokens: usage.reasoning_output_tokens,
+      total_tokens: usage.total_tokens,
+      compaction: false,
+    };
+    responses.push(response);
+    if (id) identifiedResponses.set(id, response);
+    previousTime = currentTime;
+  }
+  // A linked marker can follow the compaction response and duplicate a context event.
+  for (const [id, boundary] of compactionIds) {
+    const response = identifiedResponses.get(id);
+    if (response) {
+      response.compaction = true;
+      compactionBoundaries.delete(boundary);
+    } else compactionBoundaries.add(boundary);
+  }
+  for (const boundary of compactionBoundaries) {
+    if (responses[boundary]) responses[boundary].compaction = true;
+  }
+  return responses;
 }
 
 /** token_count override is for comparing the two recorded sources, without deriving totals. */
