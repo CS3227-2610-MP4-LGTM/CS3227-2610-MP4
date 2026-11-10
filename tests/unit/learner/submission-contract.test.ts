@@ -50,7 +50,7 @@ it("LRN-04.4 LRN-04.5 LRN-04.6 exports exact shared messages for the two meaning
 
 it.each([
   ["unexpected top-level field", { ...baseBody, learnerId }],
-  ["previous submission reference", { ...baseBody, previousSubmissionId: key }],
+  ["previous submission reference", { ...baseBody, previousSubmissionId: "not-a-submission" }],
   ["non-UUID revision", { ...baseBody, revisionId: "not-a-revision" }],
   ["null comments", { ...baseBody, comments: null }],
   ["missing comments", { revisionId }],

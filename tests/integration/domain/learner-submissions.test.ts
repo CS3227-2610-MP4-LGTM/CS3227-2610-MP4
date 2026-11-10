@@ -170,7 +170,7 @@ it("LRN-04.5 rejects malformed, forged, oversized and out-of-revision requests w
   const valid = { revisionId: ids.reviewRevision, comments: [] };
   const lastLine = checkout.flawedCode.trimEnd().split("\n").length;
   const invalidBodies = [
-    { ...valid, previousSubmissionId: ids.firstA },
+    { ...valid, previousSubmissionId: "not-a-submission" },
     { ...valid, learnerId: actors.learnerA.id, submittedAt: fixture.createdAt, grade: 100 },
     { ...valid, fingerprint: "caller-supplied" },
     { ...valid, revisionId: "invalid" },

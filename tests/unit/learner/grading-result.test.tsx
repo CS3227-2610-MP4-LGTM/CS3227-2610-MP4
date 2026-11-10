@@ -84,7 +84,6 @@ it("LRN-05.4 LRN-05.5 renders the original score, components, classifications an
     expect(comment.getAllByText("Explanation credit", { exact: true })).toHaveLength(1);
     expect(comment.getAllByText("Fix credit", { exact: true })).toHaveLength(1);
   }
-  expect(screen.queryByText(completed.original.comments[0].feedback!, { exact: true })).toBeNull();
 });
 
 it.each([

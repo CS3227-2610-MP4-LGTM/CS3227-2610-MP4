@@ -1,16 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 import { z } from "zod";
 import { AccessScreen } from "@/components/account/access-screen";
 import { useReportWorkspaceAccessFailure } from "@/components/account/workspace-access-boundary";
+import { WorkspaceLink } from "@/components/account/workspace-navigation";
 import { CodeDiffView } from "@/components/code-diff";
 import type { WorkspaceAccessStatus } from "@/lib/auth/workspace-access";
 import { accountAccessHeader, catalogueHref } from "@/lib/learner/challenges";
+import { retryUnavailableReason } from "@/lib/learner/feedback";
 import { gradingFailureMessages, gradingFailureSchema, gradingIntentHeader, gradingViewSchema, type LearnerGrade } from "@/lib/learner/grading";
 import { historyHref, submissionFailureSchema, submissionSuccessSchema, workspaceAccountHeader, type SubmissionView } from "@/lib/learner/submissions";
 import { ChallengeMetadata } from "./challenge-metadata";
+import { MissedCriteria } from "./missed-criteria";
 
 const gradeResponse = z.strictObject({ data: gradingViewSchema });
 const pollInterval = 1000;
@@ -25,11 +29,31 @@ function accessFailure(response: Response): WorkspaceAccessStatus | undefined {
   if (response.status === 503 && access === "account_service_unavailable") return access;
 }
 
-export function GradingResult({ submissionId, initialSubmission, accountId, initialReadFailed = false }: {
+type GradingResultProps = {
   submissionId: string;
   initialSubmission?: SubmissionView;
   accountId?: string;
   initialReadFailed?: boolean;
+  published?: boolean;
+  secondSubmissionId?: string | null;
+};
+
+export function GradingResultRoute(props: GradingResultProps) {
+  const pathname = usePathname();
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  // Next keeps the previous route in Activity. Mount the result only on its
+  // own URL so the retry view owns its content and reopening resets hints.
+  const resultPrefix = `${historyHref}/`;
+  if (id !== props.submissionId || !pathname.startsWith(resultPrefix)
+    || pathname.slice(resultPrefix.length).includes("/")) return null;
+  return <GradingResult {...props} refreshRetryEligibility={() => router.refresh()} />;
+}
+
+export function GradingResult({
+  submissionId, initialSubmission, accountId, initialReadFailed = false, published, secondSubmissionId, refreshRetryEligibility,
+}: GradingResultProps & {
+  refreshRetryEligibility?: () => void;
 }) {
   const endpoint = `/api/v1/submissions/${encodeURIComponent(submissionId)}`;
   const [submission, setSubmission] = useState(initialSubmission);
@@ -39,6 +63,7 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
   const [posting, setPosting] = useState<GradeRequest>();
   const [uncertain, setUncertain] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [checkingRetry, startRetryCheck] = useTransition();
   const pendingRequest = useRef<GradeRequest | undefined>(undefined);
   const attemptedPending = useRef(false);
   const readVersion = useRef(0);
@@ -46,6 +71,10 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
   const postingRef = useRef(false);
   const reportAccessFailure = useReportWorkspaceAccessFailure();
   const expectedAccount = accountId ?? submission?.learner.id;
+
+  function checkRetryEligibility() {
+    if (refreshRetryEligibility) startRetryCheck(refreshRetryEligibility);
+  }
 
   function deny(response: Response) {
     const failure = accessFailure(response);
@@ -56,6 +85,14 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
       setReadError(response.status === 404 ? "missing" : "denied");
     }
     setSubmission(undefined);
+  }
+
+  function handleAccountFailure(response: Response) {
+    if (!accessFailure(response)) return false;
+    ++readVersion.current;
+    setReading(false);
+    deny(response);
+    return true;
   }
 
   async function readStatus(): Promise<SubmissionView | undefined> {
@@ -87,6 +124,8 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
         pendingRequest.current = undefined;
         setUncertain(false);
       }
+      // Publication and retry usage may have changed since the page was read.
+      if (result.attemptNumber === 1 && result.grading.state === "completed") checkRetryEligibility();
       return result;
     } catch {
       if (current()) setReadError("unavailable");
@@ -133,6 +172,7 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
           setSubmission(view => view && { ...view, grading });
           setReadError(undefined);
           pendingRequest.current = undefined;
+          if (submission?.attemptNumber === 1) checkRetryEligibility();
           return;
         }
         const { code, message } = submissionFailureSchema.parse(json).error;
@@ -210,6 +250,11 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
   const commentResults = new Map(original?.comments.map(comment => [comment.commentId, comment]));
   const retrying = posting?.retry === true;
   const recovery = readError === "unavailable" || uncertain;
+  // Retry entry needs a fresh server read and a clean draft.
+  const retryHref = `${historyHref}/${submission.id}/retry`;
+  const retryReason = retryUnavailableReason(submission, {
+    published: published ?? false, secondSubmissionId: secondSubmissionId ?? null,
+  });
 
   return <article className="challenge-workspace">
     <nav aria-label="Review result navigation">
@@ -244,7 +289,7 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
     {original && <OriginalAssessment grade={original} />}
     <CodeDiffView code={challenge.code} />
     <section aria-labelledby="submitted-comments">
-      <h2 id="submitted-comments">Submitted comments</h2>
+      <h2 id="submitted-comments">{original ? "Earned credit" : "Submitted comments"}</h2>
       {comments.length ? <ol>
         {comments.map(comment => {
           const assessed = commentResults.get(comment.id);
@@ -261,11 +306,27 @@ export function GradingResult({ submissionId, initialSubmission, accountId, init
               <dl>
                 <dt>Explanation credit</dt><dd>{assessed.explanationCredit ?? "—"}</dd>
                 <dt>Fix credit</dt><dd>{assessed.fixCredit ?? "—"}</dd>
+                {assessed.matched && <><dt>Feedback</dt><dd className="review-comment-body">{assessed.feedback}</dd></>}
               </dl>
             </>}
           </li>;
         })}
       </ol> : <p>No comments submitted.</p>}
+    </section>
+    {original && <MissedCriteria key={`${submission.learner.id}:${submission.id}`}
+      grade={original} comments={comments} endpoint={endpoint} accountId={submission.learner.id}
+      handleAccountFailure={handleAccountFailure} refreshResult={readStatus} />}
+    <section aria-labelledby="next-actions">
+      <h2 id="next-actions">Next actions</h2>
+      {checkingRetry ? <p role="status">Checking retry availability…</p>
+        : original && published === undefined && submission.attemptNumber === 1
+        ? <>
+          <p>We couldn&apos;t check retry availability.</p>
+          {refreshRetryEligibility && <button type="button" className="button secondary"
+            onClick={checkRetryEligibility}>Check retry availability</button>}
+        </>
+        : retryReason ? <p>{retryReason}</p>
+          : <WorkspaceLink href={retryHref} prefetch={false}>Retry challenge</WorkspaceLink>}
     </section>
   </article>;
 }

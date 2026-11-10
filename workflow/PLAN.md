@@ -810,6 +810,197 @@ the limits above remain unchanged.
 - **Depends on:** T-03, T-04, T-05, T-11.
 - **Status:** done
 
+### T-13: Feedback, hints and Retry challenge
+
+- **Issue:** #52
+- **Covers:** LRN-06.1–06.7 and SEC-03.2. Apply SYS-02.1–02.2,
+  SYS-04.1–04.2, SYS-08.1–08.3, SYS-09, SYS-10.1–10.2, SYS-11,
+  SYS-12.1 and SYS-12.4–12.5, SYS-14.2–14.3, SYS-17 and SYS-19.1–19.3
+  to these Learner surfaces. Preserve SEC-02.2 inert text, SEC-03 safe
+  projection and SEC-05 quota-free cache reads.
+- **Route:** high
+- **Reads:** `workflow/specs/stories/LRN-06-feedback-hints-and-retry.md`
+  (all acceptance criteria and UI notes), `workflow/specs/stories/LRN-03-manage-line-comments.md`
+  (LRN-03.1–03.6), `workflow/specs/stories/LRN-04-submit-a-final-review.md`
+  (LRN-04.1–04.6), `workflow/specs/stories/LRN-05-grade-a-submitted-review.md`
+  (LRN-05.1–05.5 and LRN-05.7 for the original result and recovery), and
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  (ACC-03.2–03.7 for workspace access and recovery).
+  `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Learner, §4 Product
+  decisions → Hints and attempts, Grading and Shared vocabularies, §5
+  Navigation and UI (Learner), and §7 Non-functional requirements (learning
+  presentation).
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted
+  code, SYS-04 — Shared building blocks, SYS-08 — Authorization at the data
+  boundary, SYS-09 — Authentication with Cache Components, SYS-10 — Database
+  enforcement and privileged access, SYS-11 — Authentication and authorization
+  failures, SYS-12 — Record access and audit (Learner-facing challenge
+  material, private answers, submissions, original grades and cached per-flaw
+  hints), SYS-14 — Delivery and database evolution (SYS-14.2–14.3), SYS-17 —
+  Simple, accessible UI, SYS-18 — Resource use (preserve grading behavior),
+  and SYS-19 — Test strategy (SYS-19.1–19.3).
+  `workflow/specs/AI-SECURITY-SPEC.md` SEC-01 — Authorize and minimize model
+  access, SEC-02 — Validate model output before use, SEC-03 — Protect
+  learner-facing hints and feedback (SEC-03.2), SEC-04 — Bound SoC requests
+  and usage, SEC-05 — Reserve and settle usage atomically and SEC-06 —
+  Contain failures and keep diagnostics safe, scoped to serving approved
+  result text and reading hints from cache.
+  `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract conventions →
+  Shared values and bounds, §2 Domain model and publication lifecycle →
+  SYS-12 decision: immutable published revisions and Code, proposals and
+  locations, §3 API contracts → Transport, concurrency and errors, Shared
+  response types and Learner surface (submission create, detail and hint
+  read), §4 Server-only LLM contracts → Matched-comment assessment:
+  `operation: assess_review` (stored output), §5 Deterministic grading,
+  moderation and progress → Matching and score (credits and eligible hint
+  order), §6 Shared deterministic seed fixtures → C1: Checkout totals,
+  C2: Safe quotient and Derived fixture scenarios, and §7 Integration
+  verification (Learner access and cached hints).
+- **Tests:** Unit and component coverage in
+  `tests/unit/learner/feedback-and-hints.test.tsx`,
+  `tests/unit/learner/retry-challenge.test.tsx` and
+  `tests/unit/learner/retry-challenge-contract.test.ts` (new). Cover the
+  three result sections, one original credit and status display, matched
+  inert feedback and null unmatched/duplicate feedback, partial explanation
+  and fix, category order/counts and empty states. Check one ordered hint
+  per activation, no prefetch, disabled loading with earlier hints retained,
+  same-ID recovery, eligibility refresh, account recovery and reveal reset.
+  Exercise Next actions precedence and direct entry states, pinned
+  independent drafts and ordering, guarded departure, reload, strict request
+  validation and acknowledgement binding to the named first attempt. Check
+  frozen request replay, zero-comment confirmation and draft retention on
+  submission rejection.
+  In `retry-challenge.test.tsx`, include
+  `LRN-06.5 shows Retry challenge without reloading when grading completes while the result is open`.
+  Local Supabase coverage in `tests/integration/domain/learner-feedback-and-hints.test.ts`
+  and `tests/integration/domain/learner-retry-challenge.test.ts` (new).
+  Exercise HTTP and direct user-scoped calls with the owner, a different
+  Learner, Authors, TAs and anonymous access. Check grants, exact safe hint
+  projection, ineligible, premature, matched, other-submission and
+  other-revision hints, and historical reads after unpublish and archive.
+  In `learner-feedback-and-hints.test.ts`, include
+  `LRN-06.3 scopes second-attempt hint reads to its own original grade's eligible hints`.
+  Verify a first-attempt hint ID is denied on attempt 2 unless it is also
+  eligible on attempt 2's original grade.
+  In `learner-retry-challenge.test.ts`, include
+  `LRN-06.5 denies another Learner's challenge publication state and second-attempt ID through the scoped retry eligibility reads`.
+  Verify zero provider calls, usage reservations or grading writes. Test
+  pending, failed and override-only cases, passing originals, wrong
+  challenge/owner, missing or second-attempt IDs, pinned success after
+  republish, pinned revision mismatch, lifecycle loss and fresh key races
+  against attempt creation or publication. Verify one committed second
+  attempt, separate immutable comments, server IDs and ordinals, replay
+  after lifecycle changes, changed previous ID conflicts, and replay of
+  first-attempt keys created by T-11.
+  Production-build Chromium coverage in
+  `tests/e2e/learner/feedback-and-retry-challenge.spec.ts` (new). Cover the
+  keyboard result-to-hint and result-to-second-review journeys at phone
+  width, including fresh draft copies on reload, leave protection and
+  navigation to the second result after confirmation. Run T-11 first review
+  and T-12 grading regression tests. The orchestrator runs all
+  database-backed checks on local Supabase with the Node version from
+  `.node-version`. Local and CI browser tests use the fake provider.
+- **Config paths:** `supabase/migrations/20261110130000_learner_feedback_retry.sql`
+  (new), `src/lib/supabase/database.types.ts` (local generation using the
+  existing `package.json` script), and
+  `tests/unit/learner/submission-contract.test.ts`,
+  `tests/integration/domain/learner-submissions.test.ts` and
+  `tests/unit/learner/grading-result.test.tsx` solely for the approved
+  compatibility changes below. Reuse without edits `package.json`, `vitest.config.mts`,
+  `vitest.integration.config.mts`, `playwright.config.ts`,
+  `tests/integration/domain/learner-browse-fixture.ts`,
+  `tests/integration/domain/fixture.ts`, `tests/integration/auth/local.ts`,
+  `tests/unit/learner/grading-fixture.ts` and `tests/e2e/account/server.ts`.
+  Docs stage uses `README.md` and `docs/DeveloperGuide.md`.
+- **Constraints:** T-13 delivers all of LRN-06. LRN-07 reports and LRN-08
+  history list, current grade, overrides and moderation display are T-14 on
+  the same issue. Keep T-12's “Retry grading” flow unchanged. Use “Retry
+  challenge” for the LRN-06 action and “Retry grading” for the LRN-05.3
+  action in plans, tests and docs. Quote other screen copy as specified.
+  Read the installed Next.js guides for Route Handlers, authentication with
+  Cache Components and Link blocking navigation before writing code.
+
+  Extend the existing `read_learner_submission` / `readLearnerSubmission`
+  result flow and `GradingResult`. Use the existing projection of
+  `ai_grade_comment_results` for feedback and ordered `eligibleHints` from
+  the completed original grade. Keep feedback with its matched comment
+  alongside the single LRN-05 status and credit display. List missed partial
+  credit and missed categories separately. Use only projected categories
+  and counts for missed flaws. The result page's server read obtains
+  `published` and the second attempt's ID through user-scoped reads bound
+  to the owned source submission and passes both to `GradingResult`.
+  `GradingResult` combines those props with live grading state so “Next
+  actions” switches from the pending reason to “Retry challenge” when
+  grading completes on an otherwise eligible result without a reload.
+  The client reads the exact `SubmissionView` from
+  `GET /api/v1/submissions/:id`. Preserve that response and both
+  `SubmissionView` and `GradingView` exactly as §3 defines them, and
+  preserve the `read_learner_submission(uuid)` signature and strict response
+  shape. Keep older application deployments compatible with the new
+  migration. Use no new feedback storage and make no provider calls.
+
+  Add `GET /api/v1/submissions/:id/hints/:hintId` and one user-callable
+  read function with an explicit authenticated-only execute grant.
+  Verify the session, stored role and workspace account at the route.
+  Within the function bind the cached publication hint to the exact owned
+  submission, its pinned revision, its original grade linked through
+  `ai_grade_evidence` to that submission's completed grading run, and
+  that grade's `ai_grade_eligible_hints` row. Return only
+  `{ hintId, category, text }` on success, with private no-store caching
+  and safe errors. Keep hints available for eligible history after
+  unpublish/archive. Neither success nor denial generates text, reserves
+  quota or writes grade or usage state. Test-local setup creates eligibility
+  evidence using the §6 hints already cached by the Learner browse fixture.
+  Add no seed data or Author paths.
+
+  Extend the existing `create_learner_submission(uuid, uuid, jsonb)`
+  function and strict request validator with optional UUID
+  `previousSubmissionId` in the JSON payload. Preserve one creation path,
+  Origin check, workspace account header, T-11 ledger and first-attempt
+  semantics. Preserve the canonical first-attempt fingerprint byte for byte
+  by omitting the previous ID for first attempts. Include its canonical UUID
+  for second attempts. Resolve an existing ledger entry before reevaluating
+  eligibility and replay its recorded success or failure. Keep grants and
+  direct validation intact. On a fresh key, under the same challenge-row
+  lock, require the exact first attempt for the caller and challenge, a
+  completed original grade, no second attempt and a published challenge.
+  An override does not satisfy the original-grade prerequisite. Return
+  `409 VERSION_CONFLICT` for a mismatched pinned revision. Validate lines
+  against the first attempt's pinned code even if a different revision is
+  live. Atomically create attempt 2 and its new comments and ledger outcome.
+  Preserve the existing submission lifecycle, attempt-limit and
+  idempotency responses and T-11 recovery. Sort new migrations after
+  `20261110120000_learner_grading.sql` and regenerate database types locally.
+
+  The result offers “Retry challenge” only after the first original grade
+  completes, if a second attempt does not exist and the challenge remains
+  published. Use the LRN-06.5 reason precedence and keep “Browse
+  challenges”. `/learner/history/:id/retry` checks the current account
+  and eligibility on entry, including direct URLs. Apply LRN-06.7 loading,
+  read recovery, second-attempt, missing and access-denial behavior.
+  In the eligible “Retry review” show the challenge and “Attempt 2”.
+  Reuse T-11's review draft and workspace guard for fresh editable copies
+  in original order with independent draft identities and same-line
+  addition order. Reload restores fresh copies. Confirm with the first
+  attempt ID and its pinned revision and navigate to the second result
+  on success. Retain local work when eligibility changes after opening.
+
+  G1-approved compatibility scope. Keep the existing
+  RPC signatures and their grant-list and call-site tests. In a separate
+  test commit at G2, change only the now-accepted previous-ID input in
+  `tests/unit/learner/submission-contract.test.ts` and
+  `tests/integration/domain/learner-submissions.test.ts` to a malformed
+  previous ID. Keep the validation assertions and add the well-formed
+  foreign-ID denial to the new access tests. Remove only the obsolete
+  matched-feedback absence assertion in
+  `tests/unit/learner/grading-result.test.tsx` and cover single visible
+  matched feedback in new LRN-06.1 acceptance tests. Preserve every other
+  assertion in those files. Describe the delivered learning flow in Docs
+  and keep the documented hosted SoC and local/CI fake-provider distinction.
+- **Depends on:** T-12 and T-11, with T-10 and the auth/data foundations
+  through those tasks.
+- **Status:** done
+
 ## Author
 
 ## TA

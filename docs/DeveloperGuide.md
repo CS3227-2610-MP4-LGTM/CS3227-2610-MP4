@@ -401,16 +401,21 @@ until the grade succeeds or fails. Reopening the page observes a running grade
 or displays the stored **Original assessment** when grading has completed.
 
 **Original assessment** shows the score out of 100, pass mark, pass status,
-component points and matched and missed flaw counts. Under **Submitted
-comments**, each comment is **Matched**, **Unmatched** or **Duplicate**.
+component points and matched and missed flaw counts. After grading, the
+**Submitted comments** section becomes **Earned credit**, where each comment
+is **Matched**, **Unmatched** or **Duplicate**.
 Matched comments show **Explanation credit** and **Fix credit**. Unmatched and
 duplicate comments show **No credit** and dashes for both credits.
 
 A failed grade leaves the review saved and gives the reason. **Retry grading**
-uses the same submission after a retryable failure. If the review exceeds the
-AI input limit, the page shows the size-limit message and keeps the submitted
-evidence available. Choose **Try again** if the result could not load, or
-**Check status** if the page could not confirm the grading state.
+reruns assessment of the same submission after a retryable failure. If the
+review exceeds the AI input limit, the page shows the size-limit message and
+keeps the submitted evidence available. Choose **Try again** if the result
+could not load, or **Check status** if the page could not confirm the grading
+state.
+
+[**Retry challenge**](#learner-feedback-hints-and-retry) starts a second review
+attempt after a completed first assessment.
 
 For request and response contracts, see “Learner surface” and “Transport,
 concurrency and errors” in [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
@@ -420,6 +425,113 @@ local Supabase running, use `bun run test:integration tests/integration/domain/l
 to check grading, replay and first-attempt TA progress. Use
 `bun run test:e2e tests/e2e/learner/grading.spec.ts` for the browser flow
 with the fake provider.
+
+### Learner feedback, hints and retry
+
+After the original assessment completes, **Earned credit** shows **Feedback**
+as plain text alongside the credits for each matched comment. **Missed
+criteria** lists matched comments that received less than full credit for
+**Explanation**, **Actionable fix** or both. It also shows missed flaw counts
+by category in the same order as the catalogue's **Flaw category** choices.
+The counts keep the flaws' locations and answers private. When neither list
+has entries, the section shows “No missed criteria in this assessment.”
+
+Choose **Show hint** under a category to reveal its next eligible hint.
+**Loading hint…** pauses that control while earlier hints stay visible.
+After the last hint in the category, the control gives way to **All hints
+shown**. With no missed flaws, the result shows “No hints needed for missed
+flaws.” Hints start collapsed each time you reopen the result. Each reveal
+is quota-free and reads approved cached text on demand.
+Eligible hints remain available on completed results after unpublication or
+archiving. A second attempt uses its own original assessment's eligible hints.
+
+“We couldn't load this hint. Try again.” offers **Try again** for the same
+hint. “This hint isn't available for this review.” offers **Refresh result**
+to recheck eligibility. Account failures use the shared workspace recovery.
+
+#### Retry a challenge
+
+Under **Next actions**, **Retry challenge** is available once the first
+attempt's original assessment completes, provided the challenge is still
+published and you have no second attempt. A passing score qualifies.
+Eligibility requires a completed original assessment even when a TA override
+exists. The first result checks these reasons in order.
+
+1. “Retry is available after your first assessment completes.”
+2. “You have used your retry.”
+3. “Retry is unavailable while this challenge is not published.”
+
+If the result can't check eligibility, use **Check retry availability**.
+**Browse challenges** remains available in the result navigation.
+
+The link opens `/learner/history/:submissionId/retry` with the first attempt's
+ID. **Loading retry…** appears while the page checks access and eligibility,
+including when browser history restores the page. An eligible entry opens
+**Retry review** with the challenge title and **Attempt 2**. The draft uses
+the first attempt's pinned code even after a newer revision is published.
+It starts with independent, editable copies of the original comments in
+their submitted order. Reloading or returning after discarding edits starts
+from fresh copies.
+
+The retry uses the [same draft and submission controls](#learner-first-review),
+including **Leave this review?** when leaving with copied comments or draft
+work, **Confirm submission** to send the review and **Check submission** if
+the outcome is uncertain. Successful submission opens **Review result** for
+attempt two. If eligibility changes after the editor opens, submission
+rechecks it and keeps the draft visible on rejection.
+
+A failed entry read shows **Retry unavailable** and “We couldn't load your
+retry. Try again.” Use **Try again** at the same URL. An owned but ineligible
+entry shows **Retry unavailable**, the reason and **Back to result**. Opening
+the retry URL for attempt two shows “A second attempt cannot be retried.”
+A missing attempt shows **Review not found**. Access failures use the shared
+workspace recovery.
+
+#### Feedback and retry contracts
+
+`GET /api/v1/submissions/:id/hints/:hintId` follows the Learner surface in
+[INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface)
+and is sent with `Cache-Control: private, no-store`. The authenticated-only
+`read_learner_submission_hint` database function checks the stored Learner
+role, submission ownership, pinned revision and the exact completed original
+grade's eligible hint for a missed flaw. Hint text is fetched separately from
+the result and rendered as plain text. The result response carries eligible
+hint references.
+
+The result and retry pages use the caller-scoped `read_learner_retry_eligibility`
+database function to read publication status and the second submission ID.
+The retry POST uses the existing submission endpoint and adds
+`previousSubmissionId` alongside the first attempt's `revisionId` and the
+draft comments. The submission function checks ownership, original grade
+completion, publication and attempt eligibility under the challenge lock,
+which serializes competing second attempts. It records the outcome in the
+existing idempotency ledger. The server and client check that a successful
+acknowledgement identifies attempt two linked to the specified first
+submission and pinned revision.
+See the [feedback and retry migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261110130000_learner_feedback_retry.sql).
+
+#### Feedback and retry checks
+
+Run the Learner unit tests without Supabase:
+
+```bash
+bun run test tests/unit/learner
+```
+
+With local Supabase running, check the hint projection and access boundaries,
+then exercise retry ownership, revision pinning and concurrent creation:
+
+```bash
+bun run test:integration tests/integration/domain/learner-feedback-and-hints.test.ts tests/integration/domain/learner-retry-challenge.test.ts
+```
+
+With local Supabase and Chromium installed, run the production-build browser
+journeys with the fake provider. These cover keyboard use at 320 CSS pixels,
+retry submission and history restoration before and after unpublication.
+
+```bash
+bun run test:e2e tests/e2e/learner/feedback-and-retry-challenge.spec.ts tests/e2e/learner/retry-history-restore.spec.ts --project chromium
+```
 
 ### TA submission inspection
 

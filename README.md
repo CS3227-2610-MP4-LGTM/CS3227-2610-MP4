@@ -39,11 +39,15 @@ Sign in as a Learner to open **Challenges**. Filter published challenges by
 **Language**, **Difficulty** and **Flaw category**, then choose **View challenge**
 to inspect the source in a PR view. For a first attempt, draft line comments
 and choose **Submit review**. Confirming opens **Review result** with the pinned
-code and read-only comments. Grading starts automatically and shows the score,
-component points and comment credits when complete.
+code and read-only comments. Grading starts automatically. Once it completes,
+read comment feedback under **Earned credit** and use **Show hint** under
+**Missed criteria** to reveal eligible hints one at a time. **Next actions**
+offers **Retry challenge** for an eligible second attempt, starting with editable
+copies of the first review's comments on the same code revision.
 [Learner challenge catalogue and PR view](docs/DeveloperGuide.md#learner-challenge-catalogue-and-pr-view) ·
 [Learner first review](docs/DeveloperGuide.md#learner-first-review) ·
-[Learner grading](docs/DeveloperGuide.md#learner-grading)
+[Learner grading](docs/DeveloperGuide.md#learner-grading) ·
+[Learner feedback, hints and retry](docs/DeveloperGuide.md#learner-feedback-hints-and-retry)
 
 Sign in as a TA to open **Submissions**, filter attempts by learner, challenge
 and grading status, then choose **View submission** for read-only pinned code,
@@ -68,7 +72,7 @@ fake provider. See [Provider configuration](docs/DeveloperGuide.md#provider-conf
 | `bun run typecheck` | Generates route types, then `tsc --noEmit` |
 | `bun run test` | Unit tests (Vitest); no Supabase required |
 | `bun run test:integration` | Auth/API/Postgres integration tests against local Supabase |
-| `bun run test:e2e` | Playwright account, Learner browse, review and grading, TA inspection, moderation and learner-progress journeys against local Supabase and a production build (port 3100) |
+| `bun run test:e2e` | Playwright account, Learner browse, review, grading, hints and challenge retry, TA inspection, moderation and learner-progress journeys against local Supabase and a production build (port 3100) |
 | `bun run build` | Production build |
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |
