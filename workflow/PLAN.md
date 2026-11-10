@@ -1044,4 +1044,4 @@ the limits above remain unchanged.
   Read the relevant Next.js guide before code; the orchestrator runs all
   database-backed checks and specialists report them as unrun.
 - **Depends on:** T-04, T-32
-- **Status:** todo
+- **Status:** done

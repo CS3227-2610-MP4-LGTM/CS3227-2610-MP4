@@ -7,7 +7,7 @@ import { useReportWorkspaceAccessFailure } from "@/components/account/workspace-
 import type { LearnerResult, ProgressResult, RecommendationResult } from "@/lib/ta/progress";
 import { useInspectionRead } from "./use-inspection-read";
 
-type Props = { learnerId: string; readLearner: (id: string) => Promise<LearnerResult>; readProgress: (id: string) => Promise<ProgressResult>; readRecommendations: (id: string) => Promise<RecommendationResult>; summarySlot?: ReactNode; onRetryIdentity?: () => void };
+type Props = { learnerId: string; readLearner: (id: string) => Promise<LearnerResult>; readProgress: (id: string) => Promise<ProgressResult>; readRecommendations: (id: string) => Promise<RecommendationResult>; summarySlot?: ReactNode; summaryPanel?: ReactNode; onRetryIdentity?: () => void };
 // Section-local requests retain only successful content for this mounted learner.
 // Cleanup prevents a late response from another request restoring stale access.
 function useSection<T extends { status: string }>(id: string, read: (id: string) => Promise<T>) {
@@ -36,7 +36,7 @@ export function LearnerDetail(props: Props) {
   if (result.status !== "ok") return <><p role="alert">{result.status === "not_found" ? "Learner not found." : "We couldn't load learner performance. Try again."}</p>{result.status !== "not_found" && <button className="button secondary" onClick={props.onRetryIdentity ?? refresh}>Try again</button>}<Link prefetch={false} href="/ta/learners">Back to learners</Link></>;
   return <DetailSections key={props.learnerId} {...props} learner={result.learner} />;
 }
-function DetailSections({ learnerId, learner, readProgress, readRecommendations, summarySlot }: Props & { learner: { id: string; displayName: string } }) {
+function DetailSections({ learnerId, learner, readProgress, readRecommendations, summarySlot, summaryPanel }: Props & { learner: { id: string; displayName: string } }) {
   const progress = useSection(learnerId, readProgress);
   const recommendations = useSection(learnerId, readRecommendations);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -48,7 +48,7 @@ function DetailSections({ learnerId, learner, readProgress, readRecommendations,
     <h1 ref={heading} tabIndex={-1}>Learner performance</h1>
     <dl className="ta-evidence"><dt>Learner</dt><dd>{learner.displayName}</dd><dt>Learner ID</dt><dd>{learner.id}</dd></dl>
     <Link prefetch={false} href={`/ta/submissions?learnerId=${learnerId}`}>View submissions</Link>
-    <section aria-labelledby="performance-summary"><h2 id="performance-summary">Performance summary</h2>{summarySlot}</section>
+    {summaryPanel ?? <section aria-labelledby="performance-summary"><h2 id="performance-summary">Performance summary</h2>{summarySlot}</section>}
     <button className="button secondary" disabled={progress.pending || recommendations.pending} onClick={() => { progress.refresh(); recommendations.refresh(); }}>Refresh progress and recommendations</button>
     <section aria-labelledby="category-progress"><h2 id="category-progress">Category progress</h2>
       {progress.pending && <p role="status">Loading category progress…</p>}
