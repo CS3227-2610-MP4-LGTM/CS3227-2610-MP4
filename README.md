@@ -38,10 +38,12 @@ and access recovery.
 Sign in as a Learner to open **Challenges**. Filter published challenges by
 **Language**, **Difficulty** and **Flaw category**, then choose **View challenge**
 to inspect the source in a PR view. For a first attempt, draft line comments
-and choose **Submit review**. Confirming opens the read-only result with the
-submitted comments and **Grading pending**.
+and choose **Submit review**. Confirming opens **Review result** with the pinned
+code and read-only comments. Grading starts automatically and shows the score,
+component points and comment credits when complete.
 [Learner challenge catalogue and PR view](docs/DeveloperGuide.md#learner-challenge-catalogue-and-pr-view) ·
-[Learner first review](docs/DeveloperGuide.md#learner-first-review)
+[Learner first review](docs/DeveloperGuide.md#learner-first-review) ·
+[Learner grading](docs/DeveloperGuide.md#learner-grading)
 
 Sign in as a TA to open **Submissions**, filter attempts by learner, challenge
 and grading status, then choose **View submission** for read-only pinned code,
@@ -55,10 +57,8 @@ progress and rule-based recommendations. **View submissions** opens supporting
 attempts, which offer **Back to learner**. See
 [TA learner progress and recommendations](docs/DeveloperGuide.md#ta-learner-progress-and-recommendations).
 
-The internal [shared LLM boundary](docs/DeveloperGuide.md#shared-llm-boundary)
-provides validated fake operations and durable usage accounting. Live model
-dispatch is disabled; role endpoints and generated-result persistence belong to
-separate features.
+Hosted development uses the live SoC provider. Local development and CI use the
+fake provider. See [Provider configuration](docs/DeveloperGuide.md#provider-configuration).
 
 ## Checks
 
@@ -68,7 +68,7 @@ separate features.
 | `bun run typecheck` | Generates route types, then `tsc --noEmit` |
 | `bun run test` | Unit tests (Vitest); no Supabase required |
 | `bun run test:integration` | Auth/API/Postgres integration tests against local Supabase |
-| `bun run test:e2e` | Playwright account, Learner browse and review, TA inspection, moderation and learner-progress journeys against local Supabase and a production build (port 3100) |
+| `bun run test:e2e` | Playwright account, Learner browse, review and grading, TA inspection, moderation and learner-progress journeys against local Supabase and a production build (port 3100) |
 | `bun run build` | Production build |
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |
@@ -83,7 +83,7 @@ setup and the hosted settings that need human review.
 | Path | Contents |
 | --- | --- |
 | `src/app/` | Pages and route handlers (Next.js App Router) |
-| `src/server/llm/` | Server-only AI contracts, fake provider and usage accounting |
+| `src/server/llm/` | Server-only AI contracts, provider dispatch and usage accounting |
 | `src/lib/supabase/`, `src/server/supabase/` | Supabase clients and generated database types |
 | `supabase/` | Local Supabase config, migrations and seed data |
 | `docs/` | Product site and Developer Guide |
