@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { fail } from "./errors";
 import { validateLearnerText, type RetainedFlaw } from "./safety";
+import { fullCaseFold } from "./unicode-case-fold";
 export const categories = [
     "logic_bug", "edge_case", "error_handling", "security", "performance"
 ] as const;
@@ -296,6 +297,8 @@ const protectedFlaw = z.object({
     explanation: text(2000),
     fix: text(2000)
 });
+const uuidInFeedback = /[0-9a-f](?:[\s\p{P}\p{S}\p{Cf}]*[0-9a-f]){31}/u;
+const uuidIgnoredMarks = /[\p{Default_Ignorable_Code_Point}\p{M}]/gu;
 export const retainedContextSchema = z.array(protectedFlaw).min(1).max(5).refine(a => unique(a.map(f => f.key)));
 /** Caller captures every retained flaw from the authorized revision, including
  * unmatched flaws excluded from provider projections. Missing context fails closed. */
@@ -347,6 +350,11 @@ export function validateOutput(snapshot: unknown, value: unknown, options?: {
                 maxCodePoints: 2000,
                 retainedFlaws: retained
             });
+            // Decompose accented hex letters and remove marks that would fold to letters.
+            const unmarkedFeedback = a.feedback.normalize("NFKC").normalize("NFD").replace(uuidIgnoredMarks, "");
+            const feedbackForIdCheck = fullCaseFold(unmarkedFeedback).replace(uuidIgnoredMarks, "");
+            if (uuidInFeedback.test(feedbackForIdCheck))
+                fail("INVALID_AI_OUTPUT");
         });
     }
     else if (captured.operation === "summarize_learner" && result.operation === "summarize_learner") {

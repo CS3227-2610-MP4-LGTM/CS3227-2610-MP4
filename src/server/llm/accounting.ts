@@ -64,6 +64,7 @@ export type Accounting = {
     gradingContext?: (input: {
         accountId: string;
         submissionId: string;
+        gradingRunId: string;
     }) => Promise<unknown>;
 };
 export function createAccountingStore(options: {
@@ -76,8 +77,8 @@ export function createAccountingStore(options: {
     async function rpc(name: "llm_accounting" | "llm_grading_context", args: Record<string, unknown>) {
         try {
             if (options.db) {
-                const values = name === "llm_accounting" ? [args.action, JSON.stringify(args.args)] : [args.account_id, args.submission_id];
-                const result = await options.db.query(name === "llm_accounting" ? "select public.llm_accounting($1::text,$2::jsonb) as result" : "select public.llm_grading_context($1::uuid,$2::uuid) as result", values);
+                const values = name === "llm_accounting" ? [args.action, JSON.stringify(args.args)] : [args.account_id, args.submission_id, args.grading_run_id];
+                const result = await options.db.query(name === "llm_accounting" ? "select public.llm_accounting($1::text,$2::jsonb) as result" : "select public.llm_grading_context($1::uuid,$2::uuid,$3::uuid) as result", values);
                 return result.rows[0].result;
             }
             const admin = createAdminClient();
@@ -86,7 +87,8 @@ export function createAccountingStore(options: {
                 args: args.args as Json
             }) : await admin.rpc("llm_grading_context", {
                 account_id: args.account_id as string,
-                submission_id: args.submission_id as string
+                submission_id: args.submission_id as string,
+                grading_run_id: args.grading_run_id as string
             });
             if (result.error)
                 throw result.error;
@@ -151,9 +153,11 @@ export function createAccountingStore(options: {
         gradingContext: async (input: {
             accountId: string;
             submissionId: string;
+            gradingRunId: string;
         }) => rpc("llm_grading_context", {
             account_id: input.accountId,
-            submission_id: input.submissionId
+            submission_id: input.submissionId,
+            grading_run_id: input.gradingRunId
         })
     };
 }

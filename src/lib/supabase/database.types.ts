@@ -43,6 +43,20 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"learner_grading_requests": {
+                  Row: {
+                    "grading_run_id": string | null,"idempotency_key": string,"intent": string,"outcome": Json | null,"submission_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "grading_run_id"?: string | null,"idempotency_key": string,"intent": string,"outcome"?: Json | null,"submission_id": string
+                  }
+                  Update: {
+                    "grading_run_id"?: string | null,"idempotency_key"?: string,"intent"?: string,"outcome"?: Json | null,"submission_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"llm_operations": {
                   Row: {
                     "account_id": string,"environment_id": string,"expires_at": string,"fingerprint": string,"id": string,"idempotency_key": string,"operation": string,"resource_id": string,"state": string
@@ -160,6 +174,14 @@ isOneToOne: false
 "learner_submission_projection":
 { Args: { "p_submission_id": string }; Returns: Json
                            },
+"lock_learner_grading_submission":
+{ Args: { "p_account_id": string,"p_submission_id": string }; Returns: Database["public"]['Tables']["submissions"]['Row']
+                          SetofOptions: {
+        from: "*"
+        to: "submissions"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "normalize_display_name":
 { Args: { "value": string }; Returns: string
                            },
@@ -758,8 +780,14 @@ isOneToOne: false
 "challenge_generation_access":
 { Args: { "resource_id": string }; Returns: string
                            },
+"complete_learner_grading":
+{ Args: { "p_account_id": string,"p_grading_run_id": string,"p_payload": Json,"p_submission_id": string }; Returns: Json
+                           },
 "create_learner_submission":
 { Args: { "p_challenge_id": string,"p_idempotency_key": string,"p_payload": Json }; Returns: Json
+                           },
+"fail_learner_grading":
+{ Args: { "p_account_id": string,"p_failure_code": string,"p_grading_run_id": string,"p_submission_id": string }; Returns: Json
                            },
 "list_learner_challenges":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_category"?: Database["public"]['Enums']["flaw_category"],"p_difficulty"?: Database["public"]['Enums']["challenge_difficulty"],"p_language"?: Database["public"]['Enums']["challenge_language"],"p_limit": number }; Returns: Json
@@ -775,12 +803,17 @@ isOneToOne: false
                            },
 "llm_grading_context":
 { Args: { "account_id": string,"submission_id": string }; Returns: Json
+                           } |
+{ Args: { "account_id": string,"grading_run_id": string,"submission_id": string }; Returns: Json
                            },
 "read_learner_challenge":
 { Args: { "p_challenge_id": string }; Returns: Json
                            },
 "read_learner_submission":
 { Args: { "p_submission_id": string }; Returns: Json
+                           },
+"start_learner_grading":
+{ Args: { "p_account_id": string,"p_idempotency_key": string,"p_intent": string,"p_submission_id": string }; Returns: Json
                            }
           }
           Enums: {

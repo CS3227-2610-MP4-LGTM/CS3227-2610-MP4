@@ -808,7 +808,7 @@ the limits above remain unchanged.
   environment configuration accurately, including live hosted dev and fake
   local/CI.
 - **Depends on:** T-03, T-04, T-05, T-11.
-- **Status:** todo
+- **Status:** blocked
 
 ## Author
 
