@@ -101,9 +101,15 @@ export const longCheckoutLine = `// ${"checkout ".repeat(40).trimEnd()}`;
 
 export async function createLearnerBrowseFixture({
   scope, pageSize = 21, cleanupFeatureSubmissions = scope === "submission",
-}: { scope: "integration" | "e2e" | "submission"; pageSize?: number; cleanupFeatureSubmissions?: boolean }) {
+}: {
+  scope: "integration" | "e2e" | "submission" | "author" | "author-e2e";
+  pageSize?: number;
+  cleanupFeatureSubmissions?: boolean;
+}) {
   const h = localHarness();
-  const prefix = { integration: "49a00000", e2e: "49b00000", submission: "50a00000" }[scope];
+  const prefix = {
+    integration: "49a00000", e2e: "49b00000", submission: "50a00000", author: "81a00000", "author-e2e": "81b00000",
+  }[scope];
   const id = (n: number) => `${prefix}-0000-4000-8000-${String(n).padStart(12, "0")}`;
   const practice = Array.from({ length: pageSize }, (_, index) => id(1000 + index));
   const ids = {
