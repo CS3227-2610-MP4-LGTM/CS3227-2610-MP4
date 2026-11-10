@@ -6,7 +6,7 @@ import { useReportWorkspaceAccessFailure } from "@/components/account/workspace-
 import { useWorkspaceNavigation, WorkspaceLink } from "@/components/account/workspace-navigation";
 import { CodeDiffView } from "@/components/code-diff";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
-import type { ChallengeView } from "@/lib/learner/challenges";
+import { catalogueHref, type ChallengeView } from "@/lib/learner/challenges";
 import {
   commentError, commentLimit, commentTextLimit, historyHref, submissionErrorMessages, submissionOutcomeMessages,
 } from "@/lib/learner/submissions";
@@ -20,12 +20,16 @@ type SubmitState =
   | { kind: "uncertain"; request: FrozenReview; inProgress: boolean };
 type Rejection = Extract<SubmissionOutcome, { status: "rejected" }>;
 
-export function ReviewDraft({ accountId, challenge, openSubmission }: {
+export function ReviewDraft({ accountId, challenge, openSubmission, previousSubmissionId, initialComments }: {
   accountId?: string;
   challenge: ChallengeView;
   openSubmission: (href: string) => void;
+  previousSubmissionId?: string;
+  initialComments?: readonly { line: number; body: string }[];
 }) {
-  const [comments, setComments] = useState<Draft[]>([]);
+  const [baseline] = useState<Draft[]>(() =>
+    initialComments?.map(({ line, body }, id) => ({ id, line, body })) ?? []);
+  const [comments, setComments] = useState(baseline);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [state, setState] = useState<SubmitState>({ kind: "ready" });
   const [rejection, setRejection] = useState<Rejection>();
@@ -37,20 +41,24 @@ export function ReviewDraft({ accountId, challenge, openSubmission }: {
   const lineActions = useRef(new Map<number, HTMLButtonElement>());
   const editActions = useRef(new Map<number, HTMLButtonElement>());
   const returnFocus = useRef<{ line: number; commentId?: number }>(null);
-  const nextId = useRef(0);
+  const nextId = useRef(baseline.length);
   const activeRequest = useRef<FrozenReview | null>(null);
   const reportAccessFailure = useReportWorkspaceAccessFailure();
   const { clearProtection, protectDraft } = useWorkspaceNavigation();
-  const dirty = state.kind !== "submitted" && (comments.length > 0 || Boolean(editor?.body));
+  const dirty = state.kind !== "submitted" && (comments.length > 0 || Boolean(editor?.body) || baseline.length > 0);
 
   const discard = useCallback(() => {
     activeRequest.current = null;
-    setComments([]);
+    nextId.current = baseline.length;
+    returnFocus.current = null;
+    focusSubmit.current = false;
+    // A cached route can show this draft again. Its guard reconnects on re-entry.
+    setComments(baseline);
     setEditor(null);
     setRejection(undefined);
     setAnnouncement("");
     setState({ kind: "ready" });
-  }, []);
+  }, [baseline]);
 
   useLayoutEffect(() => {
     if (dirty) return protectDraft(discard);
@@ -223,6 +231,8 @@ export function ReviewDraft({ accountId, challenge, openSubmission }: {
         <p key={field} className="field-error" role="alert">{messages.join(" ")}</p>,
       )}
       {rejection.recovery === "history" && <WorkspaceLink href={historyHref}>Review history</WorkspaceLink>}
+      {previousSubmissionId && rejection.recovery === "challenges" &&
+        <WorkspaceLink href={catalogueHref}>Back to challenges</WorkspaceLink>}
     </div>}
     {(state.kind === "ready" || confirming) &&
       <button type="button" className="button primary" ref={submitAction} disabled={Boolean(rejection?.recovery) || confirming}
@@ -240,7 +250,8 @@ export function ReviewDraft({ accountId, challenge, openSubmission }: {
           void submit({
             key: crypto.randomUUID(),
             accountId,
-            payload: { revisionId: challenge.revisionId, comments: comments.map(({ line, body }) => ({ line, body })) },
+            payload: { revisionId: challenge.revisionId, ...(previousSubmissionId && { previousSubmissionId }),
+              comments: comments.map(({ line, body }) => ({ line, body })) },
           }, false);
         }}>{state.kind === "sending" ? <span role="status">Submitting review…</span> : "Confirm submission"}</button>
       </div>

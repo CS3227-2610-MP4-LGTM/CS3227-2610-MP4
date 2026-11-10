@@ -4,12 +4,12 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { AccessScreen } from "@/components/account/access-screen";
 import { WorkspacePage } from "@/components/account/workspace-page";
-import { GradingResult } from "@/components/learner/grading-result";
+import { GradingResultRoute } from "@/components/learner/grading-result";
 import { catalogueHref } from "@/lib/learner/challenges";
 import { historyHref } from "@/lib/learner/submissions";
 import { signOutAction } from "@/server/auth/actions";
 import { signInNotice } from "@/server/auth/session-notice";
-import { readLearnerSubmissionWithAccess } from "@/server/learner/submissions";
+import { readLearnerResultWithRetry } from "@/server/learner/submissions";
 
 export const instant = false;
 
@@ -22,7 +22,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 async function RequestedReview({ params }: { params: Promise<{ id: string }> }) {
   await connection();
   const { id } = await params;
-  const result = await readLearnerSubmissionWithAccess(id);
+  const result = await readLearnerResultWithRetry(id);
   if (result.status === "unauthenticated") redirect(`/sign-in?notice=${await signInNotice()}`);
   if (result.status === "account_unavailable" || result.status === "account_service_unavailable") {
     return <main className="account-shell">
@@ -42,8 +42,10 @@ async function RequestedReview({ params }: { params: Promise<{ id: string }> }) 
         <Link href={historyHref}>Review history</Link>
       </section>;
     }
-    return <GradingResult key={id} submissionId={id} accountId={accountId}
+    return <GradingResultRoute key={id} submissionId={id} accountId={accountId}
       initialSubmission={result.status === "ok" ? result.submission : undefined}
+      published={result.status === "ok" ? result.retry?.published : undefined}
+      secondSubmissionId={result.status === "ok" ? result.retry?.secondSubmissionId : undefined}
       initialReadFailed={result.status === "unavailable"} />;
   }}</WorkspacePage>;
 }

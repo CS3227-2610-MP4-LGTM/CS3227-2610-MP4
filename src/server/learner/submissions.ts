@@ -4,6 +4,7 @@ import { isWorkspaceAccessFailure, type WorkspaceAccessFailure } from "@/lib/aut
 import { challengeCardSchema, challengeIdSchema } from "@/lib/learner/challenge-schema";
 import { genericReadFailure, type ReadFailure } from "@/lib/learner/challenges";
 import { gradingViewSchema, learnerFlagSchema } from "@/lib/learner/grading";
+import { learnerHintSchema, type RetryEligibility } from "@/lib/learner/feedback";
 import {
   commentLimit, pendingGrade, reviewBodyLimit, submissionFieldsSchema, submissionInputSchema,
   submissionOutcomeMessages, submissionViewSchema, workspaceAccountHeader, type SubmissionView,
@@ -20,6 +21,12 @@ const resultReadSchema = z.union([
   }) }),
   z.strictObject({ status: z.enum(["forbidden", "not_found"]) }),
 ]);
+const readDenial = z.strictObject({ status: z.enum(["forbidden", "not_found"]) });
+const retryEligibilitySchema = z.union([
+  z.strictObject({ status: z.literal("ok"), published: z.boolean(), secondSubmissionId: challengeIdSchema.nullable() }),
+  readDenial,
+]);
+const hintReadSchema = z.union([z.strictObject({ status: z.literal("ok"), hint: learnerHintSchema }), readDenial]);
 const createResultSchema = z.union([
   successSchema,
   z.strictObject({ status: z.literal("invalid"), invalidCommentIndex: z.number().int().min(0).max(commentLimit - 1).optional() }),
@@ -88,6 +95,52 @@ export async function readLearnerSubmissionWithAccess(
 export async function readLearnerSubmission(id: string) {
   const result = await readLearnerSubmissionWithAccess(id);
   return isWorkspaceAccessFailure(result) ? genericReadFailure(result) : result;
+}
+
+export async function readLearnerResultWithRetry(id: string): Promise<
+  (Success & { retry?: RetryEligibility }) | ReadFailure | WorkspaceAccessFailure
+> {
+  const caller = await submissionCaller();
+  if (caller.status !== "ok") return caller;
+  const source = await readLearnerSubmissionWithAccess(id, caller);
+  if (source.status !== "ok") return source;
+  try {
+    const { data, error } = await caller.client.rpc("read_learner_retry_eligibility", { p_submission_id: source.submission.id });
+    if (error) return source;
+    const eligibility = retryEligibilitySchema.parse(data);
+    if (eligibility.status === "forbidden") {
+      const access = await afterDatabaseDenial(caller.client);
+      return access.status === "unavailable" ? eligibility : access;
+    }
+    if (eligibility.status !== "ok") return eligibility;
+    const { published, secondSubmissionId } = eligibility;
+    return { ...source, retry: { published, secondSubmissionId } };
+  } catch {
+    return source;
+  }
+}
+
+export async function readLearnerHint(
+  id: string, hintId: string, caller: Extract<Awaited<ReturnType<typeof submissionCaller>>, { status: "ok" }>,
+) {
+  const submissionId = challengeIdSchema.safeParse(id);
+  const hint = challengeIdSchema.safeParse(hintId);
+  if (!submissionId.success || !hint.success) return { status: "invalid" } as const;
+  try {
+    const { data, error } = await caller.client.rpc("read_learner_submission_hint", {
+      p_submission_id: submissionId.data, p_hint_id: hint.data,
+    });
+    if (error) return { status: "unavailable" } as const;
+    const result = hintReadSchema.parse(data);
+    if (result.status === "forbidden") {
+      const access = await afterDatabaseDenial(caller.client);
+      return access.status === "unavailable" ? result : access;
+    }
+    if (result.status === "ok" && result.hint.hintId !== hint.data.toLowerCase()) return { status: "unavailable" } as const;
+    return result;
+  } catch {
+    return { status: "unavailable" } as const;
+  }
 }
 
 export async function readRequestBody(request: Request, byteLimit = reviewBodyLimit): Promise<{ status: "ok"; value: unknown } | { status: "too_large" | "invalid" }> {
@@ -190,7 +243,9 @@ export async function createLearnerSubmission(id: string, request: Request): Pro
     }
     if (result.status !== "ok") return { status: result.status };
     const submission = buildView(result.submission, caller.account.id);
-    if (submission.attemptNumber !== 1 || submission.challengeId !== challengeId.data.toLowerCase()
+    const previous = input.data.previousSubmissionId?.toLowerCase() ?? null;
+    if (submission.attemptNumber !== (previous === null ? 1 : 2) || submission.previousSubmissionId !== previous
+      || submission.id === previous || submission.challengeId !== challengeId.data.toLowerCase()
       || submission.revisionId !== input.data.revisionId.toLowerCase()) return { status: "uncertain" };
     return { status: "ok", submission };
   } catch {

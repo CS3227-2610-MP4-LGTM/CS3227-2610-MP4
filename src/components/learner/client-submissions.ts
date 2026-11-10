@@ -30,8 +30,11 @@ export async function sendReview(challengeId: string, request: FrozenReview, che
     });
     const json = await response.json();
     if (response.status === 201) {
-      const { id, attemptNumber, challengeId: returnedChallenge, revisionId, learner, comments } = submissionSuccessSchema.parse(json).data;
-      if (attemptNumber === 1 && returnedChallenge.toLowerCase() === challengeId.toLowerCase()
+      const { id, attemptNumber, previousSubmissionId, challengeId: returnedChallenge, revisionId, learner, comments } =
+        submissionSuccessSchema.parse(json).data;
+      const previous = request.payload.previousSubmissionId?.toLowerCase() ?? null;
+      if (attemptNumber === (previous === null ? 1 : 2) && previousSubmissionId === previous
+        && id !== previous && returnedChallenge.toLowerCase() === challengeId.toLowerCase()
         && revisionId.toLowerCase() === request.payload.revisionId.toLowerCase()
         && (request.accountId === undefined || learner.id.toLowerCase() === request.accountId.toLowerCase())
         && comments.length === request.payload.comments.length

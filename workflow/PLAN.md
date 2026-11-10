@@ -999,7 +999,7 @@ the limits above remain unchanged.
   and keep the documented hosted SoC and local/CI fake-provider distinction.
 - **Depends on:** T-12 and T-11, with T-10 and the auth/data foundations
   through those tasks.
-- **Status:** todo
+- **Status:** done
 
 ## Author
 

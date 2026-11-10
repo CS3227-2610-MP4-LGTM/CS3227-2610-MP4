@@ -69,7 +69,7 @@ input[aria-invalid], select[aria-invalid] { border-color: #a12d26; }
 .challenge-results > * + * { margin-top: 1rem; }
 .challenge-list { display: grid; gap: 1rem; list-style: none; padding: 0; }
 .challenge-card { background: white; border: 1px solid var(--border); border-radius: .75rem; padding: 1rem; }
-.challenge-card h3, .challenge-workspace h1 { overflow-wrap: anywhere; }
+.challenge-card h3, .challenge-workspace h1, .challenge-workspace h2 { overflow-wrap: anywhere; }
 .challenge-card h3 { font-size: 1.15rem; font-weight: 700; }
 .challenge-card a, .challenge-workspace a { text-decoration: underline; }
 .challenge-metadata { display: grid; gap: .5rem; margin: .75rem 0; }

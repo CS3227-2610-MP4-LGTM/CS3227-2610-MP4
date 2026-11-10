@@ -29,6 +29,7 @@ const commentBodySchema = z.string().transform(value => value.trim()).superRefin
 });
 export const submissionInputSchema = z.strictObject({
   revisionId: challengeIdSchema,
+  previousSubmissionId: challengeIdSchema.optional(),
   comments: z.array(z.strictObject({ line: lineSchema, body: commentBodySchema })).max(commentLimit),
 }).refine(({ comments }) => comments.every((comment, index) =>
   index === 0 || comment.line >= comments[index - 1].line,

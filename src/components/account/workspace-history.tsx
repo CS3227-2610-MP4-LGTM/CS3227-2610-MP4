@@ -1,6 +1,7 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 
 const positionKey = "lgtmWorkspaceHistoryPosition";
 let tracking = false;
@@ -18,14 +19,41 @@ function workspaceHistoryPosition(state: unknown = window.history.state): number
   return typeof position === "number" ? position : undefined;
 }
 
-export function WorkspaceHistoryTracker() {
+function isRetryEntry() {
+  return /^\/learner\/history\/[^/]+\/retry\/?$/.test(window.location.pathname);
+}
+
+export function WorkspaceHistoryTracker({ children }: { children: ReactNode }) {
+  const [loadingRetry, setLoadingRetry] = useState(false);
+
   useLayoutEffect(() => {
     if (tracking) return;
     tracking = true;
 
-    // Install before the router's traversal listener. The callback is set
-    // only when a review actually needs protection.
-    window.addEventListener("popstate", event => interceptPopState?.(event), true);
+    const showRetryLoading = () => flushSync(() => setLoadingRetry(true));
+    const reloadRetry = () => {
+      showRetryLoading();
+      window.location.reload();
+    };
+
+    // Let the draft guard finish first. A retry entry must then go through
+    // the server check again before the router can restore its cached editor.
+    window.addEventListener("popstate", event => {
+      interceptPopState?.(event);
+      if (event.cancelBubble || !isRetryEntry()) return;
+      event.stopImmediatePropagation();
+      reloadRetry();
+    }, true);
+
+    // Store the loading view if the browser freezes a retry document.
+    window.addEventListener("pagehide", event => {
+      if (event.persisted && isRetryEntry()) showRetryLoading();
+    });
+    window.addEventListener("pageshow", event => {
+      if (!event.persisted) return;
+      if (isRetryEntry()) reloadRetry();
+      else setLoadingRetry(false);
+    });
 
     const history = window.history;
     const push = history.pushState.bind(history);
@@ -41,7 +69,9 @@ export function WorkspaceHistoryTracker() {
       replace({ ...state, [positionKey]: workspaceHistoryPosition() ?? 0 }, unused, url);
     };
   }, []);
-  return null;
+  return loadingRetry
+    ? <main className="loading-shell" role="status">Loading retry…</main>
+    : children;
 }
 
 export function interceptWorkspaceTraversal(onDeparture: (leave: () => void) => void) {

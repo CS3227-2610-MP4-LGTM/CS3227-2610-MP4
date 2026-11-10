@@ -812,8 +812,14 @@ isOneToOne: false
 "read_learner_challenge":
 { Args: { "p_challenge_id": string }; Returns: Json
                            },
+"read_learner_retry_eligibility":
+{ Args: { "p_submission_id": string }; Returns: Json
+                           },
 "read_learner_submission":
 { Args: { "p_submission_id": string }; Returns: Json
+                           },
+"read_learner_submission_hint":
+{ Args: { "p_hint_id": string,"p_submission_id": string }; Returns: Json
                            },
 "read_ta_learner":
 { Args: { "p_learner_id": string }; Returns: Json
