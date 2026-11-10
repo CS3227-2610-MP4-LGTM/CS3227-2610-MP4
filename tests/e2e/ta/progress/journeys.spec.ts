@@ -22,23 +22,41 @@ async function tabTo(page: Page, target: Locator) {
   await expect(target).toBeFocused();
 }
 test.beforeEach(async ({ page, progressFixture }) => { await login(page, progressFixture.actors.taA); });
-test("TA-04.1 TA-05.7 learner navigation and supporting submission round trip preserve learner context", async ({ page }) => {
+test("TA-04.1 TA-04.3 TA-04.4 TA-05.7 learner navigation and supporting submission round trip preserve learner context", async ({ page }) => {
+  const summaryPath = `/api/v1/ta/learners/${id(11)}/summary`;
+  const generationPath = `/api/v1/ta/learners/${id(11)}/summaries`;
+  const generations: string[] = [];
+  page.on("request", request => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === generationPath) generations.push(request.url());
+  });
+  const summaryRead = () => page.waitForResponse(response => response.request().method() === "GET" && new URL(response.url()).pathname === summaryPath);
   await page.getByRole("navigation").getByRole("link", { name: "Learners", exact: true }).click();
   await expect(page).toHaveURL(root);
   for (const name of ["Submissions", "Flagged submissions", "Learners"]) await expect(page.getByRole("navigation").getByRole("link", { name, exact: true })).toBeVisible();
+  const initialRead = summaryRead();
   await page.goto(detail);
+  expect((await initialRead).status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Learner performance", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Performance summary" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Generate|Regenerate/ })).toHaveCount(0);
+  const summary = page.getByRole("region", { name: "Performance summary" });
+  const generate = summary.getByRole("button", { name: /^(Generate|Regenerate) summary$/ });
+  await expect(summary).toBeVisible();
+  await expect(generate).toHaveCount(1);
+  await expect(generate).toBeVisible();
+  expect(generations).toEqual([]);
   await page.getByRole("link", { name: "View submissions", exact: true }).first().click();
   await expect(page).toHaveURL(`/ta/submissions?learnerId=${id(11)}`);
   await page.getByRole("link", { name: "View submission", exact: true }).first().click();
   await expect(page.getByRole("region", { name: "Original assessment" })).toContainText("25 / 100");
+  const returnedRead = summaryRead();
   await page.getByRole("link", { name: "Back to learner", exact: true }).click();
   await expect(page).toHaveURL(detail);
+  expect((await returnedRead).status()).toBe(200);
+  await expect(generate).toHaveCount(1);
+  await expect(generate).toBeVisible();
   await page.getByRole("link", { name: "Back to learners", exact: true }).click(); await expect(page).toHaveURL(root);
   await expect(page.getByRole("link", { name: "View learner", exact: true }).first()).toBeVisible();
   expect(await page.getByRole("main").innerText()).not.toMatch(/@example\.test|email/i);
+  expect(generations).toEqual([]);
 });
 test("TA-04.2 learner cursor survives reload/back; invalid pages recover explicitly", async ({ page }) => {
   const response = await page.request.get("/api/v1/ta/learners?limit=1"); expect(response.status()).toBe(200);
