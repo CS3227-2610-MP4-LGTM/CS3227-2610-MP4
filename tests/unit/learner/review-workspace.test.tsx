@@ -103,8 +103,9 @@ function write(body: string, editor = screen.getByRole("textbox", { name: /comme
 }
 
 function addComment(body = comment, line = 3) {
-  write(body, openEditor(line));
-  click("Add comment");
+  const editor = openEditor(line);
+  write(body, editor);
+  click("Add comment", editor.closest("form")!);
 }
 
 function confirmReview() {

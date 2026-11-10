@@ -144,8 +144,12 @@ test("SYS-09.3 TA-01.7 denies prefetched/reloaded evidence after sign-out and sw
 });
 test("SYS-17.1 SYS-17.3 TA-01.4 supports keyboard filters/detail and a labelled diff at phone width", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 }); await page.goto(root);
+  const heading = page.getByRole("heading", { name: "Submissions", exact: true });
+  await expect(heading).toBeFocused();
   await tabTo(page, page.getByLabel("Learner ID")); await page.keyboard.type(id(11));
   await tabTo(page, action(page, "Apply filters")); await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/ta/submissions\\?learnerId=${id(11)}$`));
+  await expect(heading).toBeFocused();
   const link = page.getByRole("link", { name: "View submission" }).first(); await tabTo(page, link); await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Submission", exact: true })).toBeFocused();
   const source = page.getByRole("region", { name: "Source" }); await tabTo(page, source);
