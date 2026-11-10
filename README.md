@@ -60,6 +60,10 @@ Open **Learners** and choose **View learner** for completed first-attempt catego
 progress and rule-based recommendations. **View submissions** opens supporting
 attempts, which offer **Back to learner**. See
 [TA learner progress and recommendations](docs/DeveloperGuide.md#ta-learner-progress-and-recommendations).
+The **Performance summary** region reads retained AI advice without generating
+automatically. Choose **Generate summary** or **Regenerate summary** explicitly,
+then use its supporting-submission links to check the advice. See
+[TA performance summaries](docs/DeveloperGuide.md#ta-performance-summaries).
 
 Hosted development uses the live SoC provider. Local development and CI use the
 fake provider. See [Provider configuration](docs/DeveloperGuide.md#provider-configuration).

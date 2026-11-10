@@ -11,5 +11,5 @@ async function RequestedLearner({ params }: { params: Promise<{ learnerId: strin
   await connection();
   const { learnerId } = await params;
   const learner = await readLearner(learnerId);
-  return <WorkspacePage role="ta">{accountId => <LearnersRoute key={`${accountId}:${learnerId}`} learnerId={learnerId} initialLearner={learner} />}</WorkspacePage>;
+  return <WorkspacePage role="ta">{accountId => <LearnersRoute key={`${accountId}:${learnerId}`} learnerId={learnerId} accountId={accountId} initialLearner={learner} />}</WorkspacePage>;
 }

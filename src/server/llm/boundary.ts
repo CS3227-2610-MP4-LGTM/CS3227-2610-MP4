@@ -7,6 +7,7 @@ import { assembleCandidate, categories, validateInput, type InputEnvelope, type 
 import { type RunnerOptions, type RunResult, createOperationRunner } from "./execution";
 import { errorCode, fail } from "./errors";
 import type { RetainedFlaw } from "./safety";
+import { captureSummary } from "./summary-snapshot";
 const requestSchema = z.strictObject({
     operation: z.enum([
         "inject_flaws", "generate_hints", "assess_review", "summarize_learner"
@@ -24,7 +25,6 @@ const selectionSchema = z.strictObject({
 });
 type Selection = z.infer<typeof selectionSchema>;
 type Client = SupabaseClient<Database>;
-type Row<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"];
 const privateFlawSchema = z.object({
     id: z.uuid(),
     revision_id: z.uuid(),
@@ -260,93 +260,6 @@ export function createLlmBoundary(options: RunnerOptions & { client: Client }) {
             })
         };
     }
-    async function summaryCapture(learnerId: string): Promise<Capture> {
-        const learner = await checked(client.from("profiles").select("id,role").eq("id", learnerId).maybeSingle());
-        if (learner.role !== "learner")
-            fail("FORBIDDEN");
-        // Progress covers all completed first attempts; page through history rather
-        // than letting the API's row limit silently truncate it.
-        const history: Row<"submissions">[] = [];
-        for (let offset = 0;; offset += 100) {
-            const page = await checked(client.from("submissions").select("*").eq("learner_id", learnerId).order("submitted_at", {
-                ascending: false
-            }).order("id").range(offset, offset + 99));
-            history.push(...page);
-            if (page.length < 100)
-                break;
-        }
-        const progress = categories.map(category => ({
-            category,
-            totalFlaws: 0,
-            identifiedFlaws: 0,
-            identificationRate: null as number | null,
-            completedFirstAttempts: 0
-        }));
-        const selected: unknown[] = [];
-        for (const submission of history) {
-            const grades = await checked(client.from("ai_grades").select("id,score").eq("submission_id", submission.id));
-            if (!grades.length)
-                continue;
-            if (submission.attempt_number !== 1 && selected.length >= 20)
-                continue;
-            const grade = grades[0];
-            const flaws = await checked(client.from("revision_flaws").select("id,category").eq("revision_id", submission.revision_id).order("start_line").order("id"));
-            const assessments = await checked(client.from("ai_grade_assessments").select("flaw_id,comment_id").eq("grade_id", grade.id));
-            const counts = categories.map(category => ({
-                category,
-                totalFlaws: flaws.filter(f => f.category === category).length,
-                identifiedFlaws: flaws.filter(f => f.category === category && assessments.some(a => a.flaw_id === f.id && a.comment_id !== null)).length
-            })).filter(c => c.totalFlaws > 0);
-            if (submission.attempt_number === 1)
-                for (const c of counts) {
-                    const target = progress.find(p => p.category === c.category)!;
-                    target.totalFlaws += c.totalFlaws;
-                    target.identifiedFlaws += c.identifiedFlaws;
-                    target.completedFirstAttempts++;
-                }
-            if (selected.length >= 20)
-                continue;
-            const overrides = await checked(client.from("grade_overrides").select("score,audit_order").eq("submission_id", submission.id).order("audit_order", {
-                ascending: false
-            }).limit(1));
-            const comments = await checked(client.from("submission_comments").select("id,body").eq("submission_id", submission.id).order("ordinal"));
-            const feedback = await checked(client.from("ai_grade_comment_results").select("comment_id,feedback").eq("grade_id", grade.id));
-            selected.push({
-                submissionId: submission.id,
-                revisionId: submission.revision_id,
-                attemptNumber: submission.attempt_number,
-                submittedAt: submission.submitted_at,
-                originalScore: grade.score,
-                effectiveScore: overrides[0]?.score ?? grade.score,
-                categories: counts,
-                comments: comments.map(c => ({
-                    commentId: c.id,
-                    body: c.body,
-                    feedback: feedback.find(f => f.comment_id === c.id)?.feedback ?? null
-                }))
-            });
-        }
-        for (const c of progress)
-            c.identificationRate = c.totalFlaws ? Math.round(c.identifiedFlaws / c.totalFlaws * 10000) / 10000 : null;
-        if (!selected.length)
-            fail("INVALID_STATE");
-        const snapshot = validateInput({
-            schemaVersion: 1,
-            operation: "summarize_learner",
-            payload: {
-                submissions: selected,
-                progress: {
-                    learnerId,
-                    categories: progress
-                }
-            }
-        });
-        return {
-            snapshot,
-            retainedFlaws: [],
-            fingerprint: fingerprint(snapshot)
-        };
-    }
     return {
         async execute(value: unknown, serverSelection?: unknown): Promise<RunResult> {
             try {
@@ -358,7 +271,7 @@ export function createLlmBoundary(options: RunnerOptions & { client: Client }) {
                 const required = request.operation === "assess_review" ? "learner" : request.operation === "summarize_learner" ? "ta" : "author";
                 if (caller.role !== required)
                     fail("FORBIDDEN");
-                const capture = () => request.operation === "assess_review" ? assessmentCapture(caller.id, request, selected?.data) : request.operation === "summarize_learner" ? summaryCapture(request.resourceId) : authorCapture(caller.id, request);
+                const capture = () => request.operation === "assess_review" ? assessmentCapture(caller.id, request, selected?.data) : request.operation === "summarize_learner" ? captureSummary(client, request.resourceId) : authorCapture(caller.id, request);
                 const initial = await capture();
                 const result = await runner.run({
                     accountId: caller.id,

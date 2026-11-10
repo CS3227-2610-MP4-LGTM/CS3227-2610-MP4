@@ -153,6 +153,20 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"ta_summary_requests": {
+                  Row: {
+                    "account_id": string,"expires_at": string,"failure_code": string | null,"idempotency_key": string,"learner_id": string,"state": string,"summary_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id": string,"expires_at": string,"failure_code"?: string | null,"idempotency_key": string,"learner_id": string,"state": string,"summary_id"?: string | null
+                  }
+                  Update: {
+                    "account_id"?: string,"expires_at"?: string,"failure_code"?: string | null,"idempotency_key"?: string,"learner_id"?: string,"state"?: string,"summary_id"?: string | null
+                  }
+                  Relationships: [
+
+                  ]
                 }
           }
           Views: {
@@ -808,6 +822,9 @@ isOneToOne: false
 { Args: { "account_id": string,"submission_id": string }; Returns: Json
                            } |
 { Args: { "account_id": string,"grading_run_id": string,"submission_id": string }; Returns: Json
+                           },
+"persist_ta_summary":
+{ Args: { "p_input": Json }; Returns: Json
                            },
 "read_learner_challenge":
 { Args: { "p_challenge_id": string }; Returns: Json
