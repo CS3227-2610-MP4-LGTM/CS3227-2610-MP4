@@ -659,6 +659,157 @@ the limits above remain unchanged.
 - **Depends on:** T-10 (with T-02 and T-03 through T-10).
 - **Status:** done
 
+### T-12: Grade a submitted review
+
+- **Issue:** #51
+- **Covers:** LRN-05.1–05.7, including explicit “Retry grading” on the same
+  pinned submission, exact failure messages, observation of uncertain outcomes,
+  and no automatic retry of failed grading. For AI input-limit failures, the
+  page omits “Retry grading” and the server rejects retry. Cover SYS-02,
+  SYS-03, SYS-04, SYS-08–SYS-12 (Submission grading named use and historical
+  access), SYS-17, SYS-18.2 and SYS-19. Preserve the T-04/T-05 SEC-01–SEC-06
+  controls for this operation.
+  Under LRN-05.2, SYS-10.3 and SEC-01, accept an assessment only when
+  both the pre-dispatch capture and the capture after a successful response
+  find the exact running run created by the start function for this
+  submission. Each capture returns `INVALID_STATE` if no run is bound,
+  the bound run is absent, a different run is active, or the bound run
+  is no longer running. Completion independently rechecks eligibility.
+  Record SYS-19.4 live smoke and SYS-13.3/SYS-15 hosted dev settings evidence
+  at human close-out.
+- **Route:** high
+- **Reads:** `workflow/specs/stories/LRN-05-grade-a-submitted-review.md`;
+  `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Learner, §4 Product
+  decisions → Hints and attempts, Grading and Moderation flags, and §7
+  Non-functional requirements; `workflow/specs/TECHNICAL-SPEC.md` SYS-02 —
+  Untrusted input and submitted code, SYS-03 — LLM boundary, SYS-04 — Shared
+  building blocks, SYS-08 — Authorization at the data boundary, SYS-09 —
+  Authentication with Cache Components, SYS-10 — Database enforcement and
+  privileged access (Submission grading), SYS-11 — Authentication and
+  authorization failures, SYS-12 — Record access and audit, SYS-13 —
+  Environment isolation (hosted selection), SYS-15 — Configuration and hosted
+  Auth (AI settings), SYS-17 — Simple, accessible UI, SYS-18 — Resource use,
+  and SYS-19 — Test strategy;
+  `workflow/specs/AI-SECURITY-SPEC.md` SEC-01 — Authorize and minimize model
+  access, SEC-02 — Validate model output before use, SEC-03 — Protect learner-facing
+  hints and feedback (assessment feedback), SEC-04 — Bound SoC requests and usage,
+  SEC-05 — Reserve and settle usage atomically, and SEC-06 — Contain failures
+  and keep diagnostics safe (all scoped to assessment); `workflow/specs/INTEGRATION-SPEC.md`
+  §1 Scope and contract conventions, §2 Domain model and publication lifecycle →
+  SYS-12 decision: immutable published revisions and Code, proposals and locations,
+  §3 API contracts → Transport, concurrency and errors, Shared response types
+  and Learner surface, §4 Server-only LLM contracts → Matched-comment
+  assessment: `operation: assess_review`, §5 Deterministic grading, moderation
+  and progress → Matching and score and Flags, §6 Shared deterministic seed
+  fixtures → C1: Checkout totals, C2: Safe quotient, Submissions and expected
+  outcomes and Derived fixture scenarios, and §7 Integration verification
+  (assessment, access and pinned projection).
+- **Tests:** unit (`tests/unit/learner/grading.test.ts`,
+  `tests/unit/learner/grading-result.test.tsx`) for deterministic distance,
+  tie order, duplicate/unmatched classification, credit aggregation, empty/no
+  matches, penalty, rounding, pass/flag thresholds, strict transport and safe
+  DTOs, account and Origin checks, and result state/error rendering. Use
+  `tests/unit/server/llm/soc-smoke-multi-match.test.ts` (new) with simulated
+  transport for multi-match labels, duplicate-pair rejection and retry
+  reporting. Use `tests/integration/llm/assess-review-bound-run.test.ts` (new)
+  for successful capture of the bound run, pre-dispatch rejection without
+  reservation or provider work, and rejection of a successful provider
+  response if the run stops running or another run becomes active before
+  recapture. Cover missing bindings, absent runs, runs for other
+  submissions, and pending or terminal runs. At G2, use a separate
+  `test(llm)` commit for the setup-only edits to the approved assessment
+  success and forged-pair cases in `tests/integration/llm/boundary.test.ts`.
+  Create a running run and bind its ID in each setup. Preserve both
+  assertions and all other approved tests. Local Supabase
+  (`tests/integration/domain/learner-grading.test.ts`, with
+  `tests/integration/domain/grading-run-history.test.ts` as regression) covers
+  owner/role/anonymous and RPC grants, private-field and diagnostic isolation,
+  replay and concurrent requests, active-run and stale-write rejection,
+  atomic grade and child writes, no-match provider bypass, and provider failure
+  without a grade or flags. Cover the 60-second database deadline, late
+  completion rejection, read-only timeout projection, atomic timeout settlement
+  and restart, terminal-field immutability, and stored pending rows blocking
+  a new run. Verify explicit retry increments `run_number` on the same
+  submission and that the server rejects retry after an input-limit failure.
+  Assert one assessment per pinned flaw for a completed first attempt with
+  both matches and misses, including null comment
+  ID for misses. Cover existing-grade short-circuit before context read,
+  historical access, and completed-run history. Production-build e2e
+  (`tests/e2e/learner/grading.spec.ts`) covers pending through terminal
+  observation, reopen/read recovery, explicit retry and input-limit suppression,
+  and the single original display, with the fake provider. The orchestrator
+  runs database-backed checks on local Supabase using T-11's harness and the
+  Node version from `.node-version`.
+- **Config paths:** `src/server/llm/boundary.ts`,
+  `tests/integration/llm/boundary.test.ts` (only the two G2 setup edits above),
+  `tests/integration/llm/assess-review-bound-run.test.ts` (new),
+  `tests/unit/server/llm/soc-smoke-multi-match.test.ts` (new),
+  `workflow/scripts/soc-smoke.ts`,
+  `workflow/scripts/fixtures/soc-smoke/assess-review-multi-match.json` (new).
+  Keep the existing E6 cases in
+  `workflow/scripts/fixtures/soc-smoke/assess-review-e6.json` intact and usable.
+- **Constraints:** T-12 owns the `assess_review` boundary change. The start
+  function creates the running run before dispatch and passes its ID to
+  `createLlmBoundary` through the server-only selection argument. The run ID
+  stays out of the public request and model payload. Both captures verify
+  that exact run for the verified Learner's submission, with no completed
+  grade. Keep the change scoped to `assess_review`.
+
+  Reuse the SYS-10.3 `public.llm_grading_context` read only after verified
+  Learner ownership and checking for an existing completed grade. Project only
+  named, needed fields from private flaw data. Never pass a whole flaw row
+  through to a DTO. Select matches deterministically from the pinned revision,
+  send only those pairs to `assess_review`, and persist its validated credits
+  and safe feedback. Compute points and rule flags from the contract.
+
+  Add typed admin-only start, complete and fail functions for the Submission
+  grading named use. Use database timestamps. Each write locks the submission
+  and rechecks the stored Learner role and ownership, grade absence and active
+  run identity or absence as appropriate for the step. Atomically complete
+  the active run, original grade, all children and rule flags. Use replay keys
+  and compare-and-set transitions to reject stale or duplicate writes. Release
+  database locks before provider work. New runs start in `running` and
+  can transition once to `failed` or `completed`. Freeze terminal state,
+  `finished_at` and `failure_code`. Only absence of a run yields the
+  pending result state. Never create or transition stored `pending` rows.
+  Treat an existing `pending` row as active and fail closed.
+
+  A running run expires at `created_at + 60 seconds` on the database clock.
+  Reject completion once the deadline is reached. The reader reports an
+  expired running run as failed with `AI_TIMEOUT` without writing, so polling
+  stops. On the next grade POST, the start function atomically records the
+  expired run as failed with `AI_TIMEOUT` and a database-clock `finished_at`
+  before creating the next run. Sort new migrations
+  after T-32 PR #79's `20261109160000_ta_learner_progress.sql`; regenerate
+  `src/lib/supabase/database.types.ts` locally. Preserve the first-attempt
+  `ai_grades` and per-revision-flaw `ai_grade_assessments` shape consumed by
+  T-32. T-32 is a compatibility constraint.
+
+  Extend `read_learner_submission` and `readLearnerSubmission` and use the
+  same reader for the result page and `GET /api/v1/submissions/:id`. Project
+  stored safe grade fields and counts, never private matching. Use the shared
+  Learner-pinned projection and read-only comments. Use the cookie-authenticated
+  `POST /api/v1/submissions/:id/grade`, reusing T-11's Origin check and
+  `X-LGTM-Workspace-Account-Id` header. A completed grade is returned from
+  storage on reopen or grade request. After a retryable failure, an explicit
+  grade POST uses the same start function to create the next `run_number` on
+  the same submission. Preserve the transport replay rule for uncertain
+  outcomes. Offer “Retry grading” per LRN-05.3 and LRN-05.6 and reject retry
+  at the server after an AI input-limit failure. Display original score,
+  components, statuses and credits once. T-13 (LRN-06–08) owns feedback
+  display, hints, challenge retry, reports and history. Read the relevant
+  installed Next.js guide before writing Next.js code.
+
+  Add a labelled fixture with at least two selected comments in one
+  `assess_review` call and paired credit labels. Report repeated-pair
+  rejections and retries with safe diagnostics and the existing output-retry
+  limits; preserve single-match label support. The human runs live smoke at
+  G4 and switches hosted dev to live SoC at close-out. Document the reviewed
+  environment configuration accurately, including live hosted dev and fake
+  local/CI.
+- **Depends on:** T-03, T-04, T-05, T-11.
+- **Status:** done
+
 ## Author
 
 ## TA

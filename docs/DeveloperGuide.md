@@ -339,9 +339,8 @@ Finish or cancel the open comment editor before choosing **Submit review**.
 The **Submit review?** dialog shows the comment count and warns when there are
 no comments. **Keep reviewing** returns to the draft.
 **Confirm submission** submits the loaded revision and locks the draft while the
-request is in progress. A confirmed review opens
-`/learner/history/:submissionId` with the pinned **Source**, read-only
-**Submitted comments** and **Grading pending**.
+request is in progress. A confirmed review opens **Review result** with the
+pinned **Source**, read-only **Submitted comments** and automatic grading.
 
 If the app cannot confirm the outcome, the draft stays locked. **Check
 submission** replays the same request. A temporary failure during that check
@@ -377,8 +376,9 @@ ledger untouched.
 
 The migration grants both submission and result-read function execution to
 `authenticated`. It keeps direct write grants and ledger access closed.
-Submission creates no grading run. The result function returns the pinned
-code projection and submitted comments only to the owning Learner. See the
+Opening the result starts grading separately from submission. The result
+function returns the pinned code, submitted comments and grading state only to
+the owning Learner. See the
 [server submission contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/submissions.ts)
 and [Learner submission migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261109120000_learner_submissions.sql).
 
@@ -391,6 +391,35 @@ and [Learner submission migration](https://github.com/CS3227-2610-MP4-LGTM/CS322
   local Supabase.
 - `bun run test:e2e tests/e2e/learner/review.spec.ts` exercises the
   keyboard review flow and leave warnings on a production build.
+
+### Learner grading
+
+**Review result** shows the challenge, attempt number, submission time, pinned
+code and read-only comments. Opening a pending result starts grading
+automatically. **Grading pending** and **Grading your review…** show progress
+until the grade succeeds or fails. Reopening the page observes a running grade
+or displays the stored **Original assessment** when grading has completed.
+
+**Original assessment** shows the score out of 100, pass mark, pass status,
+component points and matched and missed flaw counts. Under **Submitted
+comments**, each comment is **Matched**, **Unmatched** or **Duplicate**.
+Matched comments show **Explanation credit** and **Fix credit**. Unmatched and
+duplicate comments show **No credit** and dashes for both credits.
+
+A failed grade leaves the review saved and gives the reason. **Retry grading**
+uses the same submission after a retryable failure. If the review exceeds the
+AI input limit, the page shows the size-limit message and keeps the submitted
+evidence available. Choose **Try again** if the result could not load, or
+**Check status** if the page could not confirm the grading state.
+
+For request and response contracts, see “Learner surface” and “Transport,
+concurrency and errors” in [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+
+Run the grading unit checks with `bun run test tests/unit/learner`. With
+local Supabase running, use `bun run test:integration tests/integration/domain/learner-grading.test.ts tests/integration/llm/learner-grading tests/integration/ta/progress/learner-grading.test.ts`
+to check grading, replay and first-attempt TA progress. Use
+`bun run test:e2e tests/e2e/learner/grading.spec.ts` for the browser flow
+with the fake provider.
 
 ### TA submission inspection
 
@@ -718,15 +747,13 @@ Every input and output uses the strict envelope
 | `assess_review` | Learner; own eligible persisted submission | Pinned flawed code and selected flaw/comment pairs / keyed credit assessments and feedback |
 | `summarize_learner` | TA; learner ID | Latest 20 completed submissions and category progress / strengths, blind spots and next steps with evidence |
 
-For assessment, `serverSelection` is `{matches: [{key, commentId}]}` from a
-trusted server caller's deterministic matching, never an HTTP body. The boundary
-checks unique identities and comment locations against the owned submission.
-An empty match set returns an empty assessment without provider dispatch or quota.
-Role features still own deterministic matching and scoring, authorized endpoints,
-idempotent result persistence and replay, grading flags, browser rendering and
-cached hint reads. Their final persistence transactions must repeat authorization,
-version/fingerprint compare-and-set and expiry checks; a returned result alone
-does not authorize a later write.
+The grading service matches comments against the pinned revision and binds
+assessment to the active grading run. The boundary rechecks that run before
+dispatch and after a successful response. An empty match set returns an empty
+assessment without provider dispatch or quota. The grading service scores the
+validated result and persists the original assessment. The final write rechecks
+ownership, run eligibility and the deadline. See the
+[grading service](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/grade-submission.ts).
 
 Contracts reject unknown fields, invalid ranges, duplicate or mismatched keys,
 unsupported values and unsupported evidence. Candidate assembly validates source
@@ -788,8 +815,8 @@ printing their values. Configure the provider independently in each environment.
 
 | Environment | Provider settings |
 | --- | --- |
-| Local, test and CI | Set `APP_ENV` to `local`, `test` or `ci` and set `AI_PROVIDER=fake`. |
-| Hosted development (Vercel Preview) | Set `APP_ENV=development`. The provider defaults to fake. To opt in, set `AI_PROVIDER=soclaas` and the development `SOCLAAS_API_KEY`. |
+| Local, test and CI | Use the fake provider. Set `APP_ENV` to `local`, `test` or `ci` and set `AI_PROVIDER=fake`. |
+| Hosted development (Vercel Preview) | Use the live SoC provider. Set `APP_ENV=development`, `AI_PROVIDER=soclaas` and the development `SOCLAAS_API_KEY`. |
 | Hosted production (Vercel Production) | Set `APP_ENV=production` and select `AI_PROVIDER=fake` explicitly or opt in with `AI_PROVIDER=soclaas` and the separate production `SOCLAAS_API_KEY`. |
 
 Keep both SoC keys server-only. The app pins `qwen3.6:35b` with a reviewed
@@ -844,19 +871,25 @@ bun --no-env-file --conditions=react-server workflow/scripts/soc-smoke.ts \
   --labelled-input workflow/scripts/fixtures/soc-smoke/assess-review-e6.json
 ```
 
-Use `--labelled-input` on its own with `assess_review`. Each labelled case
+Use `--labelled-input` on its own with `assess_review`. Each E6 case
 requires a `caseId`, a payload with one matched comment, and
 `explanation_label` and `fix_label` values of `0`, `0.5`, or `1`.
-Labels stay local to the smoke runner.
+For multiple matches, use
+`workflow/scripts/fixtures/soc-smoke/assess-review-multi-match.json` as the
+labelled input. Multi-match cases group expected credits in
+`assessment_labels` keyed by flaw and comment pair. Labels stay local to the
+smoke runner.
 
 The script writes one CSV row per call with case and settings, latency,
 token counts when available, finish reason, answer and reasoning character
 counts, validation outcome, rejection reason and detail, and parsed
-assessment credits when applicable. Labelled rows include both labels.
-`exact_agreement` is `true` when both credits match on a valid assessment
-and `false` when either differs. It is blank on invalid or unlabelled rows.
-Report how many E6 responses are valid and how many valid responses agree
-exactly. The CSV omits credentials and raw model text.
+assessment credits when applicable. Labelled rows include expected credits.
+`exact_agreement` is `true` when every expected credit matches on a valid
+response and `false` when any differs. It is blank on invalid or unlabelled
+rows. Multi-match cases report each attempt, including invalid output retried
+within the operation limits. A repeated flaw and comment pair in a rejected
+assessment is identified as `duplicate_pair`. The CSV omits credentials and
+raw model text.
 
 ### Fake provider and targeted tests
 

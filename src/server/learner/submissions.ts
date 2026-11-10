@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isWorkspaceAccessFailure, type WorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { challengeCardSchema, challengeIdSchema } from "@/lib/learner/challenge-schema";
 import { genericReadFailure, type ReadFailure } from "@/lib/learner/challenges";
+import { gradingViewSchema, learnerFlagSchema } from "@/lib/learner/grading";
 import {
   commentLimit, pendingGrade, reviewBodyLimit, submissionFieldsSchema, submissionInputSchema,
   submissionOutcomeMessages, submissionViewSchema, workspaceAccountHeader, type SubmissionView,
@@ -13,7 +14,12 @@ import { projectLearnerCode } from "./projection";
 
 const projectionSchema = submissionFieldsSchema.extend({ challenge: challengeCardSchema.extend({ source: z.string() }) });
 const successSchema = z.strictObject({ status: z.literal("ok"), submission: projectionSchema });
-const resultReadSchema = z.union([successSchema, z.strictObject({ status: z.enum(["forbidden", "not_found"]) })]);
+const resultReadSchema = z.union([
+  z.strictObject({ status: z.literal("ok"), submission: projectionSchema.extend({
+    grading: gradingViewSchema, flags: z.array(learnerFlagSchema),
+  }) }),
+  z.strictObject({ status: z.enum(["forbidden", "not_found"]) }),
+]);
 const createResultSchema = z.union([
   successSchema,
   z.strictObject({ status: z.literal("invalid"), invalidCommentIndex: z.number().int().min(0).max(commentLimit - 1).optional() }),
@@ -30,7 +36,7 @@ type CreateFailure =
   | Invalid | WorkspaceAccessFailure;
 export type CreateSubmissionResult = Success | CreateFailure;
 
-async function submissionCaller() {
+export async function submissionCaller() {
   try {
     const client = await createClient();
     const caller = await checkLearnerAccount(client);
@@ -45,19 +51,21 @@ async function afterDatabaseDenial(client: LearnerClient) {
   return caller.status === "ok" ? { status: "unavailable" } as const : caller;
 }
 
-function buildView(projection: z.infer<typeof projectionSchema>, learnerId: string) {
+function buildView(projection: z.infer<typeof projectionSchema> & Partial<Pick<SubmissionView, "grading" | "flags">>, learnerId: string) {
   const { challenge: { source, ...challenge }, ...submission } = projection;
   if (submission.learner.id !== learnerId) throw new Error("Unexpected submission owner");
   return submissionViewSchema.parse({
-    ...submission,
-    challenge: { ...challenge, code: projectLearnerCode(challenge.language, source) },
     grading: pendingGrade,
     flags: [],
+    ...submission,
+    challenge: { ...challenge, code: projectLearnerCode(challenge.language, source) },
   });
 }
 
-export async function readLearnerSubmissionWithAccess(id: string): Promise<Success | ReadFailure | WorkspaceAccessFailure> {
-  const caller = await submissionCaller();
+export async function readLearnerSubmissionWithAccess(
+  id: string, checkedCaller?: Awaited<ReturnType<typeof submissionCaller>>,
+): Promise<Success | ReadFailure | WorkspaceAccessFailure> {
+  const caller = checkedCaller ?? await submissionCaller();
   if (caller.status !== "ok") return caller;
   const parsedId = challengeIdSchema.safeParse(id);
   if (!parsedId.success) return { status: "not_found" };
@@ -82,7 +90,7 @@ export async function readLearnerSubmission(id: string) {
   return isWorkspaceAccessFailure(result) ? genericReadFailure(result) : result;
 }
 
-async function readRequestBody(request: Request): Promise<{ status: "ok"; value: unknown } | { status: "too_large" | "invalid" }> {
+export async function readRequestBody(request: Request, byteLimit = reviewBodyLimit): Promise<{ status: "ok"; value: unknown } | { status: "too_large" | "invalid" }> {
   const reader = request.body?.getReader();
   if (!reader) return { status: "invalid" };
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -93,7 +101,7 @@ async function readRequestBody(request: Request): Promise<{ status: "ok"; value:
       const chunk = await reader.read();
       if (chunk.done) break;
       bytes += chunk.value.byteLength;
-      if (bytes > reviewBodyLimit) {
+      if (bytes > byteLimit) {
         void reader.cancel().catch(() => {});
         return { status: "too_large" };
       }
@@ -121,7 +129,7 @@ function validationFailure(error: z.ZodError): Invalid {
   return Object.keys(fieldErrors).length ? { status: "invalid", fieldErrors } : { status: "invalid" };
 }
 
-function matchesRequestOrigin(request: Request, url: URL) {
+export function matchesRequestOrigin(request: Request, url: URL) {
   const origin = request.headers.get("Origin");
   const host = request.headers.get("Host");
   if (host === null) return origin === null || origin === url.origin;
@@ -139,18 +147,19 @@ function matchesRequestOrigin(request: Request, url: URL) {
   }
 }
 
+export function matchesWorkspaceAccount(request: Request, accountId: string) {
+  const workspaceAccount = request.headers.get(workspaceAccountHeader);
+  if (workspaceAccount === null) return true;
+  const expectedAccount = challengeIdSchema.safeParse(workspaceAccount);
+  return expectedAccount.success && expectedAccount.data.toLowerCase() === accountId.toLowerCase();
+}
+
 export async function createLearnerSubmission(id: string, request: Request): Promise<CreateSubmissionResult> {
   const caller = await submissionCaller();
   if (caller.status !== "ok") return caller;
   const url = new URL(request.url);
   if (!matchesRequestOrigin(request, url)) return { status: "forbidden" };
-  const workspaceAccount = request.headers.get(workspaceAccountHeader);
-  if (workspaceAccount !== null) {
-    const expectedAccount = challengeIdSchema.safeParse(workspaceAccount);
-    if (!expectedAccount.success || expectedAccount.data.toLowerCase() !== caller.account.id.toLowerCase()) {
-      return { status: "account_unavailable" };
-    }
-  }
+  if (!matchesWorkspaceAccount(request, caller.account.id)) return { status: "account_unavailable" };
   const challengeId = challengeIdSchema.safeParse(id);
   const key = challengeIdSchema.safeParse(request.headers.get("Idempotency-Key"));
   if (!challengeId.success || !key.success || url.searchParams.size) return { status: "invalid" };

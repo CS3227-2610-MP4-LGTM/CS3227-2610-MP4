@@ -21,7 +21,7 @@ export function localHarness() {
   if (!key || !secret) throw new Error("Local Supabase test keys unavailable");
   const client = () => createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   return {
-    url, key, client,
+    url, key, secret, client,
     admin: createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } }),
     db: new Client({ connectionString: dbUrl }),
   };

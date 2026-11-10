@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { challengeCardSchema, challengeIdSchema, timestampSchema } from "./challenge-schema";
+import { gradingViewSchema, learnerFlagSchema } from "./grading";
 
 export const submissionErrorMessages = {
   lifecycleUnavailable: "This challenge is no longer available for submission.",
@@ -46,10 +47,10 @@ const learnerCodeSchema = z.strictObject({
   path: z.string(),
   before: z.literal(""),
   after: z.string(),
-  hunks: z.tuple([z.strictObject({
+  hunks: z.array(z.strictObject({
     oldStart: z.literal(0), oldCount: z.literal(0), newStart: z.literal(1),
     newCount: lineSchema, lines: z.array(addedLineSchema),
-  })]),
+  })).length(1),
 });
 
 export const submissionFieldsSchema = z.strictObject({
@@ -71,10 +72,8 @@ export const pendingGrade = {
 
 export const submissionViewSchema = submissionFieldsSchema.extend({
   challenge: challengeCardSchema.extend({ code: learnerCodeSchema }),
-  grading: z.strictObject({
-    state: z.literal("pending"), failureCode: z.null(), original: z.null(), effective: z.null(), overrides: z.tuple([]),
-  }),
-  flags: z.tuple([]),
+  grading: gradingViewSchema,
+  flags: z.array(learnerFlagSchema),
 }).refine(({ attemptNumber, previousSubmissionId, challengeId, revisionId, challenge, comments }) => {
   const source = challenge.code.after;
   const sourceLines = (source.endsWith("\n") ? source.slice(0, -1) : source).split("\n");

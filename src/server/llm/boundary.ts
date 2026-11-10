@@ -16,6 +16,7 @@ const requestSchema = z.strictObject({
     expectedVersion: z.number().int().positive().optional()
 });
 const selectionSchema = z.strictObject({
+    gradingRunId: z.uuid().optional(),
     matches: z.array(z.strictObject({
         key: z.uuid(),
         commentId: z.uuid()
@@ -204,7 +205,8 @@ export function createLlmBoundary(options: RunnerOptions & { client: Client }) {
             fail("FORBIDDEN");
         const existing = await checked(client.from("ai_grades").select("id").eq("submission_id", submission.id));
         const active = await checked(client.from("grading_runs").select("id,state").eq("submission_id", submission.id).in("state", ["pending", "running"]));
-        if (existing.length || active.length)
+        if (existing.length || !selection?.gradingRunId || active.length !== 1 ||
+            active[0].id !== selection.gradingRunId || active[0].state !== "running")
             fail("INVALID_STATE");
         const revision = await checked(client.from("challenge_revisions").select("id,language,flawed_code").eq("id", submission.revision_id).maybeSingle());
         const comments = await checked(client.from("submission_comments").select("id,ordinal,line,body").eq("submission_id", submission.id).order("ordinal"));
@@ -217,17 +219,15 @@ export function createLlmBoundary(options: RunnerOptions & { client: Client }) {
             flaws: z.array(privateFlawSchema).max(5)
         }).safeParse(await accounting.gradingContext({
             accountId,
-            submissionId: submission.id
+            submissionId: submission.id,
+            gradingRunId: selection.gradingRunId
         }));
         if (!context.success || context.data.revisionId !== submission.revision_id || context.data.flaws.some(f => f.revision_id !== submission.revision_id))
             fail("SERVICE_UNAVAILABLE");
         const flaws = context.data.flaws.map(retained);
-        const selected = selection ?? {
-            matches: []
-        };
-        if (new Set(selected.matches.map(m => m.key)).size !== selected.matches.length || new Set(selected.matches.map(m => m.commentId)).size !== selected.matches.length)
+        if (new Set(selection.matches.map(m => m.key)).size !== selection.matches.length || new Set(selection.matches.map(m => m.commentId)).size !== selection.matches.length)
             fail("FORBIDDEN");
-        const matches = selected.matches.map(pair => {
+        const matches = selection.matches.map(pair => {
             const flaw = flaws.find(f => f.key === pair.key), comment = comments.find(c => c.id === pair.commentId);
             if (!flaw || !comment || comment.line < flaw.startLine - 1 || comment.line > flaw.endLine + 1)
                 fail("FORBIDDEN");

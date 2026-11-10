@@ -2,6 +2,8 @@ import "server-only";
 import { isWorkspaceAccessFailure, type WorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { accountAccessHeader, genericReadFailure, type ReadFailure } from "@/lib/learner/challenges";
 import { submissionErrorMessages, submissionOutcomeMessages } from "@/lib/learner/submissions";
+import { gradingFailureMessages } from "@/lib/learner/grading";
+import type { requestLearnerGrade } from "./grade-submission";
 import type { CreateSubmissionResult } from "./submissions";
 
 const headers = { "Cache-Control": "private, no-store", Pragma: "no-cache", Expires: "0" };
@@ -51,4 +53,41 @@ export function learnerSubmissionResponse(result: CreateSubmissionResult): Respo
   const [status, code, message] = submissionErrors[result.status];
   const fieldErrors = result.status === "invalid" ? result.fieldErrors : undefined;
   return Response.json({ error: { code, message, ...(fieldErrors && { fieldErrors }) } }, { status, headers });
+}
+
+export function learnerResultReadErrorResponse(result: ReadFailure | WorkspaceAccessFailure): Response {
+  if (isWorkspaceAccessFailure(result) || result.status === "forbidden") return learnerErrorResponse(result);
+  const [status, code, message] = ({
+    invalid: [400, "VALIDATION_ERROR", "The review request is invalid."],
+    not_found: [404, "NOT_FOUND", "We couldn't find this review."],
+    unavailable: [503, "SERVICE_UNAVAILABLE", "We couldn't load this review result. Try again."],
+    unauthenticated: errors.unauthenticated,
+  } as const)[result.status];
+  return Response.json({ error: { code, message } }, { status, headers });
+}
+
+const gradingFailureStatuses = {
+  RATE_LIMITED: 429, PAYLOAD_TOO_LARGE: 413, INVALID_AI_OUTPUT: 422,
+  AI_UNAVAILABLE: 502, AI_TIMEOUT: 504, SERVICE_UNAVAILABLE: 503,
+} as const;
+
+export function learnerGradeResponse(result: Awaited<ReturnType<typeof requestLearnerGrade>>): Response {
+  if (result.status === "ok") return learnerDataResponse(result.grading);
+  if (result.status === "failed") {
+    const code = result.failureCode;
+    return Response.json({ error: { code, message: gradingFailureMessages[code] } }, { status: gradingFailureStatuses[code], headers });
+  }
+  if (result.status === "invalid_state") {
+    return Response.json({ error: { code: "INVALID_STATE", message: "Grading cannot start for this review right now." } },
+      { status: 409, headers });
+  }
+  if (result.status === "idempotency_conflict") {
+    return Response.json({ error: { code: "IDEMPOTENCY_CONFLICT", message: "This grading request key was already used with a different intent." } },
+      { status: 409, headers });
+  }
+  if (result.status === "too_large") {
+    return Response.json({ error: { code: "PAYLOAD_TOO_LARGE", message: "The grading request is too large." } },
+      { status: 413, headers });
+  }
+  return learnerResultReadErrorResponse(result);
 }

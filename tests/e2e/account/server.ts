@@ -2,8 +2,16 @@
 import { spawn } from "node:child_process";
 import { localHarness } from "../../integration/auth/local";
 
-const { url, key } = localHarness();
-const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: key };
+const { url, key, secret } = localHarness();
+const env: NodeJS.ProcessEnv = {
+  ...process.env,
+  NEXT_PUBLIC_SUPABASE_URL: url,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: key,
+  SUPABASE_SECRET_KEY: secret,
+  APP_ENV: "ci",
+  AI_PROVIDER: "fake",
+};
+delete env.SOCLAAS_API_KEY;
 let child: ReturnType<typeof spawn>;
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => { child?.kill(signal); process.exit(0); });

@@ -1,0 +1,73 @@
+[
+  {
+    "caseId": "c1-assess-review-paired",
+    "payload": {
+      "language": "javascript",
+      "flawedCode": "function discounted(price, percent) {\n  const fraction = percent / 100;\n  return price * fraction;\n}\n\n// Basket totals use whole currency units.\n\nfunction basketTotal(items) {\n  const prices = items.map(item => item.price);\n  return prices.reduce((sum, price) => sum + price);\n}\n",
+      "matches": [
+        {
+          "key": "00000000-0000-4000-8000-000000000301",
+          "category": "logic_bug",
+          "startLine": 3,
+          "endLine": 3,
+          "explanation": "Returns the discount amount instead of the payable price.",
+          "fix": "Multiply price by one minus fraction.",
+          "comment": {
+            "id": "00000000-0000-4000-8000-000000000601",
+            "line": 3,
+            "body": "This returns the discount rather than the payable amount; multiply by one minus fraction."
+          }
+        },
+        {
+          "key": "00000000-0000-4000-8000-000000000302",
+          "category": "edge_case",
+          "startLine": 10,
+          "endLine": 10,
+          "explanation": "An empty basket causes reduce to throw.",
+          "fix": "Supply zero as the initial accumulator.",
+          "comment": {
+            "id": "00000000-0000-4000-8000-000000000602",
+            "line": 10,
+            "body": "An empty basket throws instead of returning a total."
+          }
+        }
+      ]
+    },
+    "retainedFlaws": [
+      {
+        "key": "00000000-0000-4000-8000-000000000301",
+        "category": "logic_bug",
+        "startLine": 3,
+        "endLine": 3,
+        "originalSnippet": "  return price * (1 - fraction);",
+        "replacementSnippet": "  return price * fraction;",
+        "explanation": "Returns the discount amount instead of the payable price.",
+        "fix": "Multiply price by one minus fraction."
+      },
+      {
+        "key": "00000000-0000-4000-8000-000000000302",
+        "category": "edge_case",
+        "startLine": 10,
+        "endLine": 10,
+        "originalSnippet": "  return prices.reduce((sum, price) => sum + price, 0);",
+        "replacementSnippet": "  return prices.reduce((sum, price) => sum + price);",
+        "explanation": "An empty basket causes reduce to throw.",
+        "fix": "Supply zero as the initial accumulator."
+      }
+    ],
+    "assessment_labels": [
+      {
+        "key": "00000000-0000-4000-8000-000000000301",
+        "commentId": "00000000-0000-4000-8000-000000000601",
+        "explanation_label": 1,
+        "fix_label": 1
+      },
+      {
+        "key": "00000000-0000-4000-8000-000000000302",
+        "commentId": "00000000-0000-4000-8000-000000000602",
+        "explanation_label": 1,
+        "fix_label": 0
+      }
+    ]
+  }
+]
