@@ -1003,6 +1003,126 @@ the limits above remain unchanged.
 
 ## Author
 
+### T-20: Create, configure, list and edit challenge drafts
+
+- **Issue:** #81
+- **Covers:** AUT-01.1–01.5. AUT-02.1–02.6, except the “Generate proposals”
+  action and its eligibility in AUT-02.1 and AUT-02.3, which T-21 adds.
+  AUT-06.1. AUT-06.2 for lifecycle status, the working draft, whether a live
+  revision exists, “Edit draft”, “Back to challenges”, read failure, absence
+  and access denial; “Unpublish” and “Archive” belong to T-23 and published
+  revision detail to T-22. AUT-06.3. SYS-02.1–02.2, SYS-04.1–04.2,
+  SYS-08.1–08.3, SYS-09, SYS-10.1–10.2, SYS-10.4, SYS-11, SYS-12.1 (Author
+  rows of Learner-facing challenge material and private answers), SYS-14.3,
+  SYS-17 and SYS-19 apply to the new Author reads, writes and UI.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Author,
+  §4 Product decisions → Flaw proposals and answer keys, Challenge input and
+  Shared vocabularies, and §5 Navigation and UI.
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted
+  code, SYS-04 — Shared building blocks, SYS-08 — Authorization at the data
+  boundary, SYS-09 — Authentication with Cache Components, SYS-10 — Database
+  enforcement and privileged access, SYS-11 — Authentication and authorization
+  failures, SYS-12 — Record access and audit (Learner-facing challenge material
+  and Private answers and grading material), SYS-14 — Delivery and database
+  evolution (SYS-14.3), SYS-17 — Simple, accessible UI and SYS-19 — Test
+  strategy. `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and contract
+  conventions → Shared values and bounds and Pasted-code cap, §2 Domain model
+  and publication lifecycle (challenges, challenge_drafts, proposal_sets,
+  proposal_decisions) → SYS-12 decision: immutable published revisions,
+  §3 API contracts → Transport, concurrency and errors, Shared response types
+  (`AuthorDraft`, `AuthorChallengeCard`) and Author surface (`GET`/`POST
+  /author/challenges`, `GET`/`PATCH /author/challenges/:id`), §6 Shared
+  deterministic seed fixtures (Author A/B identities and C1/C2 ownership) and
+  §7 Integration verification (Author ownership and access).
+  `workflow/specs/stories/AUT-01-create-a-draft.md`,
+  `workflow/specs/stories/AUT-02-configure-flaws.md`,
+  `workflow/specs/stories/AUT-06-maintain-challenges.md` (AUT-06.1–06.3),
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  (ACC-03.2, ACC-03.4–03.8), and the Decisions in
+  `workflow/handoffs/50-learner-review-submit.md` inherited from PR #43 for
+  write boundaries.
+- **Tests:** unit (`tests/unit/author/`) for strict request, response and list
+  query shapes, unknown fields and cursor/status validation. Cover the exact
+  AUT-01.2 and AUT-02.2 messages; whitespace-only text and code; Text(120) and
+  Text(4000) code-point bounds; and the code cap at 20,000/20,001 UTF-8 bytes
+  after CRLF and lone-CR normalization, with multibyte text and ill-formed
+  Unicode. Cover integer flaw count 1–5, 1–5 unique supported categories, the
+  128 KiB raw body check before parsing (413), and PATCH requiring both
+  expected versions and at least one field. jsdom component tests, following
+  `tests/unit/learner/`, cover grouped create/edit/configuration forms, first
+  invalid field focus, progress and outcome announcements, and disabled repeat
+  saves. Cover confirmed failure retaining values; “Check save” resolving the
+  same key and payload; “Cancel”; the AUT-02.4/AUT-06.3 invalidation dialog
+  with both choices; and the published-revision notice. Cover conflict
+  “Reload” and uncertain “Refresh” actions that reread without mutating;
+  archived read-only state; list filter, empty, no-match, “Clear filter”,
+  “Load more” and read-failure retry; and detail absence and read failure.
+  Local Supabase integration (`tests/integration/author/`) uses real local Auth
+  with Authors A and B, a Learner, a TA and an anonymous caller. Exercise the
+  Route Handlers for 401, 403, 404, 400, 413 and 409. Exercise direct
+  user-scoped database access: no direct table writes on Author tables,
+  explicit function execution grants, function-level validation of every
+  bound, and other-Author, Learner and TA denial of drafts and proposals.
+  Cover create idempotency: a replay returns the recorded IDs, a changed
+  payload returns 409 `IDEMPOTENCY_CONFLICT`, concurrent duplicates execute
+  once, and keys are isolated per actor. Cover PATCH stale-version conflicts
+  without changes, increments of both versions, and archived 409
+  `INVALID_STATE`. A published challenge edit keeps its status and published
+  pointer. An edit over an active proposal set clears the active generation
+  and its decisions from `AuthorDraft` while keeping the historical set. Cover
+  list order, status filter, filter-bound cursors, limit bounds, own rows only
+  and exact `AuthorChallengeCard` fields. Insert proposal sets, published
+  revisions and archived states through the superuser `pg` test harness only.
+  Production-build e2e (`tests/e2e/author/`) covers keyboard draft creation
+  through “Flaw configuration”, then list → detail → “Edit draft” → saved
+  changes, at 320 CSS pixels without page-level horizontal scrolling. The
+  orchestrator runs every database-backed check; specialists report them as
+  unrun.
+- **Config paths:** `vitest.integration.config.mts` (add `author` to the
+  integration include glob).
+- **Constraints:** Before writing Next.js code, read the installed
+  `node_modules/next/dist/docs/` guides for Route Handlers, dynamic routes and
+  forms or Server Actions. Add `GET`/`POST /api/v1/author/challenges` and
+  `GET`/`PATCH /api/v1/author/challenges/[id]`. Pages and any Server Actions
+  share one validated server contract in `src/server/author/`. Each protected
+  entry point verifies the session and stored Author role, following
+  `src/server/learner/access.ts`, and prevents cross-request caching. Replace
+  the placeholder pages at `/author/challenges` (“My challenges”) and
+  `/author/challenges/new` (“Create challenge”). Add
+  `/author/challenges/[id]` (detail), `/author/challenges/[id]/edit` (“Edit
+  draft”) and `/author/challenges/[id]/configuration` (“Flaw configuration”).
+  Proposal preview, publication result and lifecycle controls are left to
+  T-21–T-23. Reuse the shared vocabularies and schemas in `src/lib/learner/`.
+  Move them to a role-neutral `src/lib/` module only without behaviour change.
+  One client-safe validator owns Text(n) and code-cap rules for forms and
+  server.
+
+  Add a migration and regenerate `src/lib/supabase/database.types.ts`. Keep
+  PR #43's write boundary: no direct `INSERT`/`UPDATE`/`DELETE` table grants.
+  User-callable functions grant execution explicitly to `authenticated` and
+  deny `PUBLIC`, `anon` and `service_role`, and validate every bound on direct
+  calls. One function creates the challenge and its draft atomically (status
+  `draft`, both versions 1). It records outcomes in a private ledger used only
+  for Author challenge creation, keyed by actor and Idempotency-Key, with a
+  fingerprint the function computes from its validated arguments. Another
+  function applies a draft PATCH against the expected row and draft versions,
+  serialized on the challenge row. It increments both versions and clears the
+  active generation pointer. It never changes status or the published pointer
+  and rejects archived challenges. Any accepted PATCH counts as an edit; the UI
+  sends only changed fields and offers no save when nothing changed. Reads stay
+  user-scoped: the list returns `AuthorChallengeCard` only. Detail returns
+  `AuthorDraft`, with `proposals` from the active set and empty when the
+  generation pointer is null. No T-20 path creates proposals, revisions or
+  lifecycle changes, and no LLM or admin client is used. Map failures per
+  INTEGRATION-SPEC §3. `fieldErrors` keys are request field names; server and
+  client share exported message constants, and free-form text is never
+  matched. 409 `VERSION_CONFLICT` covers stale versions and 409
+  `INVALID_STATE` covers archived or in-progress duplicates. Account failures
+  follow SYS-11 and ACC-03 without replaying a save.
+- **Depends on:** T-02, T-03; spec PR for #80.
+- **Status:** todo
+
 ## TA
 
 ### T-30: Inspect submissions and retained assessment evidence
