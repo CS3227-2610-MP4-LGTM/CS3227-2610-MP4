@@ -569,14 +569,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "display_name": string,"id": string,"role": string
+                    "created_at": string,"display_name": string,"id": string,"role": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "display_name": string,"id": string,"role": string
+                    "created_at"?: string,"display_name": string,"id": string,"role": string
                   }
                   Update: {
-                    "display_name"?: string,"id"?: string,"role"?: string
+                    "created_at"?: string,"display_name"?: string,"id"?: string,"role"?: string
                   }
                   Relationships: [
 
@@ -795,6 +795,9 @@ isOneToOne: false
 "list_ta_flags":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_kind"?: string,"p_limit"?: number,"p_status"?: string }; Returns: Json
                            },
+"list_ta_learners":
+{ Args: { "p_after_id"?: string,"p_before"?: string,"p_limit"?: number }; Returns: Json
+                           },
 "list_ta_submissions":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_challenge_id"?: string,"p_grading_state"?: string,"p_learner_id"?: string,"p_limit"?: number }; Returns: Json
                            },
@@ -811,6 +814,9 @@ isOneToOne: false
                            },
 "read_learner_submission":
 { Args: { "p_submission_id": string }; Returns: Json
+                           },
+"read_ta_learner":
+{ Args: { "p_learner_id": string }; Returns: Json
                            },
 "start_learner_grading":
 { Args: { "p_account_id": string,"p_idempotency_key": string,"p_intent": string,"p_submission_id": string }; Returns: Json

@@ -50,6 +50,10 @@ comments, original/current grades and private answer evidence. See
 Use **Flagged submissions** to filter open/resolved flags, append resolutions
 and corrections, or save justified grade overrides from submission detail. See
 [TA flag resolution and grade overrides](docs/DeveloperGuide.md#ta-flag-resolution-and-grade-overrides).
+Open **Learners** and choose **View learner** for completed first-attempt category
+progress and rule-based recommendations. **View submissions** opens supporting
+attempts, which offer **Back to learner**. See
+[TA learner progress and recommendations](docs/DeveloperGuide.md#ta-learner-progress-and-recommendations).
 
 The internal [shared LLM boundary](docs/DeveloperGuide.md#shared-llm-boundary)
 provides validated fake operations and durable usage accounting. Live model
@@ -64,7 +68,7 @@ separate features.
 | `bun run typecheck` | Generates route types, then `tsc --noEmit` |
 | `bun run test` | Unit tests (Vitest); no Supabase required |
 | `bun run test:integration` | Auth/API/Postgres integration tests against local Supabase |
-| `bun run test:e2e` | Playwright account, Learner browse and review, TA inspection and moderation journeys against local Supabase and a production build (port 3100) |
+| `bun run test:e2e` | Playwright account, Learner browse and review, TA inspection, moderation and learner-progress journeys against local Supabase and a production build (port 3100) |
 | `bun run build` | Production build |
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |

@@ -919,7 +919,7 @@ the limits above remain unchanged.
   Read the relevant Next.js guide before code; the orchestrator runs all
   database-backed checks and specialists report them as unrun.
 - **Depends on:** T-30
-- **Status:** done
+- **Status:** blocked
 
 ### T-32: Learner directory, category progress and rule-based recommendations
 
@@ -975,7 +975,7 @@ the limits above remain unchanged.
   Read the relevant Next.js guide before code; the orchestrator runs all
   database-backed checks and specialists report them as unrun.
 - **Depends on:** T-30
-- **Status:** todo
+- **Status:** done
 
 ### T-33: Generate and retain evidence-linked learner performance summaries
 
