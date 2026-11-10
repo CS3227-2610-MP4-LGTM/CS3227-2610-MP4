@@ -1,5 +1,5 @@
 import { localHarness } from "../auth/local";
-import { insert } from "./fixture";
+import { insert, quote } from "./fixture";
 
 const password = "local learner browse fixture";
 const createdAt = "2026-01-01T00:00:00Z";
@@ -247,21 +247,52 @@ export async function createLearnerBrowseFixture({
 
   async function disposeCreatedSubmissions() {
     if (!cleanupFeatureSubmissions || createdUsers.length === 0) return;
-    const { rows: [ledger] } = await h.db.query<{ exists: boolean }>(
-      "select to_regclass('private.submission_create_requests') is not null as exists",
-    );
-    if (ledger.exists) {
+    // Use the fake provider environment's accounting lock before sweeping usage rows.
+    const accountingEnvironment = scope === "e2e" ? "ci" : "test";
+    await h.db.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [`llm-accounting:${accountingEnvironment}`]);
+    // Submission creation locks the challenge before taking the profile FK lock.
+    const challengeIds = rows.filter(row => row.table === "challenges").map(row => row.id);
+    await h.db.query(`
+      select id from public.challenges where id = any($1::uuid[]) order by id for update
+    `, [challengeIds]);
+    // Locking fixture profiles prevents new FK references during cleanup.
+    await h.db.query(`
+      select id from public.profiles where id = any($1::uuid[]) and role = 'learner'
+      order by id for update
+    `, [createdUsers]);
+    const { rows: [ledgers] } = await h.db.query<{ submission: boolean; grading: boolean }>(`
+      select to_regclass('private.submission_create_requests') is not null as submission,
+        to_regclass('private.learner_grading_requests') is not null as grading
+    `);
+    if (ledgers.submission) {
       await h.db.query("delete from private.submission_create_requests where actor_id = any($1::uuid[])", [createdUsers]);
     }
     const seeded = rows.filter(row => row.table === "submissions").map(row => row.id);
     const { rows: submissions } = await h.db.query<{ id: string }>(`
-      select id from public.submissions where learner_id = any($1::uuid[]) and id <> all($2::uuid[])
-    `, [createdUsers, seeded]);
+      select id from public.submissions where learner_id = any($1::uuid[]) order by id for update
+    `, [createdUsers]);
     const submissionIds = submissions.map(row => row.id);
     if (!submissionIds.length) return;
-    await h.db.query("delete from public.submission_comments where submission_id = any($1::uuid[])", [submissionIds]);
+
+    const operations = `select id from private.llm_operations where operation = 'assess_review'
+      and resource_id = any($1::uuid[]) and account_id = any($2::uuid[])`;
+    for (const table of ["llm_usage_events", "ai_usage_records"]) {
+      await h.db.query(`delete from private.${quote(table)} where operation_id in (${operations})`, [submissionIds, createdUsers]);
+    }
+    await h.db.query(`delete from private.llm_operations where id in (${operations})`, [submissionIds, createdUsers]);
+    if (ledgers.grading) {
+      await h.db.query("delete from private.learner_grading_requests where submission_id = any($1::uuid[])", [submissionIds]);
+    }
+    const grades = "select id from public.ai_grades where submission_id = any($1::uuid[])";
+    for (const table of ["ai_grade_assessments", "ai_grade_comment_results", "ai_grade_eligible_hints", "ai_grade_evidence"]) {
+      await h.db.query(`delete from public.${quote(table)} where grade_id in (${grades})`, [submissionIds]);
+    }
+    await h.db.query("delete from public.review_flags where submission_id = any($1::uuid[]) and source = 'rule'", [submissionIds]);
+    await h.db.query("delete from public.ai_grades where submission_id = any($1::uuid[])", [submissionIds]);
     await h.db.query("delete from public.grading_runs where submission_id = any($1::uuid[])", [submissionIds]);
-    await h.db.query("delete from public.submissions where id = any($1::uuid[])", [submissionIds]);
+    const createdSubmissionIds = submissionIds.filter(id => !seeded.includes(id));
+    await h.db.query("delete from public.submission_comments where submission_id = any($1::uuid[])", [createdSubmissionIds]);
+    await h.db.query("delete from public.submissions where id = any($1::uuid[])", [createdSubmissionIds]);
   }
 
   async function dispose() {
@@ -275,6 +306,12 @@ export async function createLearnerBrowseFixture({
           await disposeCreatedSubmissions();
           for (const row of rows.toReversed()) {
             await h.db.query(`delete from public.${row.table} where ${row.key} = $1`, [row.id]);
+          }
+          if (cleanupFeatureSubmissions) {
+            // A request that already captured context still cannot reserve usage
+            // after this transaction. Keep FK checks and role-row cascades active.
+            await h.db.query("set local session_replication_role = origin");
+            await h.db.query("delete from public.profiles where id = any($1::uuid[]) and role = 'learner'", [createdUsers]);
           }
           await h.db.query("commit");
           rows.length = 0;
