@@ -527,8 +527,8 @@ recommendations** rereads current history and publication eligibility. Each
 section has its own **Try again**; one failure leaves the other's successful
 result visible. Failed refreshes retain successful content labelled
 “Previously loaded progress” or “Previously loaded recommendations”. These reads
-make no AI request. The separate **Performance summary** region currently has
-no summary content or generation action.
+make no AI request. The separate [Performance summary](#ta-performance-summaries)
+region reads retained AI advice and generates only on explicit action.
 
 **View submissions** opens the learner-filtered submissions list. Open an attempt
 there and use **Back to learner** to return. **Back to learners** returns to the
@@ -577,6 +577,101 @@ and [identity migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4
   covers protected reads, RPC/grant boundaries and retained original evidence.
 - `bun run test:e2e tests/e2e/ta/progress` covers production browser navigation,
   refresh/retry, submission round trips, keyboard access and phone-width layouts.
+
+### TA performance summaries
+
+On **Learner performance**, **Performance summary** reads the latest stored
+summary without calling the model. “No performance summary yet.” offers
+**Generate summary**; a stored result offers **Regenerate summary**. Opening,
+reloading or returning to the page never starts generation automatically.
+
+Stored results show “AI-generated summary — review the supporting submissions.”,
+a **Generated** timestamp in UTC, and **Strengths**, **Blind spots** and
+**Suggested next steps**. Each item shows its category, full plain text and
+**View supporting submission** links. Those links open retained submission
+evidence with **Back to learner** return navigation. Empty sections have explicit
+empty messages; they are not read failures. Treat the advice as a prompt for TA
+judgement: generation changes no grade, flag, progress or recommendation.
+
+Freshness compares evidence fingerprints, not the generated date. A stale result
+remains readable with “This summary is out of date. Generate a new summary to
+include current evidence.” **Refresh learner performance** rereads the stored
+result and freshness. Progress and recommendations continue to load and recover
+independently of the summary.
+
+Explicit generation shows “Generating performance summary…” and disables its
+controls. While pending, an existing result remains visible as **Previous summary**.
+Success shows “Performance summary generated.” and focuses the summary heading.
+Failures preserve the previous result and offer these recoveries:
+
+| Failure | Message and recovery |
+| --- | --- |
+| No completed submission | “A completed submission is required to generate a summary.” — **View submissions**. |
+| Oversized evidence | “There is too much evidence to generate this summary.” — **Refresh learner performance**. |
+| Usage/concurrency limit | “Summary generation is temporarily limited. Try again later.” — **Try again**. |
+| Timeout | “Summary generation timed out. Try again.” — **Try again**. |
+| Invalid model output | “We couldn't generate a valid summary. Try again.” — **Try again**. |
+| Provider/accounting/service failure | “Summary generation is unavailable. Try again.” — **Try again**. |
+
+Retries require an explicit action. If the reply is lost or otherwise uncertain,
+use **Refresh learner performance** to discover a committed result without
+automatically repeating generation. A read failure says “We couldn't load the
+performance summary. Try again.” and offers **Try again** for the read. Already
+loaded output stays visible as “Previously loaded summary; freshness unavailable.”
+until a successful refresh. Account failures use shared workspace recovery and
+never automatically replay generation.
+
+#### Summary contracts and persistence
+
+| Endpoint | Request and success data |
+| --- | --- |
+| `GET /api/v1/ta/learners/:id/summary` | UUID learner ID; no query fields. Returns `{ summary: SummaryRecord \| null, stale }`. |
+| `POST /api/v1/ta/learners/:id/summaries` | Strict empty `{}` body, UUID `Idempotency-Key` and same-origin request. Returns `SummaryRecord` with HTTP 201. |
+
+Both endpoints require a verified stored TA role and a learner in moderation
+scope. They use canonical `{ data }` / `{ error }` envelopes and private/no-store
+headers. `SummaryRecord` contains `id`, `learnerId`, `createdAt`, `inputFingerprint`
+and `output`. Output has up to five items in each of `strengths`, `blindSpots`
+and `nextSteps`, with at least one item overall. Each item has a category,
+nonblank text of at most 2,000 Unicode code points and 1–20 unique supporting
+submission IDs. Validation rejects evidence outside the captured snapshot and
+categories absent from that evidence. Text renders inertly; only server-built
+supporting links navigate.
+
+The authorized snapshot selects the latest 20 completed submissions by
+`submittedAt` descending, then ID ascending, including completed retries.
+Category progress still uses all eligible completed first attempts. Model input
+contains selected scores, category counts, comments/feedback and progress;
+it excludes learner names/emails, unrelated learners and private answer
+explanations/fixes. Fingerprints cover that snapshot and effective override
+audit order, so an override can make a retained summary stale without changing
+original identification progress.
+
+Generation uses the shared LLM boundary and usage limits. The dedicated
+`persist_ta_summary(p_input jsonb)` RPC atomically stores validated output and
+its evidence, retaining immutable prior records. Only service_role can execute
+it; the admin client has no direct summary-table access. Its private RLS-protected
+request journal scopes mutation keys to the TA and learner: duplicate calls
+replay recorded results, in-progress duplicates return 409, and the same key
+can be used independently for another learner. A confirmed failed attempt can
+be retried explicitly with a new key. No transaction spans a provider call.
+Final account rechecks preserve 401 for session expiry, 503 for account-service
+outages and 403 for forbidden or changed accounts, without publishing output.
+
+See the [summary service](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/summaries.ts),
+[snapshot capture](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/summary-snapshot.ts)
+and [summary migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261110160000_ta_performance_summaries.sql).
+
+#### Summary checks
+
+- `bun run test tests/unit/ta/summaries` covers rendering, validation, explicit
+  retries, access failures and final account rechecks.
+- With local Supabase running, `bun run test:integration tests/integration/ta/summaries`
+  covers evidence/freshness, grants, atomic persistence, failure preservation
+  and learner-scoped mutation-key replay with fake AI.
+- `bun run test:e2e tests/e2e/ta/summaries` covers production browser generation,
+  supporting-evidence round trips, independent failures, account transitions,
+  keyboard focus and phone-width rendering using local Auth and fake AI.
 
 ### TA flag resolution and grade overrides
 
