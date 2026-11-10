@@ -74,7 +74,7 @@ test("LRN-03.1 LRN-04.1 LRN-04.3 SYS-17.1 SYS-17.3 submits with the keyboard at 
   const result = page.getByRole("main");
   await expect(result.getByRole("region", { name: "Source" })).toContainText(longCheckoutLine);
   await expect(result.getByText(body, { exact: true })).toBeVisible();
-  await expect(result.getByText(/\bpending\b/i)).toBeVisible();
+  await expect(result.getByText(/^(Grading pending|Grading your review…|Grading failed\. Your review is still saved\.|Original assessment)$/)).toBeVisible();
   await expect(result.getByRole("button", { name: /^(Add comment|Edit|Remove|Submit review)\b/i })).toHaveCount(0);
   await expect(editor(page)).toHaveCount(0);
   await expect(leaveDialog(page)).toHaveCount(0);

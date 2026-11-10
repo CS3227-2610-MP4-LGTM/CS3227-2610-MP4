@@ -107,7 +107,7 @@ async function attempt(learner: Learner, challengeId: string, revisionId: string
   return { id, owner, learner, revisionId, comments };
 }
 
-async function request(id: string, caller: Actor | "anon", key?: string) {
+async function request(id: string, caller: Actor | "anon", key?: string, intent: "initial" | "retry" = "initial") {
   mocks.client = caller === "anon" ? fixture.h.client() : fixture.actors[caller].client;
   const params = { params: Promise.resolve({ id }) };
   const endpoint = `${origin}/api/v1/submissions/${id}`;
@@ -117,6 +117,7 @@ async function request(id: string, caller: Actor | "anon", key?: string) {
     response = await POST(new Request(endpoint + "/grade", {
       method: "POST", body: "{}", headers: {
         "Content-Type": "application/json", "Idempotency-Key": key, Origin: origin,
+        "X-LGTM-Grading-Intent": intent,
         [accountHeader]: caller === "anon" ? absent : fixture.actors[caller].id,
       },
     }), params);
@@ -127,7 +128,9 @@ async function request(id: string, caller: Actor | "anon", key?: string) {
   return { status: response.status, headers: response.headers, body: await response.json() };
 }
 
-function grade({ id, learner }: Attempt, key = randomUUID()) { return request(id, learner, key); }
+function grade({ id, learner }: Attempt, key = randomUUID(), intent: "initial" | "retry" = "initial") {
+  return request(id, learner, key, intent);
+}
 function read({ id, learner }: Attempt) { return request(id, learner); }
 
 async function runs({ id }: Attempt) {
@@ -149,8 +152,8 @@ const startName = "start_learner_grading";
 const completeName = "complete_learner_grading";
 const failName = "fail_learner_grading";
 function ownerArgs({ id, owner }: Attempt) { return { p_account_id: owner, p_submission_id: id }; }
-function start(submission: Attempt, key = randomUUID()) {
-  return fixture.h.admin.rpc(startName, { ...ownerArgs(submission), p_idempotency_key: key });
+function start(submission: Attempt, intent: "initial" | "retry" = "initial") {
+  return fixture.h.admin.rpc(startName, { ...ownerArgs(submission), p_idempotency_key: randomUUID(), p_intent: intent });
 }
 function fail(submission: Attempt, id: string, failure = "AI_UNAVAILABLE") {
   return fixture.h.admin.rpc(failName, { ...ownerArgs(submission), p_grading_run_id: id, p_failure_code: failure });
@@ -195,7 +198,7 @@ it("SYS-10.1 SYS-10.3 SEC-01.1 limits grading functions to their explicit roles 
   const { ids, h, actors } = fixture;
   const owned = await attempt("learnerB", ids.practice[0], fixture.longPublication.revisionId);
   const adminSignatures = [
-    `public.${startName}(uuid,uuid,uuid)`,
+    `public.${startName}(uuid,uuid,uuid,text)`,
     `public.${completeName}(uuid,uuid,uuid,jsonb)`,
     `public.${failName}(uuid,uuid,uuid,text)`,
     "public.llm_grading_context(uuid,uuid)",
@@ -213,7 +216,7 @@ it("SYS-10.1 SYS-10.3 SEC-01.1 limits grading functions to their explicit roles 
     ({ signature, anon: false, authenticated: false, admin: true, public: false, explicit_admin: true }))));
   expect(privileges).toHaveLength(adminSignatures.length);
   const rpcArgs = [
-    [startName, { ...ownerArgs(owned), p_idempotency_key: randomUUID() }],
+    [startName, { ...ownerArgs(owned), p_idempotency_key: randomUUID(), p_intent: "initial" }],
     [completeName, { ...ownerArgs(owned), p_grading_run_id: absent, p_payload: {} }],
     [failName, { ...ownerArgs(owned), p_grading_run_id: absent, p_failure_code: "AI_TIMEOUT" }],
     ["llm_grading_context", { account_id: owned.owner, submission_id: owned.id }],
@@ -234,7 +237,7 @@ it("SYS-10.1 SYS-10.3 SEC-01.1 limits grading functions to their explicit roles 
   expect((await actors.learnerB.client.from("revision_flaws").select("id,explanation,fix").eq("revision_id", owned.revisionId)).data ?? []).toEqual([]);
   for (const actor of [actors.learnerA, actors.authorA, actors.taA]) {
     const forged = { p_account_id: actor.id, p_submission_id: owned.id };
-    expect((await h.admin.rpc(startName, { ...forged, p_idempotency_key: randomUUID() })).error).toMatchObject({ message: "FORBIDDEN" });
+    expect((await h.admin.rpc(startName, { ...forged, p_idempotency_key: randomUUID(), p_intent: "initial" })).error).toMatchObject({ message: "FORBIDDEN" });
     expect((await h.admin.rpc(completeName, { ...forged, p_grading_run_id: absent, p_payload: {} })).error).toMatchObject({ message: "FORBIDDEN" });
     expect((await h.admin.rpc(failName, { ...forged, p_grading_run_id: absent, p_failure_code: "AI_TIMEOUT" })).error).toMatchObject({ message: "FORBIDDEN" });
   }
@@ -360,7 +363,7 @@ it("LRN-05.3 LRN-05.6 SYS-18.2 SEC-06.1 retains a failed submission, replays its
     expect(await grade(owned, key)).toMatchObject({ status: failed.status, body: failed.body });
     expect(mocks.execute).toHaveBeenCalledOnce();
 
-    expect(await grade(owned)).toMatchObject({ status: 200, body: { data: { state: "completed" } } });
+    expect(await grade(owned, randomUUID(), "retry")).toMatchObject({ status: 200, body: { data: { state: "completed" } } });
     expect(await runs(owned)).toEqual([
       expect.objectContaining({ run_number: 1, state: "failed", failure_code: "AI_UNAVAILABLE" }),
       expect.objectContaining({ run_number: 2, state: "completed", failure_code: null }),
@@ -378,7 +381,7 @@ it("LRN-05.6 blocks retries after AI input-limit failure without invoking the pr
   const owned = await attempt("learnerB", ids.differentLanguage, ids.differentLanguageRevision, [[2, "An eligible comment."]]);
   await seedRun(owned, "failed", 0, "PAYLOAD_TOO_LARGE");
   expect((await read(owned)).body.data.grading).toMatchObject({ state: "failed", failureCode: "PAYLOAD_TOO_LARGE", original: null });
-  expect(await grade(owned)).toMatchObject({ status: 409, body: { error: { code: "INVALID_STATE" } } });
+  expect(await grade(owned, randomUUID(), "retry")).toMatchObject({ status: 409, body: { error: { code: "INVALID_STATE" } } });
   expect(await runs(owned)).toHaveLength(1);
   expect(await counts(owned)).toMatchObject({ operations: 0, grades: 0 });
   expect(mocks.execute).not.toHaveBeenCalled();
@@ -392,7 +395,7 @@ it("LRN-05.2 LRN-05.3 LRN-05.6 SYS-10.3 projects an expired run read-only then s
   expect((await read(owned)).body.data.grading).toMatchObject({ state: "failed", failureCode: "AI_TIMEOUT", original: null });
   expect(await runs(owned)).toEqual(before);
   const { rows: [lower] } = await h.db.query<{ now: Date }>("select clock_timestamp() as now");
-  expect((await start(owned)).error).toBeNull();
+  expect((await start(owned, "retry")).error).toBeNull();
   const { rows: [upper] } = await h.db.query<{ now: Date }>("select clock_timestamp() as now");
   const history = await runs(owned);
   expect(history).toEqual([
@@ -438,7 +441,7 @@ it("LRN-05.2 SYS-10.3 rejects expired completion and atomically rejects invalid 
   const expired = await seedRun(owned, "running", 60);
   expect((await complete(owned, expired, payload)).error).toMatchObject({ message: "INVALID_STATE" });
   expect(await runs(owned)).toEqual([expect.objectContaining({ id: expired, state: "running", finished_at: null })]);
-  expect((await start(owned)).error).toBeNull();
+  expect((await start(owned, "retry")).error).toBeNull();
   const [, active] = await runs(owned);
   expect((await complete(owned, expired, payload)).error).toMatchObject({ message: "INVALID_STATE" });
   const malformed = { ...payload, assessments: [{ ...payload.assessments[0], flawId: absent }] };
@@ -456,7 +459,7 @@ it("SYS-12.4 SYS-18.2 freezes the state, finish time and failure code of both te
   expect((await start(owned)).error).toBeNull();
   const [active] = await runs(owned);
   expect((await fail(owned, active.id)).error).toBeNull();
-  expect((await grade(owned)).status).toBe(200);
+  expect((await grade(owned, randomUUID(), "retry")).status).toBe(200);
   const history = await runs(owned);
   expect(history.map(run => run.state)).toEqual(["failed", "completed"]);
   for (const [id, assignment] of [
