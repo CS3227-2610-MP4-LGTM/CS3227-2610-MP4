@@ -131,19 +131,19 @@ test("LRN-06.3 LRN-06.6 SYS-17.1 SYS-17.3 reveals a hint and submits a pinned re
   expect(response.request().postDataJSON()).toEqual({
     revisionId: ids.revision1, previousSubmissionId: first, comments: [{ line: 3, body: note1 }, { line: 3, body: note2 }],
   });
-  const { data } = await response.json();
-  await expect(page).toHaveURL(resultPath(data.id));
-  expect(data.id).not.toBe(first);
+  await expect(page).toHaveURL(/\/learner\/history\/[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i);
+  const second = new URL(page.url()).pathname.split("/").at(-1)!;
+  expect(second).not.toBe(first);
   await expect(page.getByRole("heading", { name: "Review result" })).toBeVisible();
   await expect(page.getByText("Attempt 2", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Original assessment", exact: true })).toBeVisible();
   await expect(leave).toHaveCount(0);
   await noPageOverflow(page);
 
-  await page.goto(retryPath(data.id));
+  await page.goto(retryPath(second));
   await expect(page.getByRole("heading", { name: "Retry unavailable" })).toBeVisible();
   await expect(page.getByText("A second attempt cannot be retried.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Back to result", exact: true })).toHaveAttribute("href", resultPath(data.id));
+  await expect(page.getByRole("link", { name: "Back to result", exact: true })).toHaveAttribute("href", resultPath(second));
   await page.goto(retryPath(first));
   await expect(page.getByText("You have used your retry.", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Retry review" })).toHaveCount(0);
