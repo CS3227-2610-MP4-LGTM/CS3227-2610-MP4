@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmationDialog } from "@/components/account/confirmation-dialog";
 import { useReportWorkspaceAccessFailure } from "@/components/account/workspace-access-boundary";
 import {
@@ -30,18 +30,26 @@ const replaceWarningId = "replace-proposals-warning";
  * AUT-03: the explicit “Generate proposals” action for a saved draft. Each new
  * attempt uses a new Idempotency-Key; “Check generation” resolves the same one.
  */
-export function GenerateProposals({ draft, unsaved = false, generate, onGenerated, reload, showBack = true }: {
+export function GenerateProposals({
+  draft, unsaved = false, generate, onGenerated, reload, showBack = true, disabled = false, onBusyChange,
+}: {
   draft: DraftView;
   unsaved?: boolean;
   generate: Generate;
   onGenerated: (draft: DraftView) => void;
   reload: () => void;
   showBack?: boolean;
+  /** AUT-05.2: generation is unavailable while a publication is pending. */
+  disabled?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const reportAccessFailure = useReportWorkspaceAccessFailure();
   const [phase, setPhase] = useState<Phase>("idle");
   const busy = useRef(false);
   const attempt = useRef<{ key: string; versions: ExpectedVersions } | null>(null);
+  const pending = phase === "generating";
+
+  useEffect(() => { onBusyChange?.(pending); }, [pending, onBusyChange]);
 
   if (draft.status === "archived") return null;
 
@@ -73,11 +81,12 @@ export function GenerateProposals({ draft, unsaved = false, generate, onGenerate
   }
 
   function start() {
+    if (disabled) return;
     run(crypto.randomUUID(), { expectedRowVersion: draft.rowVersion, expectedDraftVersion: draft.draftVersion });
   }
 
   function request() {
-    if (busy.current) return;
+    if (busy.current || disabled) return;
     if (unsaved) return setPhase("unsaved");
     if (draft.proposals.length || draft.generationId) return setPhase("confirming");
     start();
@@ -109,10 +118,11 @@ export function GenerateProposals({ draft, unsaved = false, generate, onGenerate
         onClick={() => attempt.current && run(attempt.current.key, attempt.current.versions)}>Check generation</button>
     </div>}
     <div className="form-actions">
-      <button type="button" className="button primary" disabled={generating} aria-disabled={generating}
-        onClick={request}>Generate proposals</button>
+      <button type="button" className="button primary" disabled={generating || disabled}
+        aria-disabled={generating || disabled} onClick={request}>Generate proposals</button>
       {/* A new attempt reads the draft's current versions; only “Check generation” reuses the stored ones. */}
-      {failure?.retry && <button type="button" className="button secondary" onClick={start}>Try again</button>}
+      {failure?.retry && <button type="button" className="button secondary" disabled={disabled}
+        onClick={start}>Try again</button>}
       {back}
     </div>
     {phase === "confirming" && <ConfirmationDialog title="Replace the current proposals?" descriptionId={replaceWarningId}

@@ -11,7 +11,9 @@ import { proposalDiff, type FinalPreview, type ProposalDecision } from "@/lib/au
 import type { CodeDiff, CodeDiffLine } from "@/lib/code-diff";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { categoryLabels } from "@/lib/learner/challenges";
+import type { AuthorPublication } from "@/lib/author/publication";
 import { GenerateProposals, type Generate } from "./generate-proposals";
+import { PublishChallenge, type Publish } from "./publish-challenge";
 
 type ProposalView = {
   id: string; category: string; sourceStartLine: number; sourceEndLine: number; originalSnippet: string;
@@ -38,13 +40,18 @@ const range = (label: string, start: number, end: number) =>
  * decision; the final candidate is always read from the server, never assembled
  * here, and any saved decision change invalidates a shown preview.
  */
-export function ProposalPreview({ draft: initial, generated = false, decide, readPreview, reload, generate }: {
+export function ProposalPreview({
+  draft: initial, generated = false, decide, readPreview, reload, generate, publish, onPublished,
+}: {
   draft: DraftView;
   generated?: boolean;
   decide: Decide;
   readPreview: ReadPreview;
   reload: () => void;
   generate: Generate;
+  /** AUT-05: offered only beside the shown final preview. */
+  publish?: Publish;
+  onPublished?: (publication: AuthorPublication) => void;
 }) {
   const reportAccessFailure = useReportWorkspaceAccessFailure();
   const [draft, setDraft] = useState(initial);
@@ -58,6 +65,9 @@ export function ProposalPreview({ draft: initial, generated = false, decide, rea
   const headingRef = useRef<HTMLHeadingElement>(null);
   const pageHeadingRef = useRef<HTMLHeadingElement>(null);
   const [arrivals, setArrivals] = useState(0);
+  // AUT-03.2 and AUT-05.2: generation and publication never run at the same time.
+  const [generating, setGenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   useEffect(() => {
     // AUT-03.2: arriving after generation announces the result and moves focus to the page heading.
@@ -88,7 +98,7 @@ export function ProposalPreview({ draft: initial, generated = false, decide, rea
   const back = <Link href={configurationHref(draft.id)} className="button secondary">Back to configuration</Link>;
 
   async function choose(proposal: ProposalView, decision: Choice) {
-    if (busy.current || archived) return;
+    if (busy.current || archived || publishing) return;
     busy.current = true;
     setSaving(proposal.id);
     setIssue(null);
@@ -118,7 +128,7 @@ export function ProposalPreview({ draft: initial, generated = false, decide, rea
   }
 
   async function showPreview() {
-    if (busy.current) return;
+    if (busy.current || publishing) return;
     busy.current = true;
     setPreview({ status: "loading" });
     let result: Awaited<ReturnType<ReadPreview>>;
@@ -192,7 +202,7 @@ export function ProposalPreview({ draft: initial, generated = false, decide, rea
             </div>}
             {!archived && <div className="form-actions">
               {(["approved", "rejected"] as const).map(choice => <button key={choice} type="button"
-                id={`decide-${proposal.id}-${choice}`} className="button secondary" disabled={pending}
+                id={`decide-${proposal.id}-${choice}`} className="button secondary" disabled={pending || publishing}
                 aria-pressed={proposal.decision === choice} onClick={() => void choose(proposal, choice)}>
                 {choice === "approved" ? "Approve" : "Reject"}
               </button>)}
@@ -204,7 +214,7 @@ export function ProposalPreview({ draft: initial, generated = false, decide, rea
       {undecided ? <p className="notice">{proposalMessages.undecided}</p>
         : !approved ? <p className="notice">{proposalMessages.noneApproved}</p>
         : <div className="form-actions">
-          <button type="button" className="button primary" disabled={blocked || !!saving || preview.status === "loading"}
+          <button type="button" className="button primary" disabled={blocked || !!saving || publishing || preview.status === "loading"}
             onClick={() => void showPreview()}>Preview final challenge</button>
         </div>}
       {preview.status === "failed" && <div role="alert" className="notice error-notice">
@@ -216,7 +226,7 @@ export function ProposalPreview({ draft: initial, generated = false, decide, rea
         <button type="button" className="button secondary" onClick={reload}>Reload draft</button>
       </div>}
       {!archived && <GenerateProposals draft={draft} generate={generate} onGenerated={adoptGenerated} reload={reload}
-        showBack={false} />}
+        showBack={false} disabled={publishing} onBusyChange={setGenerating} />}
       <div className="form-actions">{back}</div>
     </>}
 
@@ -233,6 +243,8 @@ export function ProposalPreview({ draft: initial, generated = false, decide, rea
           <p>Fix: {flaw.fix}</p>
         </li>)}
       </ol>
+      {publish && onPublished && <PublishChallenge draft={draft} flaws={preview.preview.flaws} publish={publish}
+        onPublished={onPublished} reload={reload} disabled={generating} onBusyChange={setPublishing} />}
     </section>}
   </section>;
 }

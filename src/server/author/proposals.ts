@@ -40,7 +40,7 @@ const decisionResultSchema = z.union([
 ]);
 
 /** Shared preconditions for the two T-21 writes; the result is null when the request may proceed. */
-async function writeRequest<T>(id: string, request: Request, schema: z.ZodType<T>) {
+export async function writeRequest<T>(id: string, request: Request, schema: z.ZodType<T>) {
   const caller = await authorCaller();
   if (caller.status !== "ok") return { failure: caller } as const;
   const guard = writeGuard(request, caller);

@@ -1282,6 +1282,169 @@ the limits above remain unchanged.
 - **Depends on:** T-04, T-05, T-20
 - **Status:** done
 
+### T-22: Publish a challenge with generated hints
+
+- **Issue:** #83
+- **Covers:** AUT-05.1–05.7. AUT-03.2's disabled publication action while
+  generation is pending and AUT-04.4's invalidation of uncommitted hints by a
+  saved decision change, which T-21 left for this task. “Unpublish” and
+  “Archive” belong to T-23; AUT-05.7's archived denial applies to states
+  inserted by tests until T-23 adds the actions. SYS-02.1–02.2,
+  SYS-03.1–03.3, SYS-04.1–04.2, SYS-08.1–08.3, SYS-09, SYS-10.1–10.4 (the
+  “Publication” named use), SYS-11, SYS-12.1 (Author rows of Learner-facing
+  challenge material and of private answers and grading material), SYS-14.3,
+  SYS-17, SYS-18.2 and SYS-19 apply to the new Author reads, writes and UI.
+  SEC-01.1–01.2, SEC-02.1–02.2, SEC-03.1 (hints), SEC-04.1–04.2,
+  SEC-05.1–05.3 and SEC-06.1 for the `generate_hints` caller and its
+  persistence, reusing rather than rebuilding T-04's provider, accounting,
+  hint safety checks and limit enforcement.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Author,
+  §4 Product decisions → Flaw proposals and answer keys, Hints and attempts,
+  Challenge input and Shared vocabularies, and §5 Navigation and UI.
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted
+  code, SYS-03 — LLM boundary, SYS-04 — Shared building blocks, SYS-08 —
+  Authorization at the data boundary, SYS-09 — Authentication with Cache
+  Components, SYS-10 — Database enforcement and privileged access, SYS-11 —
+  Authentication and authorization failures, SYS-12 — Record access and audit
+  (Learner-facing challenge material and Private answers and grading
+  material), SYS-14 — Delivery and database evolution (SYS-14.3), SYS-17 —
+  Simple, accessible UI, SYS-18 — Resource use and SYS-19 — Test strategy.
+  `workflow/specs/AI-SECURITY-SPEC.md` Attack surfaces, SEC-01 — Authorize and
+  minimize model access, SEC-02 — Validate model output before use, SEC-03 —
+  Protect learner-facing hints and feedback, SEC-04 — Bound SoC requests and
+  usage, SEC-05 — Reserve and settle usage atomically and SEC-06 — Contain
+  failures and keep diagnostics safe. `workflow/specs/INTEGRATION-SPEC.md` §1
+  Scope and contract conventions → Shared values and bounds and Pasted-code
+  cap, §2 Domain model and publication lifecycle (challenges,
+  challenge_drafts, challenge_revisions, revision_answers, revision_flaws,
+  flaw_hints) → SYS-12 decision: immutable published revisions and Code,
+  proposals and locations, §3 API contracts → Transport, concurrency and
+  errors, Shared response types (`AuthorPublication`, `ChallengeView`,
+  `CodeDiff`, `RevisionFlaw`) and Author surface (`POST
+  /author/challenges/:id/publish`, `GET
+  /author/challenges/:id/revisions/:revisionId`), §4 Server-only LLM contracts
+  (shared envelope and Publication hints: `operation: generate_hints`), §6
+  Shared deterministic seed fixtures (Author A/B identities, C1/C2 ownership
+  and Derived fixture scenarios) and §7 Integration verification.
+  `workflow/specs/stories/AUT-05-publish-a-challenge.md`,
+  `workflow/specs/stories/AUT-03-generate-flaw-proposals.md` (AUT-03.2),
+  `workflow/specs/stories/AUT-04-preview-and-decide-flaws.md` (AUT-04.4),
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  (ACC-03.2, ACC-03.4–03.8), and the Decisions and REV-06 finding in
+  `workflow/handoffs/82-author-proposals.md` that bind T-22.
+- **Tests:** unit (`tests/unit/author/`) for strict publish request and
+  response shapes: unknown fields, both expected versions, UUID path IDs and a
+  required `Idempotency-Key` UUID on POST; the `AuthorPublication` and
+  revision-detail DTOs; the exact AUT-05 messages and the INTEGRATION-SPEC §3
+  code for every failure; and the client status mapping (success, ineligible,
+  invalid hints, timeout, unavailable, limited, too large, conflict,
+  uncertain and access failures). jsdom component tests, following
+  `tests/unit/author/`, cover “Publish challenge” and a retained-flaw summary
+  beside the final preview only when AUT-04's conditions hold; the ineligible
+  message with “Back to proposal preview”; “Preparing hints and publishing…”
+  with duplicate publication and generation disabled; “Publication result”
+  with “Challenge published.”, revision number, publication time, “View
+  published challenge” and “Back to challenges”, focus on its heading and an
+  announcement; each AUT-05.4 failure with “Back to proposal preview”; “Check
+  publication” replaying the same key; “Try publishing again” using a new key
+  and current versions; the AUT-05.6 conflict with “Reload draft”; the
+  published revision view with real diff, answer key and hints; and inert
+  rendering of script, event-handler, Markdown-link and remote-image text in
+  hints. Local Supabase integration (`tests/integration/author/`) uses real
+  local Auth with Authors A and B, a Learner, a TA and an anonymous caller,
+  and the fake provider. Exercise both Route Handlers for 401, 403, 404, 400,
+  413, 409, 422, 429, 502 and 504. Assert zero provider attempts and zero
+  usage reservations for wrong-role, other-Author, forged-ID, archived,
+  stale-version and ineligible (no set, pending decision, none approved)
+  requests. Capture the fake request and assert the exact `generate_hints`
+  projection of the retained candidate only, with injected instructions kept
+  as data and rejected flaws absent. Verify the admin publication function is
+  executable only by `service_role`, any private ledger or validator has no
+  app-role grants, and direct user-scoped writes to revisions, answers,
+  flaws, hints and the published pointer are denied. Verify a successful
+  publication commits the revision, answers, flaws, one hint per retained
+  flaw, status `published` and the pointer atomically, with a stored diff
+  that passes `private.valid_revision_diff`, and that the Learner catalogue
+  shows the revision only then. Verify the database rejects tampered hints or
+  a changed candidate on completion even after server validation. Cover
+  SEC-03.1 for hints through the fake provider: overlap with a planted
+  snippet, explanation or fix (including another retained flaw's), a line
+  reference, markup or a link each end in 422 `INVALID_AI_OUTPUT` after the
+  permitted retry with no revision; invalid output followed by success
+  publishes once. Cover timeout, transport and limit failures with no partial
+  revision and the prior publication intact. Cover a draft edit, decision
+  change, regeneration or archive before completion (409, stale candidate not
+  published), a late result after expiry, replays returning the same
+  publication without a second provider call or revision, a changed payload
+  returning 409 `IDEMPOTENCY_CONFLICT`, concurrent duplicates dispatching
+  once and a new key after a confirmed failure. Cover republishing an edited
+  or unpublished challenge: revision number increments, new flaw and hint
+  IDs, pointer switches only on success, and the earlier revision's code,
+  key, hints and pinned submissions are unchanged. Cover the revision read
+  for the owner and denial for other Authors, Learners, TAs and anonymous
+  callers, including a revision ID from another challenge. Scan responses and
+  captured diagnostics for sentinel code, answer and hint text under
+  SEC-06.1. Insert unpublished and archived states through the superuser `pg`
+  harness only. Production-build e2e (`tests/e2e/author/`) covers keyboard
+  “Proposal preview” → “Preview final challenge” → “Publish challenge” →
+  “Publication result” → “View published challenge” with the fake provider,
+  at 320 CSS pixels without page-level horizontal scrolling, and the Learner
+  catalogue then listing the challenge. The orchestrator runs every
+  database-backed check; specialists report them as unrun.
+- **Config paths:** none; consume `src/server/llm/config.ts` unchanged and
+  reuse T-20's `author` integration-suite inclusion.
+- **Constraints:** Before writing Next.js code, read the installed
+  `node_modules/next/dist/docs/` guides for Route Handlers and dynamic routes.
+  Add `POST /api/v1/author/challenges/[id]/publish` and `GET
+  /api/v1/author/challenges/[id]/revisions/[revisionId]`, sharing validated
+  contracts in `src/server/author/`. Each entry point verifies the session
+  and stored Author role through `src/server/author/access.ts`, checks
+  ownership and state, and prevents cross-request caching. Add “Publish
+  challenge” beside T-21's final preview on “Proposal preview”, “Publication
+  result” at `/author/challenges/[id]/publication` and the published revision
+  view at `/author/challenges/[id]/revisions/[revisionId]`. Render code and
+  diffs with the shared `src/components/code-diff.tsx`; hints and answer text
+  render as inert plain text.
+
+  Publication calls `src/server/llm/` (`createLlmBoundary`, operation
+  `generate_hints`) only after the stored-role, ownership, state,
+  expected-version and eligibility checks; the caller supplies no snapshot,
+  actor, candidate or accounting fields. Reuse the boundary's existing hint
+  capture, SEC-03 checks, admission, retries, deadlines, settlement and
+  operation idempotency, following T-21's claim/fail/complete pattern in
+  `src/server/author/proposals.ts`. Add one admin-only database function for
+  the SYS-10.3 “Publication” named use, granted only to `service_role` and
+  denied to `PUBLIC`, `anon` and `authenticated`. Serialized on the challenge
+  row, it accepts only this request's completed, unexpired, settled
+  `generate_hints` operation; rechecks the Author role, ownership, a
+  non-archived state and both captured versions; requires the active set
+  with every proposal decided and at least one approved; revalidates the
+  assembled candidate and exactly one valid hint per retained flaw against
+  the stored proposals rather than trusting caller-supplied code, ranges or
+  diff; and in one transaction inserts the revision (next revision number),
+  its answers with the real diff, its flaws and hints, sets status
+  `published` and moves the pointer. It never edits or deletes earlier
+  revisions, keys, hints, proposal sets or submissions. No transaction spans
+  a provider call. Do not rely on the preview route's `draftVersion` alone
+  (T-21 REV-06); the function is the authority. Build the stored diff with
+  T-21's `src/lib/author/preview.ts` derivation, with no new dependency; it
+  must pass `private.valid_revision_diff`. A successful publication
+  increments rowVersion only (the draft is unchanged); failed, replayed or
+  stale publications change no versions. The draft and its decided proposal
+  set stay in place after publication.
+
+  The revision read is user-scoped under the existing owner RLS policies and
+  returns `{ publication, challenge, answerKey, hints }` only for a revision
+  of the caller's own challenge. Add a migration and regenerate
+  `src/lib/supabase/database.types.ts`. Errors and diagnostics follow SEC-06:
+  no prompts, code, answer text, hint text or provider bodies. All tests use
+  the fake provider; this task does not enable live SoC or change provider
+  settings. The `generate_hints` output cap in `src/server/llm/config.ts`
+  stays unchanged.
+- **Depends on:** T-04, T-05, T-21
+- **Status:** done
+
 ## TA
 
 ### T-30: Inspect submissions and retained assessment evidence
