@@ -1,5 +1,5 @@
 import "server-only";
-import { authorErrorMessages as messages } from "@/lib/author/drafts";
+import { authorErrorMessages as messages, proposalMessages } from "@/lib/author/drafts";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { accountAccessHeader } from "@/lib/learner/challenges";
 import type { AuthorFailure } from "./drafts";
@@ -32,4 +32,33 @@ export function authorErrorResponse(result: AuthorFailure): Response {
   const fieldErrors = result.status === "invalid" ? result.fieldErrors : undefined;
   const responseHeaders = isWorkspaceAccessFailure(result) ? { ...headers, [accountAccessHeader]: result.status } : headers;
   return Response.json({ error: { code, message, ...(fieldErrors && { fieldErrors }) } }, { status, headers: responseHeaders });
+}
+
+/** INTEGRATION-SPEC §3 status and message for a recorded generation failure code. */
+const generationErrors: Record<string, readonly [number, string]> = {
+  VALIDATION_ERROR: [400, messages.invalid],
+  UNAUTHENTICATED: [401, messages.unauthenticated],
+  FORBIDDEN: [403, messages.forbidden],
+  NOT_FOUND: [404, messages.notFound],
+  VERSION_CONFLICT: [409, messages.versionConflict],
+  // A generation INVALID_STATE means the draft became ineligible (archived) before completion.
+  INVALID_STATE: [409, messages.archived],
+  IDEMPOTENCY_CONFLICT: [409, messages.idempotencyConflict],
+  PAYLOAD_TOO_LARGE: [413, proposalMessages.tooLarge],
+  INVALID_AI_OUTPUT: [422, proposalMessages.invalidOutput],
+  RATE_LIMITED: [429, proposalMessages.limited],
+  AI_UNAVAILABLE: [502, proposalMessages.failed],
+  SERVICE_UNAVAILABLE: [503, messages.unavailable],
+  AI_TIMEOUT: [504, proposalMessages.timeout],
+};
+
+export function generationErrorResponse(code: string): Response {
+  const known = Object.hasOwn(generationErrors, code);
+  const [status, message] = known ? generationErrors[code] : generationErrors.SERVICE_UNAVAILABLE;
+  return Response.json({ error: { code: known ? code : "SERVICE_UNAVAILABLE", message } }, { status, headers });
+}
+
+/** AUT-04.3: the final preview is unavailable until decisions are complete with one approval. */
+export function previewIncompleteResponse(): Response {
+  return Response.json({ error: { code: "INVALID_STATE", message: proposalMessages.undecided } }, { status: 409, headers });
 }

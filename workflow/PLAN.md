@@ -1123,6 +1123,165 @@ the limits above remain unchanged.
 - **Depends on:** T-02, T-03; spec PR for #80.
 - **Status:** done
 
+### T-21: Generate, preview and decide flaw proposals
+
+- **Issue:** #82
+- **Covers:** AUT-03.1–03.7. AUT-04.1–04.6. The “Generate proposals” action
+  and its eligibility in AUT-02.1 and AUT-02.3 that T-20 left out. “Publish
+  challenge” and hint generation belong to T-22; AUT-03.2's disabled
+  publication action and AUT-04.4's hint invalidation apply once T-22 adds
+  them. SYS-02.1–02.2, SYS-03.1–03.3, SYS-04.1–04.2, SYS-08.1–08.3, SYS-09,
+  SYS-10.1–10.4 (the “Proposal generation” named use; proposal decisions stay
+  user-scoped), SYS-11, SYS-12.1 (Author rows of private answers and grading
+  material), SYS-14.3, SYS-17, SYS-18.2 and SYS-19 apply to the new Author
+  reads, writes and UI. SEC-01.1–01.2, SEC-02.1–02.2, SEC-04.1–04.2,
+  SEC-05.1–05.3 and SEC-06.1 for the `inject_flaws` caller and its
+  persistence, reusing rather than rebuilding T-04's provider, accounting and
+  limit enforcement.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Author,
+  §4 Product decisions → Flaw proposals and answer keys, Hints and attempts,
+  Challenge input and Shared vocabularies, and §5 Navigation and UI.
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted
+  code, SYS-03 — LLM boundary, SYS-04 — Shared building blocks, SYS-08 —
+  Authorization at the data boundary, SYS-09 — Authentication with Cache
+  Components, SYS-10 — Database enforcement and privileged access, SYS-11 —
+  Authentication and authorization failures, SYS-12 — Record access and audit
+  (Learner-facing challenge material and Private answers and grading
+  material), SYS-14 — Delivery and database evolution (SYS-14.3), SYS-17 —
+  Simple, accessible UI, SYS-18 — Resource use and SYS-19 — Test strategy.
+  `workflow/specs/AI-SECURITY-SPEC.md` Attack surfaces (Author code and
+  generated proposals), SEC-01 — Authorize and minimize model access, SEC-02 —
+  Validate model output before use, SEC-04 — Bound SoC requests and usage,
+  SEC-05 — Reserve and settle usage atomically and SEC-06 — Contain failures
+  and keep diagnostics safe. `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and
+  contract conventions → Shared values and bounds and Pasted-code cap, §2 Domain
+  model and publication lifecycle (challenges, challenge_drafts, proposal_sets,
+  proposal_decisions) → SYS-12 decision: immutable published revisions and
+  Code, proposals and locations, §3 API contracts → Transport, concurrency and
+  errors, Shared response types (`AuthorDraft`, `CodeDiff`, `RevisionFlaw`)
+  and Author surface (`POST /author/challenges/:id/proposals`, `PATCH
+  /author/challenges/:id/proposals/:proposalId`, `GET
+  /author/challenges/:id/preview`), §4 Server-only LLM contracts (shared
+  envelope and Flaw injection: `operation: inject_flaws`), §6 Shared
+  deterministic seed fixtures (Author A/B identities and C1/C2 ownership) and
+  §7 Integration verification.
+  `workflow/specs/stories/AUT-03-generate-flaw-proposals.md`,
+  `workflow/specs/stories/AUT-04-preview-and-decide-flaws.md`,
+  `workflow/specs/stories/AUT-02-configure-flaws.md` (AUT-02.1, AUT-02.3),
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  (ACC-03.2, ACC-03.4–03.8), and the T-20 Decisions in
+  `workflow/handoffs/81-author-drafts.md` that bind T-21.
+- **Tests:** unit (`tests/unit/author/`) for strict generation, decision and
+  preview request and response shapes: unknown fields, both expected versions,
+  `decision: approved | rejected` only (never `pending`), UUID path IDs and a
+  required `Idempotency-Key` UUID on POST. Cover the exact AUT-03 and AUT-04
+  messages and the INTEGRATION-SPEC §3 code for every failure. Cover
+  server-side assembly of the final candidate: retained edits applied in
+  source order, final ranges shifted only by earlier retained edits, rejected
+  replacements absent from code and key, trailing-LF and no-trailing-LF files,
+  and a real working-to-flawed `CodeDiff` whose hunks reproduce both sides.
+  Cover fake `inject_flaws` output that is rejected whole: wrong count,
+  foreign category, duplicate keys, overlapping or out-of-range ranges,
+  mismatched snippets, a trailing-LF or blank replacement and a candidate over
+  the code cap. jsdom component tests, following `tests/unit/author/`, cover
+  saved count, categories and difficulty above “Generate proposals”; the
+  unsaved-edits message; pending state with repeat generation disabled; the
+  replacement confirmation with both choices; arrival at “Proposal preview”
+  with focus and announcement; each AUT-03.6 failure with “Try again” and
+  “Back to configuration”; “Check generation” replaying the same key;
+  per-proposal “Approve”/“Reject” with “Saving decision…”, focus kept on that
+  proposal and decisions shown as text; the incomplete and all-rejected
+  messages; “Preview final challenge” with focus on its heading; decision
+  failure, uncertain and conflict states; absent proposals; preview read
+  failure and retry; and inert rendering of script, event-handler,
+  Markdown-link and remote-image text.
+  Local Supabase integration (`tests/integration/author/`) uses real local
+  Auth with Authors A and B, a Learner, a TA and an anonymous caller, and the
+  fake provider. Exercise all three Route Handlers for 401, 403, 404, 400, 413,
+  409, 422, 429, 502 and 504. Assert zero provider attempts and zero usage
+  reservations for wrong-role, other-Author, forged-ID, archived and
+  stale-version requests. Capture the fake request and assert the exact
+  `inject_flaws` projection of the saved draft, with injected instructions
+  kept as data. Verify the admin generation function is executable only by
+  `service_role`, and that direct user-scoped writes to proposal sets,
+  proposals, decisions and the generation pointer are denied. Verify a
+  successful generation persists the set, proposals, pending decisions and
+  pointer atomically. Verify a draft edit, regeneration or archive before
+  completion leaves the newer state untouched, and a late result after expiry
+  is never shown as successful. Cover a failed regeneration keeping the prior
+  set and decisions, replays returning the recorded result without a second
+  provider call, a changed payload returning 409 `IDEMPOTENCY_CONFLICT`,
+  concurrent duplicates dispatching once, and a new key after a confirmed
+  failure starting a new attempt. Cover invalid output followed by success,
+  repeated invalid output (422), timeout and transport failure attempt counts
+  under SEC-05. Cover decisions on the active set only: version increments,
+  switching decisions, stale-set and stale-version conflicts that leave the
+  newer decision intact, and denial for other Authors, Learners, TAs and
+  direct calls. Cover the preview 409 for incomplete or all-rejected decisions
+  and the exact assembled response, and check its diff against the database's
+  `private.valid_revision_diff`. Scan responses and captured diagnostics for
+  sentinel code and answer text under SEC-06.1. Replace
+  `activateProposalSet()` in new tests with the real generation path; insert
+  published and archived states through the superuser `pg` harness only.
+  Production-build e2e (`tests/e2e/author/`) covers keyboard draft →
+  “Generate proposals” → “Proposal preview” → approve and reject → “Preview
+  final challenge” with the fake provider, at 320 CSS pixels without
+  page-level horizontal scrolling. The orchestrator runs every database-backed
+  check; specialists report them as unrun.
+- **Config paths:** none; consume `src/server/llm/config.ts` unchanged and
+  reuse T-20's `author` integration-suite inclusion.
+- **Constraints:** Before writing Next.js code, read the installed
+  `node_modules/next/dist/docs/` guides for Route Handlers, dynamic routes and
+  forms or Server Actions. Add `POST
+  /api/v1/author/challenges/[id]/proposals`, `PATCH
+  /api/v1/author/challenges/[id]/proposals/[proposalId]` and `GET
+  /api/v1/author/challenges/[id]/preview`, sharing validated contracts in
+  `src/server/author/` with any page or Server Action. Each entry point
+  verifies the session and stored Author role through
+  `src/server/author/access.ts`, checks ownership and state, and prevents
+  cross-request caching. Add “Generate proposals” on the T-20 configuration
+  and detail pages, and “Proposal preview” at
+  `/author/challenges/[id]/proposals`. Render code and diffs with the shared
+  `src/components/code-diff.tsx`.
+
+  Generation calls `src/server/llm/` (`createLlmBoundary`, operation
+  `inject_flaws`) only after the stored-role, ownership, archived-state and
+  expected-version checks; the caller supplies no snapshot, actor or
+  accounting fields. Reuse T-04's admission, retries, deadlines and settlement
+  and its operation idempotency, following the claim/fail/complete pattern of
+  `src/server/ta/summaries.ts`. Add one admin-only database function for the
+  SYS-10.3 “Proposal generation” named use, granted only to `service_role`
+  and denied to `PUBLIC`, `anon` and `authenticated`. It revalidates the
+  output against the captured snapshot. Serialized on the challenge row, it
+  compares the captured row and draft versions and rejects archived
+  challenges and expired operations. In one transaction it inserts the set,
+  proposals and pending decisions and moves the generation pointer, never
+  deleting historical sets or touching publication. No transaction spans a
+  provider call. Decisions use a user-callable function granted only to
+  `authenticated`, with no direct table grants (PR #43's write boundary). It
+  accepts only a proposal in the active set under both expected versions,
+  never edits proposal text, and keeps the active set. A successful
+  generation and every accepted decision each increment both rowVersion and
+  draftVersion; neither changes status or the published pointer. Failed,
+  replayed or stale generations change no versions.
+
+  Preview is a user-scoped read that assembles retained proposals on the
+  server with `assembleCandidate` and returns 409 `INVALID_STATE` for
+  incomplete or all-rejected decisions. No server code derives a real
+  working-to-flawed diff yet: add one client-safe derivation in `src/lib/`
+  that builds hunks from the retained replacement ranges, with no new
+  dependency, so T-22 reuses it for `revision_answers`. Its output must pass
+  `private.valid_revision_diff`. Never trust model or client diff text or
+  final line numbers. `AuthorDraft.proposals` lists the active set by source
+  order with persisted IDs only, never the model-local `key`. Add a migration
+  and regenerate `src/lib/supabase/database.types.ts`. Errors and diagnostics
+  follow SEC-06: no prompts, code, answer text or provider bodies. All tests
+  use the fake provider; this task does not enable live SoC or change provider
+  settings.
+- **Depends on:** T-04, T-05, T-20
+- **Status:** done
+
 ## TA
 
 ### T-30: Inspect submissions and retained assessment evidence

@@ -14,5 +14,5 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 async function Requested({ params }: { params: Promise<{ id: string }> }) {
   await connection();
   const { id } = await params;
-  return <WorkspacePage role="author">{accountId => <ChallengeDetailRoute key={`${accountId}:${id}`} challengeId={id} />}</WorkspacePage>;
+  return <WorkspacePage role="author">{accountId => <ChallengeDetailRoute key={`${accountId}:${id}`} challengeId={id} accountId={accountId} />}</WorkspacePage>;
 }
