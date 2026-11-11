@@ -959,6 +959,120 @@ RLS policies; the detail route uses `challenge_generation_access` to return
 - `bun run test:e2e tests/e2e/author` exercises keyboard create at phone width,
   filtering, editing and cross-Author denial on a production build.
 
+### Author flaw proposals
+
+The challenge page and **Flaw configuration** both show **AI flaw proposals**
+with the saved flaw count, categories and difficulty, and a **Generate
+proposals** button (not shown for archived challenges). Flaw configuration with
+unsaved changes refuses with “Save your changes before generating proposals.”
+When a proposal set already exists, **Replace the current proposals?** warns
+“New proposals replace the current proposals and reset their decisions.” and
+offers **Generate new proposals** or **Cancel**. While the request runs the
+screen shows “Generating proposals…”.
+
+On success the app opens **Proposal preview** (`/author/challenges/:id/proposals`),
+moves focus to its heading and announces “Proposals generated. Review every
+proposal before publishing.” A failure keeps the current proposals and shows
+one of:
+
+| Message | **Try again** |
+| --- | --- |
+| “The AI returned invalid proposals. Try again.” | Yes |
+| “Proposal generation timed out. Try again.” | Yes |
+| “We couldn't generate proposals right now. Try again.” | Yes |
+| “AI generation is unavailable within the current limits. Try again later.” | No |
+| “This draft is too large for AI generation. Reduce it before trying again.” | No |
+
+**Try again** starts a new attempt from the draft's current versions. If the
+app cannot confirm the result it shows “We couldn't confirm proposal
+generation.” with **Check generation**, which replays the same request so it
+never creates a second set. A draft changed elsewhere shows “This draft changed.
+Reload it before generating proposals.” with **Reload draft**.
+
+**Proposal preview** labels the list as AI-generated. Each proposal shows its
+category, “Source line N” or “Source lines N–M” of the working code, the
+**Original code** and **Replacement code** in the shared code view, the
+**Explanation**, the **Fix** and its **Decision** (Pending, Approved or
+Rejected), with **Approve** and **Reject** buttons. Generated text cannot be
+edited here. A decision that fails shows “We couldn't save this decision. Try
+again.”; an unconfirmed one shows “We couldn't confirm this decision. Refresh
+the draft.” with **Refresh draft**; a stale one shows “This draft changed. Reload
+it before reviewing proposals.” with **Reload draft**. With no proposals the
+page shows “Generate proposals before reviewing flaws.” and **Back to
+configuration**.
+
+**Preview final challenge** appears only after every proposal is decided
+(otherwise “Decide every proposal to preview the final challenge.”) and at
+least one is approved (otherwise “Approve at least one proposal to preview or
+publish.”). It loads **Final challenge preview**: the working code compared
+with the flawed code Learners will review, plus an **Answer key** listing each
+approved flaw's category and “Final line N” location. If the decisions changed
+since the page loaded, the preview shows the same “This draft changed…”
+conflict and **Reload draft**. Publishing is not part of this screen yet.
+
+#### Author proposal contracts
+
+All three routes follow the Author draft contract rules above (stored Author
+role, Zod, `private, no-store`, 128 KiB body cap, `Origin` and account-header
+checks, 403 for another Author's challenge, 404 for an absent one):
+
+- `POST /api/v1/author/challenges/:id/proposals` needs an `Idempotency-Key` UUID
+  and a body of exactly `expectedRowVersion` and `expectedDraftVersion`. It
+  returns 200 with the draft. Failures use INTEGRATION-SPEC §3 codes: 409
+  `VERSION_CONFLICT`, 409 `INVALID_STATE` (archived, or the same request still
+  running), 409 `IDEMPOTENCY_CONFLICT`, 413 `PAYLOAD_TOO_LARGE`, 422
+  `INVALID_AI_OUTPUT`, 429 `RATE_LIMITED`, 502 `AI_UNAVAILABLE`, 503
+  `SERVICE_UNAVAILABLE` and 504 `AI_TIMEOUT` (also for a result that arrives
+  after the operation expired).
+- `PATCH /api/v1/author/challenges/:id/proposals/:proposalId` takes exactly
+  `expectedRowVersion`, `expectedDraftVersion` and `decision` (`approved` or
+  `rejected`) for a proposal of the active set, and returns the draft.
+- `GET /api/v1/author/challenges/:id/preview` returns the server-assembled
+  `code` diff, the approved `flaws` and the `draftVersion` it was built from. It
+  returns 409 `INVALID_STATE` until every proposal is decided and one is
+  approved. The route checks its diff against the shared `assembleCandidate`
+  and rereads the draft version, so it never mixes decisions from two saves.
+
+A successful generation and each accepted decision increment both `rowVersion`
+and `draftVersion`; a failed, replayed or stale generation changes neither.
+
+The
+[Author proposals migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261112120000_author_proposals.sql)
+adds:
+
+- `persist_author_proposals(jsonb)`, the SYS-10.3 “Proposal generation” admin
+  function, executable only by `service_role` and called through the admin
+  client. `claim` records the request in the private `author_proposal_requests`
+  ledger (keyed by actor, challenge and idempotency key, expiring after 45
+  seconds); a replay returns the recorded outcome. `fail` records a failure
+  code. `complete` accepts only this request's completed, unexpired and settled
+  `inject_flaws` operation. It rechecks the Author role, ownership, versions and
+  the captured input snapshot, and revalidates the output with the private
+  `valid_injected_proposals` validator, raising `INVALID_AI_OUTPUT` even if
+  server validation was bypassed. It then saves the set, its proposals with
+  server IDs and pending decisions, and the draft's active-generation pointer
+  in one transaction. The new set replaces the active one; earlier sets are
+  kept.
+- `decide_author_proposal(uuid, uuid, jsonb)`, user-scoped and executable only
+  by `authenticated`. It locks the challenge, checks owner, state and versions,
+  and refuses proposals outside the active set.
+
+The ledger has RLS on and no table grants; no app role or `PUBLIC` can execute
+the validator. Authors still cannot write proposal tables or the generation
+pointer directly. See the
+[server proposal contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/author/proposals.ts).
+
+#### Author proposal checks
+
+- `bun run test tests/unit/author` also covers generation and decision outcomes,
+  the client status mapping, the final preview builder and focus on arrival.
+- `bun run test:integration tests/integration/author/proposals.test.ts` exercises
+  grants, replay, versions, SQL output revalidation, late results and decisions
+  against local Supabase with the fake provider.
+- `bun run test:e2e tests/e2e/author/proposals.spec.ts` generates, decides and
+  previews by keyboard at phone width, checks the no-proposals state and
+  cross-Author denial on a production build.
+
 ### Auth tests and settings
 
 `bun run test` runs unit tests without Supabase. Start the local stack before
