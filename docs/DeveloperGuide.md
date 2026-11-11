@@ -879,6 +879,86 @@ result are atomic, so a lost response can be retried without duplicate history.
   retries, session recovery, keyboard access and phone width against a production
   build with local Supabase and the fake provider.
 
+### Author challenge drafts
+
+**My challenges** (`/author/challenges`) lists your own challenges, newest
+first, with each challenge's status, language and difficulty. Filter it with
+**Status** (All statuses, Draft, Published, Unpublished, Archived), choose
+**Load more** for the next page, and choose **View challenge** to open one.
+**Create challenge** opens `/author/challenges/new`.
+
+The create form has **Challenge details** (title, description, language,
+difficulty and working code) and **Flaws to inject** (**Flaw count** from 1 to 5
+and 1–5 **Flaw categories**). You may select more categories than the flaw
+count. Titles allow up to 120 Unicode code points and descriptions up to 4,000,
+both after trimming. Working code is one source file of up to 20,000 UTF-8 bytes
+after line endings are normalized to LF. It is displayed, never run. Text
+containing NUL characters or ill-formed Unicode is rejected with the field's
+message. **Save draft** creates a private draft and opens **Flaw
+configuration** with “Draft saved.” If the app cannot confirm the save, the
+form shows **Check save**, which replays the same request so it never creates a
+second draft.
+
+The challenge page (`/author/challenges/:id`) shows the status, whether a
+published revision is live, the metadata, the flaw configuration and the
+**Working draft code**. **Edit draft** opens `/author/challenges/:id/edit`; it is
+not offered for archived challenges, which cannot be edited. **Flaw
+configuration** (`/author/challenges/:id/configuration`) edits only the flaw
+count, categories and difficulty.
+
+Both edit screens send only changed fields; trimmed text that matches the saved
+value is not a change, so **Save changes** and **Save configuration** stay
+disabled until something differs. Every accepted save clears any active
+proposal set, so when one exists the screen first asks **Clear the current
+proposals?**. Editing a published challenge changes only its working draft;
+the published revision stays live. A save after someone else's change shows
+“This challenge changed. Reload it before continuing.” (or “This draft changed.
+Reload it before saving.” on Flaw configuration) and never overwrites the newer
+state. An unconfirmed save offers **Refresh challenge** or **Refresh draft**
+and never reports success.
+
+#### Author draft contracts
+
+The routes implement `GET`/`POST /api/v1/author/challenges` and
+`GET`/`PATCH /api/v1/author/challenges/:id` from “Author surface” in
+[INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+Every route checks the stored Author role, validates input with Zod and
+responds `private, no-store`. Writes cap bodies at 128 KiB, check a supplied
+`Origin` and optional `X-LGTM-Workspace-Account-Id`, then call a user-scoped
+database function. A create requires an `Idempotency-Key` UUID. An edit needs
+`expectedRowVersion` and `expectedDraftVersion` (1 to 2,147,483,647) plus at
+least one changed field. Categories are stored in vocabulary order, so the same
+selection always fingerprints the same.
+
+The
+[Author drafts migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261111120000_author_drafts.sql)
+adds the security-definer functions `create_author_challenge` and
+`update_author_draft`, granted only to `authenticated`. Authors still have no
+direct table write grants. Create records each committed request in the
+private `author_challenge_create_requests` ledger, keyed by actor and
+idempotency key with a server-computed fingerprint. A replay returns the
+recorded draft, a changed payload under the same key returns
+`409 IDEMPOTENCY_CONFLICT`, and a concurrent duplicate returns
+`409 INVALID_STATE`, which is safe to replay. Edits lock the challenge row,
+return `409 VERSION_CONFLICT` for stale versions and `409 INVALID_STATE` for
+archived challenges, increment both versions and clear the active proposal
+set. They leave historical proposal sets, published revisions and the live
+pointer unchanged. The ledger and the private field validator have RLS or
+revoked execution and no grants to any app role. Reads use the existing owner
+RLS policies; the detail route uses `challenge_generation_access` to return
+403 for another Author's challenge and 404 for an absent one. See the
+[server draft contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/author/drafts.ts).
+
+#### Author draft checks
+
+- `bun run test tests/unit/author` covers the screens, save outcomes and HTTP
+  validation without Supabase.
+- `bun run test:integration tests/integration/author` exercises grants, direct
+  database calls, idempotency, versions, proposal invalidation and list access
+  against local Supabase.
+- `bun run test:e2e tests/e2e/author` exercises keyboard create at phone width,
+  filtering, editing and cross-Author denial on a production build.
+
 ### Auth tests and settings
 
 `bun run test` runs unit tests without Supabase. Start the local stack before

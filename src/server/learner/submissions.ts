@@ -9,6 +9,7 @@ import {
   commentLimit, pendingGrade, reviewBodyLimit, submissionFieldsSchema, submissionInputSchema,
   submissionOutcomeMessages, submissionViewSchema, workspaceAccountHeader, type SubmissionView,
 } from "@/lib/learner/submissions";
+import { matchesRequestOrigin, readJsonBody } from "@/server/http/request";
 import { createClient } from "@/server/supabase/server";
 import { checkLearnerAccount, type LearnerClient } from "./access";
 import { projectLearnerCode } from "./projection";
@@ -143,30 +144,9 @@ export async function readLearnerHint(
   }
 }
 
-export async function readRequestBody(request: Request, byteLimit = reviewBodyLimit): Promise<{ status: "ok"; value: unknown } | { status: "too_large" | "invalid" }> {
-  const reader = request.body?.getReader();
-  if (!reader) return { status: "invalid" };
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      bytes += chunk.value.byteLength;
-      if (bytes > byteLimit) {
-        void reader.cancel().catch(() => {});
-        return { status: "too_large" };
-      }
-      chunks.push(chunk.value);
-    }
-    const body = chunks.map(chunk => decoder.decode(chunk, { stream: true })).join("") + decoder.decode();
-    return { status: "ok", value: JSON.parse(body) as unknown };
-  } catch {
-    return { status: "invalid" };
-  } finally {
-    reader.releaseLock();
-  }
+/** Shared request-body reader (see `@/server/http/request`), kept here for existing Learner and TA importers. */
+export function readRequestBody(request: Request, byteLimit = reviewBodyLimit) {
+  return readJsonBody(request, byteLimit);
 }
 
 function validationFailure(error: z.ZodError): Invalid {
@@ -182,23 +162,7 @@ function validationFailure(error: z.ZodError): Invalid {
   return Object.keys(fieldErrors).length ? { status: "invalid", fieldErrors } : { status: "invalid" };
 }
 
-export function matchesRequestOrigin(request: Request, url: URL) {
-  const origin = request.headers.get("Origin");
-  const host = request.headers.get("Host");
-  if (host === null) return origin === null || origin === url.origin;
-  // Next can put its internal hostname in Request.url. Use the inbound Host
-  // authority with Next's protocol, never a forwarded host from the caller.
-  if (!/^(?:[a-z0-9.-]+|\[[a-f0-9:.]+\])(?::\d+)?$/i.test(host)) return false;
-  try {
-    const inbound = new URL(`${url.protocol}//${host}`);
-    if (!inbound.hostname.startsWith("[") && !inbound.hostname.replace(/\.$/, "").split(".").every(
-      label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label),
-    )) return false;
-    return origin === null || origin === inbound.origin;
-  } catch {
-    return false;
-  }
-}
+export { matchesRequestOrigin };
 
 export function matchesWorkspaceAccount(request: Request, accountId: string) {
   const workspaceAccount = request.headers.get(workspaceAccountHeader);
@@ -216,7 +180,7 @@ export async function createLearnerSubmission(id: string, request: Request): Pro
   const challengeId = challengeIdSchema.safeParse(id);
   const key = challengeIdSchema.safeParse(request.headers.get("Idempotency-Key"));
   if (!challengeId.success || !key.success || url.searchParams.size) return { status: "invalid" };
-  const raw = await readRequestBody(request);
+  const raw = await readJsonBody(request, reviewBodyLimit);
   if (raw.status !== "ok") return raw;
   const input = submissionInputSchema.safeParse(raw.value);
   if (!input.success) return validationFailure(input.error);

@@ -4,7 +4,7 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: "node",
-    include: ["tests/integration/{auth,domain,llm,ta}/**/*.test.ts"],
+    include: ["tests/integration/{auth,author,domain,llm,ta}/**/*.test.ts"],
     fileParallelism: false,
     maxWorkers: 1,
     hookTimeout: 30_000,

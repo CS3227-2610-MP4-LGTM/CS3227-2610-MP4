@@ -43,6 +43,20 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"author_challenge_create_requests": {
+                  Row: {
+                    "actor_id": string,"challenge_id": string,"created_at": string,"fingerprint": string,"idempotency_key": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_id": string,"challenge_id": string,"created_at"?: string,"fingerprint": string,"idempotency_key": string
+                  }
+                  Update: {
+                    "actor_id"?: string,"challenge_id"?: string,"created_at"?: string,"fingerprint"?: string,"idempotency_key"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"learner_grading_requests": {
                   Row: {
                     "grading_run_id": string | null,"idempotency_key": string,"intent": string,"outcome": Json | null,"submission_id": string
@@ -204,6 +218,9 @@ isOneToOne: false
                            },
 "ta_grading_view":
 { Args: { "p_id": string }; Returns: Json
+                           },
+"valid_author_draft_fields":
+{ Args: { "fields": Json }; Returns: boolean
                            },
 "valid_domain_categories":
 { Args: { "value": (Database["public"]['Enums']["flaw_category"])[] }; Returns: boolean
@@ -797,6 +814,9 @@ isOneToOne: false
 "complete_learner_grading":
 { Args: { "p_account_id": string,"p_grading_run_id": string,"p_payload": Json,"p_submission_id": string }; Returns: Json
                            },
+"create_author_challenge":
+{ Args: { "p_idempotency_key": string,"p_payload": Json }; Returns: Json
+                           },
 "create_learner_submission":
 { Args: { "p_challenge_id": string,"p_idempotency_key": string,"p_payload": Json }; Returns: Json
                            },
@@ -843,6 +863,9 @@ isOneToOne: false
                            },
 "start_learner_grading":
 { Args: { "p_account_id": string,"p_idempotency_key": string,"p_intent": string,"p_submission_id": string }; Returns: Json
+                           },
+"update_author_draft":
+{ Args: { "p_challenge_id": string,"p_payload": Json }; Returns: Json
                            }
           }
           Enums: {
