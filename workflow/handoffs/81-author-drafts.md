@@ -3,8 +3,8 @@
 - **Route:** high
 - **PLAN task(s):** T-20
 - **Branch:** feat/81-author-drafts
-- **Base commit:** 27e7542a36b7799629d9be2f18b3d8ee0d79f7bc (`upstream/master`), stacked on unmerged spec branch `docs/80-author-list-response` at e58a6d1f26c4c55f386b454d36e825ce09c9d3ac
-- **Status:** done (agent stages complete; G4 human checks outstanding)
+- **Base commit:** a06f062 (`upstream/master`, after spec #80 merged as PR #86); originally 27e7542 stacked on the spec branch at e58a6d1
+- **Status:** done (rebased onto `upstream/master`; push and PR are the human's)
 
 Keep at `workflow/handoffs/<issue>-<slug>.md`. Only the orchestrator updates it.
 Record the current state, not a transcript. Omit command output, stack traces
@@ -27,7 +27,7 @@ through the user-scoped Author surface in INTEGRATION-SPEC §3.
 | Implement | main running sdd-implement (no implementer subagent) | done | Acceptance baseline unchanged (`git diff 949047e -- tests vitest.integration.config.mts` empty). Writes only in `src/` and `supabase/migrations/`. Main: full unit 913/913, Author integration 30/30, domain integration 106/106, full e2e 48/48 on a production build, lint and typecheck clean. Local DB reset applied the new migration; types regenerated. | unavailable |
 | Review | reviewer / medium and security-reviewer / high (fresh general-purpose subagents, no handoff or narrative) | done | Initial: both completed read-only; digest 982b3697a4c138f509dd032993e26296f9de56c69e9fcdc2451382b2aa000024 (match); blocking REV-01, REV-02/SEC-REV-01. Fix round 1 (1 of 2): supplemental tests committed by the human in 479b7a8 (three files; blobs match the table below). Fixes in `src/lib/author/drafts.ts`, `src/components/author/draft-fields.tsx` and the migration; after `db:reset`/`db:types`, main ran unit 927/927, integration author+domain 151/151, e2e author 3/3, lint and typecheck; G2 and supplemental tests unchanged. Rereview by fresh agents of both reviewers: digest f47f4f71a01e83fd3584a9868dfda090d65bbe5ba02f3afe7e10d94c4917a9bf before and after (match). Both completed: all prior findings resolved; one new non-blocking P3 (REV-06). Each ran unit author 149/149, lint, typecheck; DB/e2e left to main. | initial: reviewer 170377, security 121803; rereview: reviewer 84960, security 86179 (subagent totals from the harness) |
 | Docs | main running sdd-docs (no docs subagent) | done | Only `docs/DeveloperGuide.md` changed: new “Author challenge drafts” section with contracts and checks, placed before “Auth tests and settings”. Quoted labels and messages checked against `src/components/author/*`, routes, validation and the migration. README and `docs/index.md` need no change (the Author overview is unchanged). | unavailable |
-| Close-out / G4 | main | done (agent side) | PLAN T-20 `Status:` set to `done`. `bun run verify` and the full `bun run test:e2e` have not been run since the fixes; they are G4 human checks. | unavailable |
+| Close-out / G4 | main | done | PLAN T-20 `Status:` set to `done`. Human rebased onto `upstream/master` a06f062: 712ba22 plan, 700c86b and 94f40ed tests, ee7b0bd feat, 876d8b4 docs. Conflicts resolved in ee7b0bd: `src/server/learner/submissions.ts` keeps upstream's new Learner functions and re-exports `readRequestBody`/`matchesRequestOrigin` from `src/server/http/request.ts`; types regenerated; migration renamed to `20261111120000_author_drafts.sql` (upstream's `learner_grading` took version 20261110120000). Test blobs unchanged except `tests/integration/domain/learner-browse-fixture.ts`, which auto-merged with upstream edits; its T-20 change is identical. Main on the rebased tree: unit 1054/1054, full integration 404/404, lint, typecheck; full e2e 62/63, with the one failure a TA sign-in hang in the `beforeEach` of `tests/e2e/ta/summaries/journeys.spec.ts:95` (upstream test, before any Author step); that spec then passed 7/7 alone. Before the rebase the human's full e2e was 47/48, the failure caused by a concurrent agent run deleting Playwright artifacts; that spec passed 15/15 on rerun. `bun run verify`: not reported by the human, unverified. | unavailable |
 
 ## Decisions
 
@@ -45,6 +45,7 @@ through the user-scoped Author surface in INTEGRATION-SPEC §3.
 | 2026-11-10 | Human | `ProposalWithDecision` omits the model-local `key`; only server IDs persist. |
 | 2026-11-11 | Human (G3) | REV-02/SEC-REV-01: add supplemental tests for the ledger table and private validator rather than accepting the T-03 sweep. |
 | 2026-11-11 | Human (G3) | Fix round 1 covers all findings: REV-01, REV-03, REV-04, REV-05 and SEC-REV-02's cases, each with supplemental tests in new files committed by the human before fixes. |
+| 2026-11-11 | Human (G4) | REV-06 accepted as a known minor issue; no fix round 2. |
 
 ## Context for resuming
 
@@ -137,7 +138,7 @@ challenges, drafts and proposal sets afterwards.
 
 ## Implementation notes
 
-- Migration `20261110120000_author_drafts.sql`: private ledger
+- Migration `20261111120000_author_drafts.sql` (renamed from `20261110120000` at the rebase): private ledger
   `private.author_challenge_create_requests` (RLS on, no role grants), private
   `valid_author_draft_fields(jsonb)`, and definer RPCs `create_author_challenge`
   and `update_author_draft`. These are the only test-defined privileged
@@ -174,7 +175,7 @@ challenges, drafts and proposal sets afterwards.
 | REV-04 | reviewer | P3 | AUT-06.3 | resolved (round 1) | `draft-fields.tsx:51` compares untrimmed text, so whitespace-only edits enable a no-op save that can clear proposals. |
 | REV-05 | reviewer | P3 | PATCH contract | resolved (round 1) | Migration lines 149-150 accept 9-digit versions; HTTP allows up to 2,147,483,647. Align bounds. |
 | SEC-REV-02 | security-reviewer | P3 | SYS-12.1 | resolved (round 1, tests in 479b7a8) | Direct `update_author_draft` test lacks TA, anon and stale-version cases (covered elsewhere). |
-| REV-06 | reviewer (rereview) | P3 non-blocking | SYS-02.1 | open | Migration lines 149-153: the `::bigint` bound checks share an OR chain with their regex guards, against the file's own evaluation-order note; a direct RPC with a fractional version could in principle raise 22P02 instead of returning `invalid`. Not reproduced on local Postgres (a plpgsql probe returned `invalid` for 1.5, -1 and 99999999999). Fix direction: a separate IF after the regex check. Left for the human to decide; not part of a fix round. |
+| REV-06 | reviewer (rereview) | P3 non-blocking | SYS-02.1 | accepted (human, 2026-11-11) | Migration lines 149-153: the `::bigint` bound checks share an OR chain with their regex guards, against the file's own evaluation-order note; a direct RPC with a fractional version could in principle raise 22P02 instead of returning `invalid`. Not reproduced on local Postgres (a plpgsql probe returned `invalid` for 1.5, -1 and 99999999999). Fix direction: a separate IF after the regex check. Accepted by the human as a known minor issue. |
 
 ## Open questions
 
@@ -182,13 +183,38 @@ None. G1–G3 questions are resolved (see Decisions).
 
 ## Current state (2026-11-11)
 
-- Working tree on `feat/81-author-drafts` (HEAD 479b7a8): the T-20 implementation
-  with fix round 1, the DeveloperGuide section, the PLAN status line and this
-  handoff, all uncommitted. The human's local `.claude/settings.json` change is
-  also unstaged; never commit it with T-20.
-- Local Supabase (`lgtm` stack in Docker) was reset with the edited migration and
-  holds no fixture data.
-- Open: REV-06 (P3, non-blocking), left for the human to fix or accept.
+- `feat/81-author-drafts` is rebased onto `upstream/master` a06f062 (HEAD
+  876d8b4). Uncommitted: the DeveloperGuide migration link fix (for the docs
+  commit), this handoff and the session log (for `chore(logs)`), plus the human's
+  `.claude/settings.json`, which is never committed.
+- Local Supabase has every upstream migration plus `20261111120000_author_drafts.sql`
+  and no fixture data.
+- Remaining human steps: amend the docs commit, commit `chore(logs)`, run
+  `bun run verify`, force-push the rebased branch to `origin`, open the PR.
+
+## PR
+
+From the fork to `upstream` `master`, filling `.github/pull_request_template.md`:
+Closes #81; Requirement IDs from the T-20 Covers; Kind feature; Decisions made
+from this handoff's G1–G4 rows; Spec approval #86; Session log
+`logs/naa-siuuuu-ff/003-author-drafts-fix-round-close-out.md`; PLAN T-20; Route
+high; Handoff this file; Reviews: reviewer pass, security pass, open P0/P1: 0.
+
+## After T-20: next task T-21 (#82)
+
+Issue #82 is open: “generate, preview and decide flaw proposals (T-21)”,
+covering AUT-03 and AUT-04 (`workflow/specs/stories/AUT-03-generate-flaw-proposals.md`,
+`AUT-04-preview-and-decide-flaws.md`). It adds the SYS-10.3 “Proposal
+generation” admin operation and the `inject_flaws` caller: high route
+(LLM operation, admin client, migrations). PLAN has no T-21 entry yet, so it
+starts at Ready then Plan/G1 (sdd-plan in the main session). Depends on T-20:
+branch `feat/82-<slug>` from `upstream/master` after T-20 merges, or stack on
+`feat/81-author-drafts` only with the human's approval. Create
+`workflow/handoffs/82-<slug>.md` from the template on that branch, never on
+this one. T-20 decisions that bind T-21: any accepted draft edit clears the
+active proposal set; proposals persist only server IDs (no `key`); proposal
+preview is a T-21 page under `/author/challenges/[id]`; the detail page
+currently has no “Generate proposals” action.
 
 ## Fix round 1 plan
 
@@ -280,7 +306,6 @@ and the SHA-256 of each untracked non-`.env*` file.
 
 ## Next action
 
-Human (G4): run `bun run verify` and `bun run test:e2e`; decide REV-06; commit
-`feat(author)` (source, migration, types, the PLAN status line and this
-handoff), then `docs(author)` (DeveloperGuide), then write the session log and commit
-`chore(logs)`; rebase onto `upstream/master` after #80 merges and open the PR.
+Human: amend the docs commit, commit `chore(logs)`, run `bun run verify`,
+force-push and open the T-20 PR. Next agent (main session, orchestrator):
+start T-21 per “After T-20” once the human says so.
