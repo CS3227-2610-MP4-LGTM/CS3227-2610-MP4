@@ -57,8 +57,9 @@ async function learnerSees(browser: Browser, author: Fixture, id: string, title:
     const learner = await context.newPage();
     await signIn(learner, author.actors.learnerB, catalogue);
     await learner.goto(`${catalogue}/${id}`);
-    await expect(learner.getByRole("main")).toBeVisible();
-    await learner.waitForLoadState("networkidle");
+    // Wait for the settled outcome (the challenge title or a not-found/denied page), not network idle:
+    // the denied page keeps a request open, so networkidle never settles there.
+    await expect(learner.getByRole("main").getByRole("heading", { level: 1 })).toBeVisible();
     return (await learner.getByRole("heading", { name: title }).count()) > 0;
   } finally {
     await context.close();

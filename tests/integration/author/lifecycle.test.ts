@@ -117,6 +117,10 @@ async function removeCreatedAttempts() {
   try {
     await f.h.db.query("set local session_replication_role = replica");
     const submissions = "select id from public.submissions where challenge_id = any($1::uuid[])";
+    for (const table of ["ai_grade_assessments", "ai_grade_comment_results", "ai_grade_eligible_hints"]) {
+      await f.h.db.query(`delete from public.${table} where grade_id in
+        (select id from public.ai_grades where submission_id in (${submissions}))`, [created]);
+    }
     await f.h.db.query(`delete from public.ai_grade_evidence where grade_id in
       (select id from public.ai_grades where submission_id in (${submissions}))`, [created]);
     for (const table of ["ai_grades", "grading_runs", "submission_comments", "review_flags"]) {
@@ -266,6 +270,16 @@ async function completeGrade(submissionId: string) {
     id: gradeId, submission_id: submissionId, score: 25, passed: false, identification_points: 0, explanation_points: 15, fix_points: 10,
   });
   await insert(f.h.db, "public.ai_grade_evidence", { grade_id: gradeId, grading_run_id: runId, provider_output_retried: false });
+  // A completed grade also records every comment's result and every flaw's assessment (INTEGRATION-SPEC §5).
+  const { rows: comments } = await f.h.db.query<{ id: string }>("select id from public.submission_comments where submission_id = $1", [submissionId]);
+  for (const { id } of comments) {
+    await insert(f.h.db, "public.ai_grade_comment_results", { grade_id: gradeId, comment_id: id, kind: "unmatched" });
+  }
+  const { rows: flaws } = await f.h.db.query<{ id: string }>(`select x.id from public.revision_flaws x
+    join public.submissions s on s.revision_id = x.revision_id where s.id = $1`, [submissionId]);
+  for (const { id } of flaws) {
+    await insert(f.h.db, "public.ai_grade_assessments", { grade_id: gradeId, flaw_id: id, comment_id: null, distance: null });
+  }
 }
 
 async function learnerDetail(id: string) {
