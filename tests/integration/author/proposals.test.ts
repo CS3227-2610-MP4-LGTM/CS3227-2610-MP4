@@ -452,7 +452,7 @@ describe("staleness, replay and replacement", () => {
     const late = await whileInFlight(draft, async () => {
       await f.h.db.query("update private.llm_operations set expires_at = clock_timestamp() - interval '1 second' where account_id = $1 and state = 'active'", [f.actors.authorA.id]);
     });
-    expect([409, 504]).toContain(late.status);
+    failed(late, 504, "AI_TIMEOUT");
     expect(await stored(draft.id)).toMatchObject({ sets: 0, generation_id: null, draft_version: 1 });
   });
 

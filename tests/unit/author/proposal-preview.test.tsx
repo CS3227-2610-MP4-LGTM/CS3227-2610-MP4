@@ -116,6 +116,11 @@ it("AUT-03.2 announces arrival after generation", async () => {
   expectAnnouncement("Proposals generated. Review every proposal before publishing.");
 });
 
+it("AUT-03.2 SYS-17.1 moves focus to the Proposal preview heading on arrival after generation", async () => {
+  await setup(active, { generated: true });
+  expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1, name: "Proposal preview" }));
+});
+
 it("AUT-04.2 saves one decision with current versions, blocks repeats on that proposal and keeps focus there", async () => {
   const request = pending<{ status: string; draft?: View }>();
   const { decide } = await setup(active, { decide: vi.fn<Decide>().mockReturnValueOnce(request.promise) });
