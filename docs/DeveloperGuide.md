@@ -1008,7 +1008,8 @@ publish.”). It loads **Final challenge preview**: the working code compared
 with the flawed code Learners will review, plus an **Answer key** listing each
 approved flaw's category and “Final line N” location. If the decisions changed
 since the page loaded, the preview shows the same “This draft changed…”
-conflict and **Reload draft**. Publishing is not part of this screen yet.
+conflict and **Reload draft**. **Publish challenge** then appears inside the
+shown preview (see [Author publication](#author-publication)).
 
 #### Author proposal contracts
 
@@ -1072,6 +1073,106 @@ pointer directly. See the
 - `bun run test:e2e tests/e2e/author/proposals.spec.ts` generates, decides and
   previews by keyboard at phone width, checks the no-proposals state and
   cross-Author denial on a production build.
+
+### Author publication
+
+**Publish challenge** appears only inside a shown **Final challenge preview**,
+under **Publication**, which lists the retained flaw count and categories. Any
+saved decision change withdraws the preview and the button. While publishing
+the screen shows “Preparing hints and publishing…”, and generation, decisions
+and the preview button are disabled; while generation runs, publishing is
+disabled. Publishing asks the AI for one hint per retained flaw; the challenge
+is not published until the hints pass validation.
+
+On success the app opens **Publication result**
+(`/author/challenges/:id/publication`), moves focus to its heading, announces
+“Challenge published.” and shows the revision number and publication time,
+with **View published challenge** and **Back to challenges**. **View published
+challenge** opens `/author/challenges/:id/revisions/:revisionId`, the owning
+Author's view of that revision: the real working-to-flawed diff, each retained
+flaw's category, line, explanation and fix, and its hint. All stored text
+renders as plain text. Another Author's revision shows “This challenge isn't
+available to your account.”
+
+A failure leaves the challenge unpublished and shows one of:
+
+| Message | **Try publishing again** |
+| --- | --- |
+| “Review the current proposals and approve at least one flaw before publishing.” | No |
+| “The AI returned invalid hints. The challenge wasn't published.” | Yes |
+| “We couldn't publish the challenge right now.” | Yes |
+| “Publication is unavailable within the current AI limits. Try again later.” | Yes |
+| “This candidate is too large for AI publication.” | No |
+| “Publication timed out. Check publication before trying again.” | After **Check publication** confirms the failure |
+
+**Check publication** replays the same request, so it never publishes twice. An
+unconfirmed result shows “We couldn't confirm publication.” with **Check
+publication**. A challenge changed elsewhere shows “This challenge changed.
+Reload it before publishing.” with **Reload draft**. Each failure in the table
+also offers **Back to proposal preview**.
+
+After publication the draft and its decisions stay in place, so the Author can
+publish again. Each publication creates a new immutable revision, even when
+nothing changed since the last one (a human decision for T-22; it spends AI
+usage again).
+
+#### Author publication contracts
+
+Both routes follow the Author draft contract rules above:
+
+- `POST /api/v1/author/challenges/:id/publish` needs an `Idempotency-Key` UUID
+  and a body of exactly `expectedRowVersion` and `expectedDraftVersion`. It
+  returns 201 with `AuthorPublication` (`id`, `status`, `rowVersion`,
+  `revisionId`, `revisionNumber`, `publishedAt`). An ineligible candidate is 409
+  `INVALID_STATE` with the eligibility message above. Other failures use 409
+  `VERSION_CONFLICT`, 409 `INVALID_STATE` (archived, or the same request still
+  running), 409 `IDEMPOTENCY_CONFLICT`, 413 `PAYLOAD_TOO_LARGE`, 422
+  `INVALID_AI_OUTPUT`, 429 `RATE_LIMITED`, 502 `AI_UNAVAILABLE`, 503
+  `SERVICE_UNAVAILABLE` and 504 `AI_TIMEOUT`.
+- `GET /api/v1/author/challenges/:id/revisions/:revisionId` returns
+  `{ publication, challenge, answerKey, hints }` for the owner's revision; 403
+  for another Author's challenge, 404 for an absent one.
+
+The server checks role, ownership, state, versions and eligibility before
+calling the shared LLM boundary (`generate_hints`), which applies the SEC-03
+hint checks. A successful publication increments `rowVersion` only; the draft
+version and the active proposal set do not change.
+
+The
+[Author publication migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261113120000_author_publication.sql)
+adds:
+
+- `persist_author_publication(jsonb)`, the SYS-10.3 “Publication” admin
+  function, executable only by `service_role`. `claim` records the request in
+  the private `author_publication_requests` ledger (45-second expiry); a replay
+  returns the recorded outcome. `fail` records a failure code. `complete`
+  accepts only this request's completed, unexpired and settled
+  `generate_hints` operation, requires the versions the request was admitted
+  with, rechecks role, ownership, state and decisions, and rebuilds the
+  candidate from the stored proposals. It rejects a missing, extra, blank or
+  over-length hint with `INVALID_AI_OUTPUT`, then writes the revision, answer,
+  flaws, hints, `published` status and published-revision pointer in one
+  transaction. Earlier revisions are never changed.
+- Owner-only Author read policies on `revision_answers`, `revision_flaws` and
+  `flaw_hints`, replacing policies that let any Author read them. TA access is
+  unchanged.
+
+The ledger has RLS on and no table grants. Users cannot write revision tables
+or the published pointer directly. See the
+[server publication contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/author/publication.ts).
+
+#### Author publication checks
+
+- `bun run test tests/unit/author` covers the publish action and its failure
+  states, client status mapping, the result and revision views and their inert
+  rendering, and mutual disabling with generation.
+- `bun run test:integration tests/integration/author/publication.test.ts`
+  exercises grants, replay, versions, SQL hint revalidation, late results,
+  read policies (owner and TA allowed; other Authors, Learners and anonymous
+  denied) and revision reads against local Supabase with the fake provider.
+- `bun run test:e2e tests/e2e/author/publication.spec.ts` publishes by keyboard
+  at phone width, opens the revision, checks a Learner sees the challenge
+  without answers or hints, and checks cross-Author denial.
 
 ### Auth tests and settings
 
