@@ -876,4 +876,13 @@ describe("database boundary", () => {
       }
     }
   });
+
+  it("SYS-12.1 TAs keep direct read access to a published revision's answers, flaws and hints", async () => {
+    const current = await publishable();
+    const publication = ok<AuthorPublication>(await publish("authorA", current.id, versionsOf(current)));
+    for (const table of ["revision_answers", "revision_flaws", "flaw_hints"]) {
+      const { data, error } = await f.actors.taA.client.from(table).select("revision_id").eq("revision_id", publication.revisionId);
+      expect({ table, error, rows: (data ?? []).length }).toEqual({ table, error: null, rows: 1 });
+    }
+  });
 });
