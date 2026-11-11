@@ -3,9 +3,18 @@ import type { CodeDiff, CodeDiffLine } from "@/lib/code-diff";
 
 const markers = { context: " ", added: "+", removed: "−" };
 
-export function CodeDiffView({ code, afterLine }: { code: CodeDiff; afterLine?: (line: CodeDiffLine) => ReactNode }) {
-  return <section className="code-source" aria-label="Source" tabIndex={0}>
-    <h2>{code.path}</h2>
+/**
+ * Shared read-only diff view (SYS-04.2). `label` names the focusable scroll
+ * region; `showPath` hides the file heading where the caller already titles it.
+ */
+export function CodeDiffView({ code, afterLine, label = "Source", showPath = true }: {
+  code: CodeDiff;
+  afterLine?: (line: CodeDiffLine) => ReactNode;
+  label?: string;
+  showPath?: boolean;
+}) {
+  return <section className="code-source" aria-label={label} tabIndex={0}>
+    {showPath && <h2>{code.path}</h2>}
     {code.hunks.map((hunk) => (
       <div className="source-hunk" data-line-details={afterLine ? "" : undefined} key={`${hunk.oldStart}:${hunk.newStart}`}>
         {hunk.lines.map((line) => (

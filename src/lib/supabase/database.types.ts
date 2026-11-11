@@ -57,6 +57,20 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"author_proposal_requests": {
+                  Row: {
+                    "actor_id": string,"challenge_id": string,"expires_at": string,"failure_code": string | null,"idempotency_key": string,"proposal_set_id": string | null,"request_fingerprint": string,"state": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_id": string,"challenge_id": string,"expires_at": string,"failure_code"?: string | null,"idempotency_key": string,"proposal_set_id"?: string | null,"request_fingerprint": string,"state": string
+                  }
+                  Update: {
+                    "actor_id"?: string,"challenge_id"?: string,"expires_at"?: string,"failure_code"?: string | null,"idempotency_key"?: string,"proposal_set_id"?: string | null,"request_fingerprint"?: string,"state"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"learner_grading_requests": {
                   Row: {
                     "grading_run_id": string | null,"idempotency_key": string,"intent": string,"outcome": Json | null,"submission_id": string
@@ -230,6 +244,9 @@ isOneToOne: false
                            },
 "valid_domain_text":
 { Args: { "max_length": number,"value": string }; Returns: boolean
+                           },
+"valid_injected_proposals":
+{ Args: { "allowed": (Database["public"]['Enums']["flaw_category"])[],"flaw_count": number,"proposals": Json,"working_code": string }; Returns: boolean
                            },
 "valid_proposal_snapshot":
 { Args: { "snapshot": Json }; Returns: boolean
@@ -820,6 +837,9 @@ isOneToOne: false
 "create_learner_submission":
 { Args: { "p_challenge_id": string,"p_idempotency_key": string,"p_payload": Json }; Returns: Json
                            },
+"decide_author_proposal":
+{ Args: { "p_challenge_id": string,"p_payload": Json,"p_proposal_id": string }; Returns: Json
+                           },
 "fail_learner_grading":
 { Args: { "p_account_id": string,"p_failure_code": string,"p_grading_run_id": string,"p_submission_id": string }; Returns: Json
                            },
@@ -842,6 +862,9 @@ isOneToOne: false
 { Args: { "account_id": string,"submission_id": string }; Returns: Json
                            } |
 { Args: { "account_id": string,"grading_run_id": string,"submission_id": string }; Returns: Json
+                           },
+"persist_author_proposals":
+{ Args: { "p_input": Json }; Returns: Json
                            },
 "persist_ta_summary":
 { Args: { "p_input": Json }; Returns: Json

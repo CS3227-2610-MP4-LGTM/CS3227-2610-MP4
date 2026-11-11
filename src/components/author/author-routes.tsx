@@ -5,16 +5,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useReportWorkspaceAccessFailure } from "@/components/account/workspace-access-boundary";
 import {
-  authorChallengesHref, type AuthorDraft, type AuthorReadResult, type DraftPatch, type DraftValues,
+  authorChallengesHref, proposalsHref, type AuthorDraft, type AuthorReadResult, type DraftPatch, type DraftValues,
+  type ExpectedVersions,
 } from "@/lib/author/drafts";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { AuthorChallengeDetail } from "./challenge-detail";
 import { AuthorChallengeList } from "./challenge-list";
-import { createDraft, patchDraft, readChallengePage, readDraft } from "./client";
+import {
+  createDraft, decideProposal, generateProposals, patchDraft, readChallengePage, readDraft, readFinalPreview,
+} from "./client";
 import { CreateChallengeForm } from "./create-challenge-form";
 import { EditDraftForm } from "./edit-draft-form";
 import { FlawConfiguration } from "./flaw-configuration";
-import { takeDraftSaved } from "./notices";
+import { rememberProposalsGenerated, takeDraftSaved, takeProposalsGenerated } from "./notices";
+import { ProposalPreview, type Decide } from "./proposal-preview";
 
 export function AuthorListRoute() {
   const params = new URLSearchParams(useSearchParams().toString());
@@ -78,19 +82,32 @@ function DraftLoader({ challengeId, children }: { challengeId: string; children:
 function useDraftIo(challengeId: string, accountId?: string) {
   const save = useCallback((patch: DraftPatch) => patchDraft(challengeId, patch, accountId), [challengeId, accountId]);
   const reload = useCallback(() => readDraft(challengeId), [challengeId]);
-  return { save, reload };
+  const generate = useCallback((versions: ExpectedVersions, key: string) =>
+    generateProposals(challengeId, versions, key, accountId), [challengeId, accountId]);
+  return { save, reload, generate };
+}
+
+/** AUT-03.2: a validated result opens Proposal preview with its arrival announcement. */
+function useOpenProposals(challengeId: string) {
+  const router = useRouter();
+  return useCallback(() => {
+    rememberProposalsGenerated(challengeId);
+    router.push(proposalsHref(challengeId));
+  }, [challengeId, router]);
 }
 
 export function ConfigurationRoute({ challengeId, accountId }: { challengeId: string; accountId?: string }) {
   const [notice, setNotice] = useState<string>();
-  const { save, reload } = useDraftIo(challengeId, accountId);
+  const { save, reload, generate } = useDraftIo(challengeId, accountId);
+  const openProposals = useOpenProposals(challengeId);
   useEffect(() => {
     // Session storage exists only in the browser, so the one-time notice is read after hydration.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (takeDraftSaved(challengeId)) setNotice("Draft saved.");
   }, [challengeId]);
   return <DraftLoader challengeId={challengeId}>
-    {draft => <FlawConfiguration draft={draft} save={save} reload={reload} notice={notice} />}
+    {draft => <FlawConfiguration draft={draft} save={save} reload={reload} notice={notice}
+      generate={generate} onGenerated={openProposals} />}
   </DraftLoader>;
 }
 
@@ -101,7 +118,33 @@ export function EditDraftRoute({ challengeId, accountId }: { challengeId: string
   </DraftLoader>;
 }
 
-export function ChallengeDetailRoute({ challengeId }: { challengeId: string }) {
+export function ChallengeDetailRoute({ challengeId, accountId }: { challengeId: string; accountId?: string }) {
   const read = useCallback(() => readDraft(challengeId), [challengeId]);
-  return <AuthorChallengeDetail challengeId={challengeId} read={read} />;
+  const { generate } = useDraftIo(challengeId, accountId);
+  const openProposals = useOpenProposals(challengeId);
+  return <AuthorChallengeDetail challengeId={challengeId} read={read} generate={generate} onGenerated={openProposals} />;
+}
+
+export function ProposalsRoute({ challengeId, accountId }: { challengeId: string; accountId?: string }) {
+  const [generated, setGenerated] = useState(false);
+  const [loads, setLoads] = useState(0);
+  const { generate } = useDraftIo(challengeId, accountId);
+  const decide: Decide = useCallback((proposalId, body) => decideProposal(challengeId, proposalId, body, accountId),
+    [challengeId, accountId]);
+  const readPreview = useCallback(() => readFinalPreview(challengeId), [challengeId]);
+  useEffect(() => {
+    // Session storage exists only in the browser, so the one-time announcement is read after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (takeProposalsGenerated(challengeId)) setGenerated(true);
+  }, [challengeId]);
+  // Reload and Refresh remount the loader, which rereads the saved draft and decisions. The arrival
+  // announcement is one-shot, so a remount never re-announces a generation that did not happen.
+  const reload = useCallback(() => {
+    setGenerated(false);
+    setLoads(count => count + 1);
+  }, []);
+  return <DraftLoader key={loads} challengeId={challengeId}>
+    {draft => <ProposalPreview draft={draft} generated={generated} decide={decide} readPreview={readPreview}
+      reload={reload} generate={generate} />}
+  </DraftLoader>;
 }

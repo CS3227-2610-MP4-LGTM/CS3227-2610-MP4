@@ -11,6 +11,27 @@ export function rememberDraftSaved(challengeId: string) {
   }
 }
 
+const generatedKey = (challengeId: string) => `lgtm:author:proposals-generated:${challengeId}`;
+
+/** A one-time AUT-03.2 arrival announcement from generation to Proposal preview. */
+export function rememberProposalsGenerated(challengeId: string) {
+  try {
+    window.sessionStorage.setItem(generatedKey(challengeId), "1");
+  } catch {
+    // Storage can be blocked; the announcement is optional.
+  }
+}
+
+export function takeProposalsGenerated(challengeId: string) {
+  try {
+    const generated = window.sessionStorage.getItem(generatedKey(challengeId)) === "1";
+    window.sessionStorage.removeItem(generatedKey(challengeId));
+    return generated;
+  } catch {
+    return false;
+  }
+}
+
 export function takeDraftSaved(challengeId: string) {
   try {
     const saved = window.sessionStorage.getItem(key(challengeId)) === "1";

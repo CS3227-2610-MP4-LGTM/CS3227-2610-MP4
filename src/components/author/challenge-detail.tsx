@@ -5,13 +5,19 @@ import { useCallback, useEffect, useState } from "react";
 import { useReportWorkspaceAccessFailure } from "@/components/account/workspace-access-boundary";
 import { CodeDiffView } from "@/components/code-diff";
 import {
-  authorChallengesHref, editDraftHref, labelFor, statusLabels, type DraftReadOutcome,
+  authorChallengesHref, editDraftHref, labelFor, proposalsHref, statusLabels, type DraftReadOutcome, type DraftView,
 } from "@/lib/author/drafts";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { projectNewFile } from "@/lib/code-projection";
 import { categoryLabels, difficultyLabels, languageLabels, type Language } from "@/lib/learner/challenges";
+import { GenerateProposals, type Generate } from "./generate-proposals";
 
-export function AuthorChallengeDetail({ challengeId, read }: { challengeId: string; read: () => Promise<DraftReadOutcome> }) {
+export function AuthorChallengeDetail({ challengeId, read, generate, onGenerated }: {
+  challengeId: string;
+  read: () => Promise<DraftReadOutcome>;
+  generate?: Generate;
+  onGenerated?: (draft: DraftView) => void;
+}) {
   const reportAccessFailure = useReportWorkspaceAccessFailure();
   const [result, setResult] = useState<DraftReadOutcome>();
 
@@ -73,8 +79,11 @@ export function AuthorChallengeDetail({ challengeId, read }: { challengeId: stri
     {archived && <p className="notice">Archived challenges can&apos;t be edited.</p>}
     <div className="form-actions">
       {!archived && <Link href={editDraftHref(draft.id)} className="button primary">Edit draft</Link>}
+      {draft.proposals.length > 0 && <Link href={proposalsHref(draft.id)} className="button secondary">Proposal preview</Link>}
       {back}
     </div>
+    {generate && onGenerated && <GenerateProposals draft={draft} generate={generate} onGenerated={onGenerated}
+      reload={() => void load()} />}
     <h2>Working draft code</h2>
     <CodeDiffView code={projectNewFile(draft.language as Language, draft.workingCode)} />
   </section>;

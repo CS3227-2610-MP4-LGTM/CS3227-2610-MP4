@@ -1280,7 +1280,7 @@ the limits above remain unchanged.
   use the fake provider; this task does not enable live SoC or change provider
   settings.
 - **Depends on:** T-04, T-05, T-20
-- **Status:** todo
+- **Status:** done
 
 ## TA
 

@@ -129,3 +129,12 @@ input[aria-invalid], select[aria-invalid] { border-color: #a12d26; }
 .status-line { display: block; }
 .list-toolbar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .list-toolbar .field { flex: 1 1 12rem; max-width: 20rem; margin: 0; }
+
+/* Author proposals: code uses the shared .code-source view, which scrolls inside its own box. */
+.proposal-list { display: grid; gap: 1rem; padding: 0; list-style: none; }
+.proposal-item, .final-preview, .proposal-generation { min-width: 0; overflow-wrap: anywhere; }
+.proposal-item { padding: 1rem; background: white; border: 1px solid var(--border); border-radius: .75rem; }
+.proposal-item > * + * { margin-top: .5rem; }
+.proposal-item h2 { font-size: 1.1rem; }
+.proposal-item h3 { font-size: .9rem; }
+.final-preview > * + * { margin-top: 1rem; }

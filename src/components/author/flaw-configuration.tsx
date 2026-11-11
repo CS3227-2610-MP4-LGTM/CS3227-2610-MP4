@@ -4,17 +4,21 @@ import Link from "next/link";
 import { ConfirmationDialog } from "@/components/account/confirmation-dialog";
 import { authorChallengesHref, type DraftView } from "@/lib/author/drafts";
 import { DraftFieldControls } from "./draft-fields";
+import { GenerateProposals, type Generate } from "./generate-proposals";
 import { useDraftEditor, type ReloadDraft, type SaveDraft } from "./use-draft-editor";
 
 const fields = ["flawCount", "categories", "difficulty"] as const;
 const clearWarningId = "configuration-clear-warning";
 
-export function FlawConfiguration({ draft, save, reload, notice }: {
+export function FlawConfiguration({ draft, save, reload, notice, generate, onGenerated }: {
   draft: DraftView;
   save: SaveDraft;
   reload: ReloadDraft;
   navigate?: (href: string) => void;
   notice?: string;
+  /** AUT-03.1: explicit generation for the saved configuration only. */
+  generate?: Generate;
+  onGenerated?: (draft: DraftView) => void;
 }) {
   const editor = useDraftEditor({ initial: draft, fields, save, reload });
   const { phase, archived } = editor;
@@ -50,6 +54,8 @@ export function FlawConfiguration({ draft, save, reload, notice }: {
         <Link href={authorChallengesHref} className="button secondary">Back to challenges</Link>
       </div>
     </form>
+    {generate && onGenerated && <GenerateProposals draft={editor.saved} unsaved={editor.dirty} generate={generate}
+      onGenerated={onGenerated} reload={() => void editor.reloadDraft()} showBack={false} />}
     {editor.confirming && <ConfirmationDialog title="Clear the current proposals?" descriptionId={clearWarningId}
       onCancel={editor.cancelConfirm}>
       <p id={clearWarningId}>Saving changes clears the current proposals and decisions.</p>

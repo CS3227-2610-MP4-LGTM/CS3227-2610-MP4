@@ -119,7 +119,7 @@ export function useDraftEditor({ initial, fields, save, reload }: {
   }
 
   return {
-    saved, values, setValues, errors, phase, refs, archived, working, canSave, clearedProposals,
+    saved, values, setValues, errors, phase, refs, archived, working, canSave, clearedProposals, dirty: changed.length > 0,
     confirming, cancelConfirm: () => setConfirming(false), confirm: () => void commit(), requestSave, reloadDraft,
   };
 }

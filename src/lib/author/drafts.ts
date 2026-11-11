@@ -1,4 +1,5 @@
 import type { WorkspaceAccessFailure } from "@/lib/auth/workspace-access";
+import type { FinalPreview } from "@/lib/author/preview";
 import {
   categoryLabels, difficultyLabels, languageLabels, type Category, type Difficulty, type Language,
 } from "@/lib/learner/challenges";
@@ -7,6 +8,7 @@ export const authorChallengesHref = "/author/challenges";
 export const challengeHref = (id: string) => `${authorChallengesHref}/${id}`;
 export const editDraftHref = (id: string) => `${challengeHref(id)}/edit`;
 export const configurationHref = (id: string) => `${challengeHref(id)}/configuration`;
+export const proposalsHref = (id: string) => `${challengeHref(id)}/proposals`;
 
 /** INTEGRATION-SPEC §1: 128 KiB UTF-8 request bodies and the 20,000-byte pasted-code cap. */
 export const authorBodyLimit = 128 * 1024;
@@ -68,6 +70,29 @@ export const authorErrorMessages = {
   uncertain: "We couldn't confirm the challenge change. Check again.",
 } as const;
 
+/** Exact AUT-03 and AUT-04 on-screen messages. */
+export const proposalMessages = {
+  unsaved: "Save your changes before generating proposals.",
+  generating: "Generating proposals…",
+  generated: "Proposals generated. Review every proposal before publishing.",
+  replace: "New proposals replace the current proposals and reset their decisions.",
+  invalidOutput: "The AI returned invalid proposals. Try again.",
+  changed: "This draft changed. Reload it before generating proposals.",
+  limited: "AI generation is unavailable within the current limits. Try again later.",
+  tooLarge: "This draft is too large for AI generation. Reduce it before trying again.",
+  timeout: "Proposal generation timed out. Try again.",
+  failed: "We couldn't generate proposals right now. Try again.",
+  uncertain: "We couldn't confirm proposal generation.",
+  saving: "Saving decision…",
+  undecided: "Decide every proposal to preview the final challenge.",
+  noneApproved: "Approve at least one proposal to preview or publish.",
+  decisionFailed: "We couldn't save this decision. Try again.",
+  decisionUncertain: "We couldn't confirm this decision. Refresh the draft.",
+  decisionConflict: "This draft changed. Reload it before reviewing proposals.",
+  absent: "Generate proposals before reviewing flaws.",
+  previewFailed: "We couldn't load the preview. Try again.",
+} as const;
+
 export type ProposalWithDecision = {
   id: string;
   category: Category;
@@ -112,6 +137,19 @@ export type AuthorWriteResult =
 export type AuthorReadResult =
   | { status: "ok"; draft: AuthorDraft }
   | { status: "not_found" | "forbidden" | "unavailable" }
+  | WorkspaceAccessFailure;
+export type ExpectedVersions = { expectedRowVersion: number; expectedDraftVersion: number };
+export type GenerationResult =
+  | { status: "ok"; draft: AuthorDraft }
+  | { status: "invalid_output" | "limited" | "too_large" | "timeout" | "failed" | "conflict" | "uncertain" }
+  | WorkspaceAccessFailure;
+export type DecisionResult =
+  | { status: "ok"; draft: AuthorDraft }
+  | { status: "failed" | "conflict" | "uncertain" }
+  | WorkspaceAccessFailure;
+export type FinalPreviewResult =
+  | { status: "ok"; preview: { draftVersion: number } & FinalPreview }
+  | { status: "incomplete" | "unavailable" }
   | WorkspaceAccessFailure;
 export type AuthorPageResult =
   | { status: "ok"; page: AuthorChallengePage }

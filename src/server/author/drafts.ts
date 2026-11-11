@@ -62,7 +62,7 @@ function checked<T>(result: { data: T; error: unknown }): T {
 }
 
 /** Reads one own draft through user-scoped RLS. Returns null when no own row is visible. */
-async function loadDraft(client: AuthorClient, authorId: string, id: string): Promise<AuthorDraft | null> {
+export async function loadDraft(client: AuthorClient, authorId: string, id: string): Promise<AuthorDraft | null> {
   const challengeRow = checked(await client.from("challenges")
     .select("id,author_id,status,row_version,published_revision_id").eq("id", id).maybeSingle());
   if (!challengeRow) return null;
@@ -99,7 +99,7 @@ async function loadDraft(client: AuthorClient, authorId: string, id: string): Pr
 }
 
 /** Write preconditions shared by create and edit: SYS-16.2 origin and SYS-09.3 workspace account. */
-function writeGuard(request: Request, caller: AuthorCaller): AuthorFailure | null {
+export function writeGuard(request: Request, caller: AuthorCaller): AuthorFailure | null {
   if (!matchesRequestOrigin(request, new URL(request.url))) return { status: "forbidden" };
   const workspaceAccount = request.headers.get(workspaceAccountHeader);
   if (workspaceAccount !== null) {
@@ -111,7 +111,7 @@ function writeGuard(request: Request, caller: AuthorCaller): AuthorFailure | nul
   return null;
 }
 
-function rpcFailure(error: { code?: string }): AuthorFailure {
+export function rpcFailure(error: { code?: string }): AuthorFailure {
   // A PostgreSQL error code confirms rollback. A network error, gateway failure
   // or malformed acknowledgement may have lost a committed outcome.
   const code = error.code ?? "";
@@ -120,7 +120,7 @@ function rpcFailure(error: { code?: string }): AuthorFailure {
 }
 
 /** After a committed write, a failed reread cannot be reported as a definite failure. */
-async function confirmedDraft(caller: AuthorCaller, id: string): Promise<DraftResult> {
+export async function confirmedDraft(caller: AuthorCaller, id: string): Promise<DraftResult> {
   try {
     const draft = await loadDraft(caller.client, caller.account.id, id);
     return draft ? { status: "ok", draft } : { status: "uncertain" };
@@ -179,19 +179,29 @@ export async function updateAuthorDraft(id: string, request: Request): Promise<D
   }
 }
 
+/**
+ * Classifies a challenge as own, another Author's or absent without reading
+ * other Authors' rows. Throws when the classification itself fails.
+ */
+export async function ownChallenge(caller: AuthorCaller, challengeId: string): Promise<AuthorFailure | null> {
+  // Only the owner/other/absent classification crosses this boundary.
+  const access = accessSchema.parse(checked(await caller.client.rpc("challenge_generation_access", {
+    resource_id: challengeId,
+  })));
+  if (access === "UNAUTHENTICATED") return { status: "unauthenticated" };
+  if (access === "FORBIDDEN") return { status: "forbidden" };
+  if (access === "NOT_FOUND") return { status: "not_found" };
+  return null;
+}
+
 export async function readAuthorDraft(id: string, search = new URLSearchParams()): Promise<DraftResult> {
   const caller = await authorCaller();
   if (caller.status !== "ok") return caller;
   const challengeId = challengeIdSchema.safeParse(id);
   if (!challengeId.success || search.size) return { status: "invalid" };
   try {
-    // Only the owner/other/absent classification crosses this boundary.
-    const access = accessSchema.parse(checked(await caller.client.rpc("challenge_generation_access", {
-      resource_id: challengeId.data,
-    })));
-    if (access === "UNAUTHENTICATED") return { status: "unauthenticated" };
-    if (access === "FORBIDDEN") return { status: "forbidden" };
-    if (access === "NOT_FOUND") return { status: "not_found" };
+    const denied = await ownChallenge(caller, challengeId.data);
+    if (denied) return denied;
     const draft = await loadDraft(caller.client, caller.account.id, challengeId.data);
     return draft ? { status: "ok", draft } : { status: "not_found" };
   } catch {
