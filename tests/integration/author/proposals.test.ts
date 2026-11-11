@@ -693,6 +693,61 @@ describe("database boundary", () => {
     }
   });
 
+  it("SYS-10.1 SYS-10.3 the private request ledger and output validator are unreachable by every API role", async () => {
+    const { rows: [ledger] } = await f.h.db.query(
+      "select c.relrowsecurity from pg_class c where c.oid = to_regclass('private.author_proposal_requests')");
+    expect(ledger?.relrowsecurity).toBe(true);
+    for (const role of ["anon", "authenticated", "service_role"]) {
+      for (const privilege of ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]) {
+        const { rows: [row] } = await f.h.db.query("select has_table_privilege($1, 'private.author_proposal_requests', $2) as allowed", [role, privilege]);
+        expect({ role, privilege, allowed: row.allowed }).toEqual({ role, privilege, allowed: false });
+      }
+    }
+    const signature = "private.valid_injected_proposals(jsonb, text, integer, public.flaw_category[])";
+    for (const role of ["anon", "authenticated", "service_role"]) {
+      const { rows: [row] } = await f.h.db.query("select has_function_privilege($1, $2, 'EXECUTE') as allowed", [role, signature]);
+      expect({ role, allowed: row.allowed }).toEqual({ role, allowed: false });
+    }
+    const { rows: [publicGrant] } = await f.h.db.query(`select exists(select 1 from pg_proc p cross join lateral
+      aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where p.oid = to_regprocedure($1)
+      and a.grantee = 0 and a.privilege_type = 'EXECUTE') as allowed`, [signature]);
+    expect(publicGrant.allowed).toBe(false);
+  });
+
+  it("SYS-10.3 SEC-02.1 the database rejects tampered output on completion even after server validation", async () => {
+    const draft = await freshDraft();
+    const original = f.h.admin.rpc.bind(f.h.admin);
+    const rejected: { label: string; message: string | undefined; state: unknown }[] = [];
+    type Item = Record<string, unknown>;
+    const tampered = (items: Item[]): [string, unknown][] => [
+      ["a wrong count", items.slice(0, 1)],
+      ["a foreign category", items.map((item, i) => i === 1 ? { ...item, category: "security" } : item)],
+      ["a mismatched snippet", items.map((item, i) => i === 1 ? { ...item, originalSnippet: "  return 0;" } : item)],
+      ["an out-of-range location", items.map((item, i) => i === 1 ? { ...item, sourceStartLine: 400, sourceEndLine: 400 } : item)],
+      ["an unknown field", items.map((item, i) => i === 1 ? { ...item, publish: true } : item)],
+      ["a candidate over the code cap", items.map((item, i) => i === 1 ? { ...item, replacementSnippet: `  // ${"x".repeat(19_990)}` } : item)],
+    ];
+    vi.spyOn(f.h.admin, "rpc").mockImplementation((async (name: string, args: Record<string, unknown>, options: unknown) => {
+      const input = args?.p_input as Item | undefined;
+      if (name === "persist_author_proposals" && input?.action === "complete") {
+        for (const [label, proposals] of tampered(Array.isArray(input.proposals) ? input.proposals as Item[] : [])) {
+          const { error } = await original(name as never, { p_input: { ...input, proposals } } as never, options as never);
+          rejected.push({ label, message: error?.message, state: await stored(draft.id) });
+        }
+      }
+      return original(name as never, args as never, options as never);
+    }) as never);
+    const saved = ok<AuthorDraft>(await generate("authorA", draft.id, versionsOf(draft)));
+    expect(rejected.map(r => r.label)).toEqual(tampered([{}, {}]).map(([label]) => label));
+    for (const { label, message, state } of rejected) {
+      expect({ label, message }).toEqual({ label, message: expect.stringContaining("INVALID_AI_OUTPUT") });
+      expect({ label, state }).toEqual({ label, state: expect.objectContaining({
+        sets: 0, generation_id: null, draft_version: draft.draftVersion, row_version: draft.rowVersion }) });
+    }
+    // The untampered completion that followed is the only set saved.
+    expect(await stored(draft.id)).toMatchObject({ sets: 1, generation_id: saved.generationId });
+  });
+
   it("SYS-10.2 SYS-12.1 decisions use user-callable functions granted only to authenticated callers", async () => {
     const draft = await freshDraft();
     const saved = await generated(draft.id, draft);
