@@ -216,6 +216,7 @@ filter-mismatched cursors return 400. No list returns unbounded rows.
 | `ChallengeCard` | `id, revisionId, title, description, language, difficulty, categories: Category[], publishedAt`. Categories are the sorted unique approved categories. |
 | `ChallengeView` | ChallengeCard plus `code: CodeDiff` (Learner: new-file; Author/TA: real diff), per [section 2](#code-proposals-and-locations). No separate proposals, answer key, fix text, original annotations or hints. |
 | `AuthorDraft` | `id, status, rowVersion, publishedRevisionId, draftVersion, title, description, language, difficulty, workingCode, flawCount, categories, generationId, proposals: ProposalWithDecision[]`. Empty proposals if invalidated. |
+| `AuthorChallengeCard` | `id, status, title, language, difficulty, createdAt`. Title, language and difficulty come from the working draft. No description, code, configuration, proposals or answer material. |
 | `AuthorPublication` | `id, status, rowVersion, revisionId, revisionNumber, publishedAt`. Detailed own revision access also includes Author-projected CodeDiff under [section 2](#code-proposals-and-locations), private flaws and hints. |
 | `Comment` | `id, ordinal, line, body` |
 | `SubmissionView` | `id, challengeId, revisionId, learner: { id, displayName }, attemptNumber, previousSubmissionId, submittedAt, challenge: ChallengeView, comments: Comment[], grading: GradingView, flags: FlagView[]`. Nested ChallengeView uses the authenticated recipient's projection per [section 2](#code-proposals-and-locations). No learner email. |
@@ -238,7 +239,7 @@ Only Authors use these endpoints, always scoped to their own challenge.
 
 | Method and path | Input (JSON unless GET) | Result |
 | --- | --- | --- |
-| `GET /author/challenges` | Pagination; `status?` | `Page<AuthorDraft>` |
+| `GET /author/challenges` | Pagination; `status?` | `Page<AuthorChallengeCard>` |
 | `POST /author/challenges` | `title, description, language, difficulty, workingCode, flawCount, categories` | 201 AuthorDraft, initial versions 1 |
 | `GET /author/challenges/:id` | None | AuthorDraft |
 | `PATCH /author/challenges/:id` | `expectedRowVersion, expectedDraftVersion`, at least one of the seven draft fields above | AuthorDraft; metadata/code/config edits invalidate generation |
