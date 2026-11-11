@@ -15,8 +15,9 @@ type Draft = {
 
 /**
  * Extends the shared Learner browse fixture with one working draft per seeded
- * challenge, plus an archived Author A challenge. Author-created rows and any
- * private create-request ledger rows for these identities are removed on dispose.
+ * challenge, plus an archived Author A challenge. Author-created rows, revisions
+ * published through the API and any private request ledger rows for these
+ * identities are removed on dispose.
  */
 export async function createAuthorFixture(scope: Scope) {
   const base = await createLearnerBrowseFixture({ scope, pageSize: 0 });
@@ -25,6 +26,10 @@ export async function createAuthorFixture(scope: Scope) {
   const id = (n: number) => `${prefix}-0000-4000-8000-${String(n).padStart(12, "0")}`;
   const archivedA = id(8105);
   const userIds = Object.values(actors).map(actor => actor.id);
+  // Revisions the base fixture seeded; any other revision of these Authors was published through the API.
+  const { rows: seededRevisions } = await h.db.query<{ id: string }>(`select r.id from public.challenge_revisions r
+    join public.challenges c on c.id = r.challenge_id where c.author_id = any($1::uuid[])`, [userIds]);
+  const seededRevisionIds = seededRevisions.map(row => row.id);
 
   const checkoutDraft = (title: string, difficulty: Draft["difficulty"] = "easy"): Draft => ({
     title, description: checkout.description, language: "javascript", difficulty,
@@ -64,6 +69,13 @@ export async function createAuthorFixture(scope: Scope) {
         const owned = "select id from public.challenges where author_id = any($1::uuid[])";
         const sets = `select id from public.proposal_sets where challenge_id in (${owned})`;
         const proposals = `select id from public.proposals where proposal_set_id in (${sets})`;
+        // Remove revisions published through the API (T-22), with their answers, flaws and hints.
+        const publishedRevisions = `select id from public.challenge_revisions where challenge_id in (${owned})
+          and id <> all($2::uuid[])`;
+        for (const [table, column] of [["flaw_hints", "revision_id"], ["revision_flaws", "revision_id"],
+          ["revision_answers", "revision_id"], ["challenge_revisions", "id"]]) {
+          await h.db.query(`delete from public.${table} where ${column} in (${publishedRevisions})`, [userIds, seededRevisionIds]);
+        }
         await h.db.query(`delete from public.proposal_decisions where proposal_id in (${proposals})`, [userIds]);
         await h.db.query(`delete from public.proposals where id in (${proposals})`, [userIds]);
         await h.db.query(`delete from public.challenge_drafts where challenge_id in (${owned})`, [userIds]);
