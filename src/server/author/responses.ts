@@ -1,5 +1,6 @@
 import "server-only";
 import { authorErrorMessages as messages, proposalMessages } from "@/lib/author/drafts";
+import { publicationMessages } from "@/lib/author/publication";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { accountAccessHeader } from "@/lib/learner/challenges";
 import type { AuthorFailure } from "./drafts";
@@ -61,4 +62,21 @@ export function generationErrorResponse(code: string): Response {
 /** AUT-04.3: the final preview is unavailable until decisions are complete with one approval. */
 export function previewIncompleteResponse(): Response {
   return Response.json({ error: { code: "INVALID_STATE", message: proposalMessages.undecided } }, { status: 409, headers });
+}
+
+/** AUT-05.1 and AUT-05.4: publication failures use the generation statuses with publication messages. */
+const publicationErrors: Record<string, readonly [number, string, string]> = {
+  NOT_PUBLISHABLE: [409, "INVALID_STATE", publicationMessages.ineligible],
+  VERSION_CONFLICT: [409, "VERSION_CONFLICT", publicationMessages.changed],
+  PAYLOAD_TOO_LARGE: [413, "PAYLOAD_TOO_LARGE", publicationMessages.tooLarge],
+  INVALID_AI_OUTPUT: [422, "INVALID_AI_OUTPUT", publicationMessages.invalidOutput],
+  RATE_LIMITED: [429, "RATE_LIMITED", publicationMessages.limited],
+  AI_UNAVAILABLE: [502, "AI_UNAVAILABLE", publicationMessages.failed],
+  AI_TIMEOUT: [504, "AI_TIMEOUT", publicationMessages.timeout],
+};
+
+export function publicationErrorResponse(code: string): Response {
+  if (!Object.hasOwn(publicationErrors, code)) return generationErrorResponse(code);
+  const [status, errorCode, message] = publicationErrors[code];
+  return Response.json({ error: { code: errorCode, message } }, { status, headers });
 }

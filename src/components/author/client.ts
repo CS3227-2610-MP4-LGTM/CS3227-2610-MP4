@@ -3,6 +3,7 @@ import {
   type AuthorWriteResult, type DecisionResult, type DraftPatch, type DraftValues, type ExpectedVersions, type FieldErrors,
   type FinalPreviewResult, type GenerationResult,
 } from "@/lib/author/drafts";
+import { publicationMessages, type AuthorPublication, type AuthorRevision } from "@/lib/author/publication";
 import type { WorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { accountAccessHeader } from "@/lib/learner/challenges";
 import { workspaceAccountHeader } from "@/lib/learner/submissions";
@@ -170,6 +171,66 @@ export async function readFinalPreview(id: string): Promise<FinalPreviewResult> 
     const access = accessFailure(response);
     if (access) return access;
     return { status: response.status === 409 ? "incomplete" : "unavailable" };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+export type PublishStatus =
+  | "ineligible" | "invalid_output" | "timeout" | "failed" | "limited" | "too_large" | "conflict" | "uncertain";
+export type PublishResult =
+  | { status: "ok"; publication: AuthorPublication } | { status: PublishStatus } | WorkspaceAccessFailure;
+export type RevisionReadResult =
+  | { status: "ok"; revision: AuthorRevision } | { status: "forbidden" | "not_found" | "unavailable" } | WorkspaceAccessFailure;
+
+/** AUT-05: explicit publication of the saved draft versions under one Idempotency-Key. */
+export async function publishChallenge(
+  id: string, versions: ExpectedVersions, idempotencyKey: string, accountId?: string,
+): Promise<PublishResult> {
+  let response: Response;
+  try {
+    const headers = new Headers({ "Content-Type": "application/json", "Idempotency-Key": idempotencyKey });
+    if (accountId) headers.set(workspaceAccountHeader, accountId);
+    response = await fetch(`${base}/${encodeURIComponent(id)}/publish`, {
+      method: "POST", headers, body: JSON.stringify(versions), cache: "no-store",
+    });
+    // A lost or unreadable success is never reported as a failure.
+    if (response.ok) return { status: "ok", publication: (await response.json()).data as AuthorPublication };
+  } catch {
+    return { status: "uncertain" };
+  }
+  const access = accessFailure(response);
+  if (access) return access;
+  const error = await errorBody(response);
+  switch (response.status) {
+    case 422: return { status: "invalid_output" };
+    case 429: return { status: "limited" };
+    case 413: return { status: "too_large" };
+    case 504: return { status: "timeout" };
+    case 502: return { status: "failed" };
+    case 409:
+      if (error?.code === "VERSION_CONFLICT") return { status: "conflict" };
+      if (error?.code === "INVALID_STATE" && error.message === publicationMessages.ineligible) return { status: "ineligible" };
+      if (error?.code === "INVALID_STATE" && error.message === authorErrorMessages.archived) return { status: "conflict" };
+      // An in-progress duplicate may still commit; resolve it with the same key.
+      if (error?.code === "INVALID_STATE") return { status: "uncertain" };
+      return { status: "failed" };
+    case 503: return { status: error?.message === authorErrorMessages.unavailable ? "failed" : "uncertain" };
+    case 400: case 403: case 404: return { status: "failed" };
+    default: return { status: "uncertain" };
+  }
+}
+
+/** AUT-05.3: one own published revision; failures never look like an empty revision. */
+export async function readRevision(id: string, revisionId: string): Promise<RevisionReadResult> {
+  try {
+    const response = await fetch(`${base}/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}`, { cache: "no-store" });
+    if (response.ok) return { status: "ok", revision: (await response.json()).data as AuthorRevision };
+    const access = accessFailure(response);
+    if (access) return access;
+    if (response.status === 400 || response.status === 404) return { status: "not_found" };
+    if (response.status === 403) return { status: "forbidden" };
+    return { status: "unavailable" };
   } catch {
     return { status: "unavailable" };
   }

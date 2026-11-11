@@ -8,17 +8,21 @@ import {
   authorChallengesHref, proposalsHref, type AuthorDraft, type AuthorReadResult, type DraftPatch, type DraftValues,
   type ExpectedVersions,
 } from "@/lib/author/drafts";
+import { publicationHref, publicationMessages, type AuthorRevision } from "@/lib/author/publication";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { AuthorChallengeDetail } from "./challenge-detail";
 import { AuthorChallengeList } from "./challenge-list";
 import {
-  createDraft, decideProposal, generateProposals, patchDraft, readChallengePage, readDraft, readFinalPreview,
+  createDraft, decideProposal, generateProposals, patchDraft, publishChallenge, readChallengePage, readDraft,
+  readFinalPreview, readRevision, type RevisionReadResult,
 } from "./client";
 import { CreateChallengeForm } from "./create-challenge-form";
 import { EditDraftForm } from "./edit-draft-form";
 import { FlawConfiguration } from "./flaw-configuration";
 import { rememberProposalsGenerated, takeDraftSaved, takeProposalsGenerated } from "./notices";
 import { ProposalPreview, type Decide } from "./proposal-preview";
+import { PublicationResult } from "./publication-result";
+import { PublishedRevision } from "./published-revision";
 
 export function AuthorListRoute() {
   const params = new URLSearchParams(useSearchParams().toString());
@@ -63,20 +67,52 @@ function DraftLoader({ challengeId, children }: { challengeId: string; children:
     return () => setResult(undefined);
   }, [load]);
 
-  const back = <Link href={authorChallengesHref} className="button secondary">Back to challenges</Link>;
   if (!result) return <p role="status" className="loading-shell">Loading challenge…</p>;
   if (isWorkspaceAccessFailure(result)) return null;
   if (result.status === "ok") return children(result.draft);
-  if (result.status === "unavailable") return <section className="author-screen">
-    <p role="alert" className="notice error-notice">We couldn&apos;t load this challenge. Try again.</p>
+  return <ReadFailure status={result.status} retry={() => void load()}
+    message="We couldn't load this challenge. Try again." />;
+}
+
+const backToChallenges = <Link href={authorChallengesHref} className="button secondary">Back to challenges</Link>;
+
+/** A failed own-challenge read: retry for an outage, otherwise a not-found or denial page. */
+function ReadFailure({ status, retry, message }: { status: string; retry: () => void; message: string }) {
+  if (status === "unavailable") return <section className="author-screen">
+    <p role="alert" className="notice error-notice">{message}</p>
     <div className="form-actions">
-      <button type="button" className="button primary" onClick={() => void load()}>Try again</button>{back}
+      <button type="button" className="button primary" onClick={retry}>Try again</button>{backToChallenges}
     </div>
   </section>;
   return <section className="author-screen">
-    <h1>{result.status === "not_found" ? "Challenge not found." : "This challenge isn't available to your account."}</h1>
-    <div className="form-actions">{back}</div>
+    <h1>{status === "not_found" ? "Challenge not found." : "This challenge isn't available to your account."}</h1>
+    <div className="form-actions">{backToChallenges}</div>
   </section>;
+}
+
+/** Loads one own published revision; a denied or missing revision never shows its content (SYS-12.1). */
+function RevisionLoader({ challengeId, revisionId, children }: {
+  challengeId: string; revisionId: string | null; children: (revision: AuthorRevision) => ReactNode;
+}) {
+  const reportAccessFailure = useReportWorkspaceAccessFailure();
+  const [result, setResult] = useState<RevisionReadResult>();
+  const load = useCallback(async () => {
+    setResult(undefined);
+    const next: RevisionReadResult = revisionId ? await readRevision(challengeId, revisionId) : { status: "not_found" };
+    setResult(next);
+    if (isWorkspaceAccessFailure(next)) reportAccessFailure(next.status);
+  }, [challengeId, revisionId, reportAccessFailure]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    return () => setResult(undefined);
+  }, [load]);
+
+  if (!result) return <p role="status" className="loading-shell">Loading published challenge…</p>;
+  if (isWorkspaceAccessFailure(result)) return null;
+  if (result.status === "ok") return children(result.revision);
+  return <ReadFailure status={result.status} retry={() => void load()} message={publicationMessages.revisionUnavailable} />;
 }
 
 function useDraftIo(challengeId: string, accountId?: string) {
@@ -132,6 +168,10 @@ export function ProposalsRoute({ challengeId, accountId }: { challengeId: string
   const decide: Decide = useCallback((proposalId, body) => decideProposal(challengeId, proposalId, body, accountId),
     [challengeId, accountId]);
   const readPreview = useCallback(() => readFinalPreview(challengeId), [challengeId]);
+  const router = useRouter();
+  const publish = useCallback((versions: ExpectedVersions, key: string) =>
+    publishChallenge(challengeId, versions, key, accountId), [challengeId, accountId]);
+  const onPublished = useCallback(() => router.push(publicationHref(challengeId)), [challengeId, router]);
   useEffect(() => {
     // Session storage exists only in the browser, so the one-time announcement is read after hydration.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -145,6 +185,22 @@ export function ProposalsRoute({ challengeId, accountId }: { challengeId: string
   }, []);
   return <DraftLoader key={loads} challengeId={challengeId}>
     {draft => <ProposalPreview draft={draft} generated={generated} decide={decide} readPreview={readPreview}
-      reload={reload} generate={generate} />}
+      reload={reload} generate={generate} publish={publish} onPublished={onPublished} />}
   </DraftLoader>;
+}
+
+/** AUT-05.3: “Publication result” for the challenge's current published revision. */
+export function PublicationRoute({ challengeId }: { challengeId: string }) {
+  return <DraftLoader challengeId={challengeId}>
+    {draft => <RevisionLoader challengeId={challengeId} revisionId={draft.publishedRevisionId}>
+      {revision => <PublicationResult publication={revision.publication} />}
+    </RevisionLoader>}
+  </DraftLoader>;
+}
+
+/** AUT-05.3: one own published revision with its answer key and hints. */
+export function RevisionRoute({ challengeId, revisionId }: { challengeId: string; revisionId: string }) {
+  return <RevisionLoader challengeId={challengeId} revisionId={revisionId}>
+    {revision => <PublishedRevision revision={revision} />}
+  </RevisionLoader>;
 }

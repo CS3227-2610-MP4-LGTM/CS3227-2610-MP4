@@ -71,6 +71,20 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"author_publication_requests": {
+                  Row: {
+                    "actor_id": string,"challenge_id": string,"expires_at": string,"failure_code": string | null,"idempotency_key": string,"request_fingerprint": string,"revision_id": string | null,"state": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_id": string,"challenge_id": string,"expires_at": string,"failure_code"?: string | null,"idempotency_key": string,"request_fingerprint": string,"revision_id"?: string | null,"state": string
+                  }
+                  Update: {
+                    "actor_id"?: string,"challenge_id"?: string,"expires_at"?: string,"failure_code"?: string | null,"idempotency_key"?: string,"request_fingerprint"?: string,"revision_id"?: string | null,"state"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"learner_grading_requests": {
                   Row: {
                     "grading_run_id": string | null,"idempotency_key": string,"intent": string,"outcome": Json | null,"submission_id": string
@@ -864,6 +878,9 @@ isOneToOne: false
 { Args: { "account_id": string,"grading_run_id": string,"submission_id": string }; Returns: Json
                            },
 "persist_author_proposals":
+{ Args: { "p_input": Json }; Returns: Json
+                           },
+"persist_author_publication":
 { Args: { "p_input": Json }; Returns: Json
                            },
 "persist_ta_summary":

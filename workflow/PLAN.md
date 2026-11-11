@@ -1443,7 +1443,7 @@ the limits above remain unchanged.
   settings. The `generate_hints` output cap in `src/server/llm/config.ts`
   stays unchanged.
 - **Depends on:** T-04, T-05, T-21
-- **Status:** todo
+- **Status:** done
 
 ## TA
 
