@@ -1121,7 +1121,7 @@ the limits above remain unchanged.
   `INVALID_STATE` covers archived or in-progress duplicates. Account failures
   follow SYS-11 and ACC-03 without replaying a save.
 - **Depends on:** T-02, T-03; spec PR for #80.
-- **Status:** todo
+- **Status:** done
 
 ## TA
 

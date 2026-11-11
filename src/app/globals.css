@@ -111,3 +111,21 @@ input[aria-invalid], select[aria-invalid] { border-color: #a12d26; }
 .moderation-form textarea { font: inherit; width: 100%; min-width: 0; min-height: 8rem; padding: .65rem .75rem; color: var(--foreground); background: white; border: 1px solid #788a7e; border-radius: .4rem; resize: vertical; }
 .moderation-form textarea[aria-invalid] { border-color: #a12d26; }
 .moderation-form .button { margin-block-start: .75rem; margin-inline-end: .5rem; }
+
+/* Author drafts: grouped forms, scrollable code input and a list toolbar that wraps at phone width. */
+.author-screen > * + * { margin-top: 1.25rem; }
+.author-screen h1, .challenge-card h2 { overflow-wrap: anywhere; }
+.draft-form { max-width: 48rem; }
+.form-section { margin-bottom: 1.5rem; }
+.form-section h2 { font-size: 1.1rem; margin-bottom: .75rem; }
+.draft-form textarea { display: block; width: 100%; min-width: 0; padding: .65rem .75rem; color: var(--foreground); background: white; border: 1px solid #788a7e; border-radius: .4rem; font: inherit; }
+.draft-form textarea[aria-invalid] { border-color: #a12d26; }
+.draft-form .code-input { max-height: 28rem; overflow: auto; font-family: var(--font-mono, monospace); font-size: .85rem; white-space: pre; }
+.category-choices { min-width: 0; padding: 0; border: 0; }
+.category-choices legend { margin-bottom: .4rem; font-size: .9rem; font-weight: 600; }
+.choice { display: flex; align-items: center; gap: .5rem; font-weight: 400; }
+.choice input { width: auto; min-height: auto; }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
+.status-line { display: block; }
+.list-toolbar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.list-toolbar .field { flex: 1 1 12rem; max-width: 20rem; margin: 0; }
