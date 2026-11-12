@@ -42,12 +42,12 @@ test("SYS-09.3 ACC-03.9 LRN-02.5 keeps first-attempt links scoped to the current
     await expect(priorLink).toHaveCount(0);
     await signIn(page, actors.learnerB);
 
-    // The sign-in route can redirect an authenticated Learner before browser
-    // history returns to the challenge entry opened by Learner A.
-    for (let step = 0; step < 3 && new URL(page.url()).pathname !== challenge; step++) {
-      await page.goBack();
-      await expect(priorLink).toHaveCount(0);
-    }
+    // Let the sign-in entry's redirect for B commit before going Back again,
+    // so its late history write cannot overwrite A's challenge entry.
+    await page.goBack();
+    await expect(priorLink).toHaveCount(0);
+    await expect(page).not.toHaveURL(/\/sign-in(?:\?|$)/);
+    await page.goBack();
     await expectOwnAttempt();
 
     await page.getByRole("link", { name: "Back to challenges", exact: true }).click();
