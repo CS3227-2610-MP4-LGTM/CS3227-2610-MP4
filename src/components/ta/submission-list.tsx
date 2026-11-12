@@ -25,8 +25,8 @@ function Filters({ search, navigate }: { search: string; navigate: (href: string
  <input id={field.key} value={field.value} onChange={event => field.set(event.target.value)} aria-invalid={errors[field.key] || undefined} aria-describedby={errors[field.key] ? `${field.key}-error` : undefined} />
  {errors[field.key] && <span id={`${field.key}-error`}>Enter a valid ID.</span>}</div>)}
  <label>Grading status<select value={state} onChange={event => setState(event.target.value)}><option value="">All</option>{["pending", "running", "failed", "completed"].map(value => <option key={value} value={value}>{stateLabel(value)}</option>)}</select></label>
- <button type="submit" className="button primary">Apply filters</button>
- <button type="button" className="button secondary" onClick={() => navigate(base)}>Clear filters</button>
+ <div className="filter-actions"><button type="submit" className="button primary">Apply filters</button>
+ <button type="button" className="button secondary" onClick={() => navigate(base)}>Clear filters</button></div>
  </form>;
 }
 export function SubmissionList({ search, readPage, navigate }: { search: string; readPage: (search: string) => Promise<ListResult>; navigate: (href: string) => void }) {
