@@ -5,4 +5,4 @@ export type MutationFailure = ReadFailure | { status: "invalid_state" | "conflic
 export type OverrideResult = { status: "ok"; override: GradingView["overrides"][number]; grading: GradingView } | MutationFailure;
 export type ResolutionResult = { status: "ok"; flag: FlagView } | MutationFailure;
 export type FlagPageResult = { status: "ok"; page: { items: FlagView[]; nextCursor: string | null } } | ReadFailure;
-export const flagLabels: Record<string,string> = { near_pass_mark: "Score near the pass mark", grading_output_retried: "AI grading output needed a retry", assessment_disagreement: "Location match and AI assessment disagree", learner_report: "Learner reported an unmatched comment" };
+export { flagLabels } from "@/lib/moderation/flags";

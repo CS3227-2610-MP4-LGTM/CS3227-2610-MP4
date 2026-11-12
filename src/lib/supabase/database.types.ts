@@ -227,6 +227,9 @@ isOneToOne: false
 "learner_revision_categories":
 { Args: { "p_revision_id": string }; Returns: (string)[]
                            },
+"learner_submission_card":
+{ Args: { "p_submission_id": string }; Returns: Json
+                           },
 "learner_submission_projection":
 { Args: { "p_submission_id": string }; Returns: Json
                            },
@@ -859,6 +862,9 @@ isOneToOne: false
                            },
 "list_learner_challenges":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_category"?: Database["public"]['Enums']["flaw_category"],"p_difficulty"?: Database["public"]['Enums']["challenge_difficulty"],"p_language"?: Database["public"]['Enums']["challenge_language"],"p_limit": number }; Returns: Json
+                           },
+"list_learner_submissions":
+{ Args: { "p_after_id"?: string,"p_before"?: string,"p_challenge_id"?: string,"p_limit"?: number }; Returns: Json
                            },
 "list_ta_flags":
 { Args: { "p_after_id"?: string,"p_before"?: string,"p_kind"?: string,"p_limit"?: number,"p_status"?: string }; Returns: Json

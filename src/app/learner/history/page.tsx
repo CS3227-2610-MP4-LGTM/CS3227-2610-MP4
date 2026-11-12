@@ -1,5 +1,15 @@
-import { RoleLanding } from "@/components/account/role-landing";
+import { Suspense } from "react";
+import { connection } from "next/server";
+import { WorkspacePage } from "@/components/account/workspace-page";
+import { HistoryPage } from "@/components/learner/history-page";
+
 export const instant = false;
-export default function Page(props: PageProps<"/learner/history">) {
-  return <RoleLanding role="learner" heading="Review history" empty="No reviews yet." searchParams={props.searchParams} />;
+export default function Page() {
+  return <Suspense fallback={<main className="loading-shell" role="status">Loading review history…</main>}>
+    <RequestedHistory />
+  </Suspense>;
+}
+async function RequestedHistory() {
+  await connection();
+  return <WorkspacePage role="learner">{accountId => <HistoryPage key={accountId} />}</WorkspacePage>;
 }

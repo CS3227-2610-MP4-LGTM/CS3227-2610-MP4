@@ -1090,7 +1090,7 @@ the limits above remain unchanged.
   `tests/integration/ta/inspection/reads.test.ts` as targeted regressions for
   the touched result/shared label boundary. The orchestrator runs all
   database-backed checks on local Supabase; specialists report them unrun.
-- **Config paths:** `supabase/migrations/20261114120000_learner_history.sql`
+- **Config paths:** `supabase/migrations/20261114130000_learner_history.sql`
   (new), `src/lib/supabase/database.types.ts` (local generation),
   `src/lib/moderation/flags.ts` (new neutral shared labels), and
   `src/lib/ta/moderation.ts` (only replace flagLabels with a one-line re-export).
@@ -1171,7 +1171,7 @@ the limits above remain unchanged.
 - **Depends on:** T-13 (done), with T-12, T-11 and auth/data foundations
   inherited. Consume committed moderation readers/contracts only; T-31
   remains blocked and is not a completion dependency or implementation scope.
-- **Status:** todo
+- **Status:** done
 
 ## Author
 
