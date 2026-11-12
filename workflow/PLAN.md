@@ -1376,7 +1376,7 @@ the limits above remain unchanged.
   auth/data foundations inherited. Consume committed moderation readers only;
   T-31 remains blocked and is not a completion dependency or implementation
   scope. Seed resolutions directly in the local harness.
-- **Status:** todo
+- **Status:** done
 
 ## Author
 

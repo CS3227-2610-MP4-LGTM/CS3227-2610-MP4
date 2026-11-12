@@ -3,8 +3,10 @@ import { isWorkspaceAccessFailure, type WorkspaceAccessFailure } from "@/lib/aut
 import { accountAccessHeader, genericReadFailure, type ReadFailure } from "@/lib/learner/challenges";
 import { submissionErrorMessages, submissionOutcomeMessages } from "@/lib/learner/submissions";
 import { gradingFailureMessages } from "@/lib/learner/grading";
+import { reportErrorMessages, reportOutcomeMessages } from "@/lib/learner/reports";
 import type { requestLearnerGrade } from "./grade-submission";
 import type { CreateSubmissionResult } from "./submissions";
+import type { CreateReportResult } from "./reports";
 
 const headers = { "Cache-Control": "private, no-store", Pragma: "no-cache", Expires: "0" };
 
@@ -90,4 +92,30 @@ export function learnerGradeResponse(result: Awaited<ReturnType<typeof requestLe
       { status: 413, headers });
   }
   return learnerResultReadErrorResponse(result);
+}
+
+const reportErrors = {
+  invalid: [400, "VALIDATION_ERROR", reportOutcomeMessages.invalid],
+  forbidden: errors.forbidden,
+  not_found: [404, "NOT_FOUND", reportOutcomeMessages.notFound],
+  ineligible: [409, "INVALID_STATE", reportErrorMessages.ineligible],
+  already_reported: [409, "INVALID_STATE", reportErrorMessages.alreadyReported],
+  in_progress: [409, "INVALID_STATE", reportErrorMessages.inProgress],
+  idempotency_conflict: [409, "IDEMPOTENCY_CONFLICT", reportOutcomeMessages.conflict],
+  too_large: [413, "PAYLOAD_TOO_LARGE", reportOutcomeMessages.tooLarge],
+  rate_limited: [429, "RATE_LIMITED", reportOutcomeMessages.rateLimited],
+  unavailable: [503, "SERVICE_UNAVAILABLE", reportOutcomeMessages.failed],
+  uncertain: [503, "SERVICE_UNAVAILABLE", reportOutcomeMessages.uncertain],
+} as const;
+
+export function learnerReportResponse(result: CreateReportResult): Response {
+  if (result.status === "ok") return Response.json({ data: result.flag }, { status: 201, headers });
+  if (result.status === "account_service_unavailable") {
+    return Response.json({ error: { code: "SERVICE_UNAVAILABLE", message: submissionErrorMessages.accountServiceUnavailable } },
+      { status: 503, headers: { ...headers, [accountAccessHeader]: result.status } });
+  }
+  if (isWorkspaceAccessFailure(result)) return learnerErrorResponse(result);
+  const [status, code, message] = reportErrors[result.status];
+  const fieldErrors = result.status === "invalid" ? result.fieldErrors : undefined;
+  return Response.json({ error: { code, message, ...(fieldErrors && { fieldErrors }) } }, { status, headers });
 }

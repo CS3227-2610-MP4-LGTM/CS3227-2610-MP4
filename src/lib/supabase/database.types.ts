@@ -99,6 +99,20 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"learner_report_requests": {
+                  Row: {
+                    "actor_id": string,"fingerprint": string,"flag_id": string | null,"idempotency_key": string,"outcome": string,"submission_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actor_id": string,"fingerprint": string,"flag_id"?: string | null,"idempotency_key": string,"outcome": string,"submission_id": string
+                  }
+                  Update: {
+                    "actor_id"?: string,"fingerprint"?: string,"flag_id"?: string | null,"idempotency_key"?: string,"outcome"?: string,"submission_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"llm_operations": {
                   Row: {
                     "account_id": string,"environment_id": string,"expires_at": string,"fingerprint": string,"id": string,"idempotency_key": string,"operation": string,"resource_id": string,"state": string
@@ -850,6 +864,9 @@ isOneToOne: false
                            },
 "create_author_challenge":
 { Args: { "p_idempotency_key": string,"p_payload": Json }; Returns: Json
+                           },
+"create_learner_report":
+{ Args: { "p_idempotency_key": string,"p_payload": Json,"p_submission_id": string }; Returns: Json
                            },
 "create_learner_submission":
 { Args: { "p_challenge_id": string,"p_idempotency_key": string,"p_payload": Json }; Returns: Json
