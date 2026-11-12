@@ -321,8 +321,9 @@ grading cases, I found:
   backend or took 20–45 seconds. A fast 30B model credited almost everything
   1/1. `qwen3.6:35b` was both more accurate and faster than the 9B (about 2.7
   seconds against 4.5).
-- Each operation has its own output cap: 1,280 tokens for flaw proposals, 384
-  for hints, 576 for grading and 1,024 for TA summaries.
+- Each operation has its own output cap: 1,800 tokens for flaw proposals
+  (raised from 1,280 in #107), 384 for hints, 576 for grading and 1,024 for TA
+  summaries.
 
 At 1.5M tokens a day per environment, the 35B model costs about $2.34 of the
 key's $50 budget, so money isn't the binding constraint. The request rate and

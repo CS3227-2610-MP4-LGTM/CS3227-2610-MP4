@@ -6,7 +6,7 @@ export const socDestination = "https://soclaas-api.comp.nus.edu.sg/v1/chat/compl
 export const socEfforts = ["none", "low", "medium", "high"] as const;
 export type SocEffort = typeof socEfforts[number];
 export const socOperationSettings = {
-    inject_flaws: { effort: "none", maxOutputTokens: 1280 },
+    inject_flaws: { effort: "none", maxOutputTokens: 1800 },
     generate_hints: { effort: "none", maxOutputTokens: 384 },
     assess_review: { effort: "none", maxOutputTokens: 576 },
     summarize_learner: { effort: "none", maxOutputTokens: 1024 },

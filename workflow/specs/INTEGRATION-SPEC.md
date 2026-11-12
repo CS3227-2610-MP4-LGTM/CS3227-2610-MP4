@@ -164,8 +164,11 @@ supported. All proposed ranges are disjoint and within the source. Apply retaine
 replacements in source order, preserving untouched text and the file's trailing
 LF. The final flaw range is the range occupied by its replacement, shifted by
 prior retained edits. Server derivation, not model-supplied final line numbers,
-defines the answer key. Comments reference `after` lines only, including unchanged
-lines; removed-line comments and client-supplied paths/sides are not accepted.
+defines the answer key. The server also derives each proposal's source range
+from originalSnippet, ignoring model-supplied source line numbers: the snippet
+must match exactly one run of whole lines in workingCode joined with LF; zero or
+multiple matches invalidate the entire result. Comments reference `after` lines
+only, including unchanged lines; removed-line comments and client-supplied paths/sides are not accepted.
 
 ## 3. API contracts
 
