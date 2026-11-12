@@ -194,7 +194,8 @@ const versionsOf = (draft: Pick<AuthorDraft, "rowVersion" | "draftVersion">) =>
   ({ expectedRowVersion: draft.rowVersion, expectedDraftVersion: draft.draftVersion });
 
 function ok<T>(reply: Reply, statuses = [200, 201]): T {
-  expect(statuses).toContain(reply.status);
+  // The body names the failure code, so an unexpected status is diagnosable from CI logs alone.
+  expect(statuses, JSON.stringify(reply.body)).toContain(reply.status);
   expect(Object.keys(reply.body)).toEqual(["data"]);
   return reply.body.data as T;
 }
