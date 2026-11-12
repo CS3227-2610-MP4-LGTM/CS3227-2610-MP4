@@ -158,6 +158,24 @@ async function lifecycle(caller: Caller, action: Action, id: string, body: unkno
   }), { params: Promise.resolve({ id }) }));
 }
 
+/** A lifecycle request with a raw body; an empty header value omits that header. */
+async function rawLifecycle(caller: Caller, action: Action, id: string, body: string, extra: Record<string, string> = {}) {
+  const path = `/src/app/api/v1/author/challenges/[id]/${action}/route.ts`;
+  if (!handlers[path]) throw new Error(`Missing T-23 Route Handler: ${path}`);
+  const { POST } = await handlers[path]();
+  mocks.user = clientFor(caller);
+  const all = Object.fromEntries(Object.entries(headers({ "Idempotency-Key": randomUUID(), ...extra })).filter(([, value]) => value !== ""));
+  return respond(await POST(new Request(`${base}/${id}/${action}`, { method: "POST", headers: all, body }),
+    { params: Promise.resolve({ id }) }));
+}
+
+/** Ledger rows for one challenge, optionally for one key. */
+async function ledgerRows(challengeId: string, key?: string) {
+  const { rows: [row] } = await f.h.db.query<{ count: number }>(`select count(*)::int as count from ${ledger}
+    where challenge_id = $1 and ($2::uuid is null or idempotency_key = $2::uuid)`, [challengeId, key ?? null]);
+  return row.count;
+}
+
 async function read(id: string): Promise<AuthorDraft> {
   mocks.user = clientFor("authorA");
   const response = await readChallenge(new Request(`${base}/${id}`), { params: Promise.resolve({ id }) });
@@ -431,6 +449,62 @@ describe("idempotency", () => {
     ok(await lifecycle("authorA", "unpublish", current.id, { expectedRowVersion: current.rowVersion }));
     expect((await stored(current.id)).status).toBe("unpublished");
   });
+
+  // INTEGRATION-SPEC §3: failed operations record failure, so a replay returns it instead of re-evaluating.
+  it("AUT-06.6 a replayed INVALID_STATE stays INVALID_STATE after the challenge moves on, and is recorded", async () => {
+    const current = await unpublishedChallenge();
+    const key = randomUUID();
+    const body = { expectedRowVersion: current.rowVersion };
+    failed(await lifecycle("authorA", "unpublish", current.id, body, key), 409, "INVALID_STATE");
+    expect(await ledgerRows(current.id, key)).toBe(1);
+    ok(await lifecycle("authorA", "archive", current.id, body));
+    const before = await stored(current.id);
+    failed(await lifecycle("authorA", "unpublish", current.id, body, key), 409, "INVALID_STATE");
+    expect(await stored(current.id)).toEqual(before);
+  });
+
+  it("AUT-06.6 a replayed VERSION_CONFLICT never applies once the row version catches up", async () => {
+    const current = await livePublished();
+    const key = randomUUID();
+    const ahead = { expectedRowVersion: current.rowVersion + 1 };
+    failed(await lifecycle("authorA", "archive", current.id, ahead, key), 409, "VERSION_CONFLICT");
+    expect(await ledgerRows(current.id, key)).toBe(1);
+    // A separate unpublish moves the challenge to exactly the version the failed request expected.
+    ok(await lifecycle("authorA", "unpublish", current.id, { expectedRowVersion: current.rowVersion }));
+    const before = await stored(current.id);
+    expect(before).toMatchObject({ status: "unpublished", row_version: current.rowVersion + 1 });
+    failed(await lifecycle("authorA", "archive", current.id, ahead, key), 409, "VERSION_CONFLICT");
+    failed(await lifecycle("authorA", "archive", current.id, { expectedRowVersion: current.rowVersion + 2 }, key), 409,
+      "IDEMPOTENCY_CONFLICT");
+    expect(await stored(current.id)).toEqual(before);
+  });
+});
+
+describe("request validation", () => {
+  const invalidRequests: [string, (rowVersion: number) => { body: string; extra: Record<string, string> }, number, string][] = [
+    ["an unknown field", rv => ({ body: JSON.stringify({ expectedRowVersion: rv, note: "x" }), extra: {} }), 400, "VALIDATION_ERROR"],
+    ["a client-supplied status", rv => ({ body: JSON.stringify({ expectedRowVersion: rv, status: "archived" }), extra: {} }), 400, "VALIDATION_ERROR"],
+    ["an expectedDraftVersion", rv => ({ body: JSON.stringify({ expectedRowVersion: rv, expectedDraftVersion: 1 }), extra: {} }), 400, "VALIDATION_ERROR"],
+    ["a string row version", rv => ({ body: JSON.stringify({ expectedRowVersion: String(rv) }), extra: {} }), 400, "VALIDATION_ERROR"],
+    ["a zero row version", () => ({ body: JSON.stringify({ expectedRowVersion: 0 }), extra: {} }), 400, "VALIDATION_ERROR"],
+    ["malformed JSON", () => ({ body: "{\"expectedRowVersion\":", extra: {} }), 400, "VALIDATION_ERROR"],
+    ["a missing Idempotency-Key", rv => ({ body: JSON.stringify({ expectedRowVersion: rv }), extra: { "Idempotency-Key": "" } }), 400, "VALIDATION_ERROR"],
+    ["a malformed Idempotency-Key", rv => ({ body: JSON.stringify({ expectedRowVersion: rv }), extra: { "Idempotency-Key": "not-a-uuid" } }), 400, "VALIDATION_ERROR"],
+    ["a body over 128 KiB", rv => ({ body: JSON.stringify({ expectedRowVersion: rv, padding: "a".repeat(128 * 1024) }), extra: {} }), 413, "PAYLOAD_TOO_LARGE"],
+  ];
+
+  // Every case must leave it untouched, so one published challenge serves them all.
+  let shared: Promise<AuthorDraft> | undefined;
+  for (const action of ["unpublish", "archive"] as const) {
+    it.each(invalidRequests)(`SYS-02.1 AUT-06.6 ${action} with %s is rejected through the route without a change`, async (_case, build, status, code) => {
+      const current = await (shared ??= livePublished());
+      const { body, extra } = build(current.rowVersion);
+      const before = await stored(current.id);
+      failed(await rawLifecycle("authorA", action, current.id, body, extra), status, code);
+      expect(await stored(current.id)).toEqual(before);
+      expect(await ledgerRows(current.id)).toBe(0);
+    });
+  }
 });
 
 describe("learners and history", () => {
@@ -557,6 +631,47 @@ describe("database boundary", () => {
     }
     expect((await anon.rpc(name as never, forged as never)).error).not.toBeNull();
     expect(await stored(current.id)).toEqual(before);
+  });
+
+  it("SYS-10.2 SYS-02.1 the owning Author calling the lifecycle function directly with an invalid payload changes nothing", async () => {
+    const probe = await livePublished();
+    const rpc = vi.spyOn(f.actors.authorA.client, "rpc");
+    ok(await lifecycle("authorA", "unpublish", probe.id, { expectedRowVersion: probe.rowVersion }));
+    const [name, args] = rpc.mock.calls.find(([, called]) => JSON.stringify(called).includes(probe.id))!;
+    const entries = Object.entries(args as Record<string, unknown>);
+    const argFor = (match: (value: unknown) => boolean) => entries.find(([, value]) => match(value))![0];
+    const idArg = argFor(value => value === probe.id);
+    const actionArg = argFor(value => value === "unpublish");
+    const payloadArg = argFor(value => typeof value === "object" && value !== null);
+    const keyArg = entries.find(([arg]) => ![idArg, actionArg, payloadArg].includes(arg))![0];
+
+    const current = await livePublished();
+    const rv = current.rowVersion;
+    const cases: [string, Record<string, unknown>][] = [
+      ["an empty payload", { [payloadArg]: {} }],
+      ["an extra key", { [payloadArg]: { expectedRowVersion: rv, status: "archived" } }],
+      ["an expectedDraftVersion", { [payloadArg]: { expectedRowVersion: rv, expectedDraftVersion: 1 } }],
+      ["a string row version", { [payloadArg]: { expectedRowVersion: String(rv) } }],
+      ["a null row version", { [payloadArg]: { expectedRowVersion: null } }],
+      ["a zero row version", { [payloadArg]: { expectedRowVersion: 0 } }],
+      ["a negative row version", { [payloadArg]: { expectedRowVersion: -rv } }],
+      ["a fractional row version", { [payloadArg]: { expectedRowVersion: rv + 0.5 } }],
+      ["an out-of-range row version", { [payloadArg]: { expectedRowVersion: 2_147_483_648 } }],
+      ["an array payload", { [payloadArg]: [rv] }],
+      ["a null payload", { [payloadArg]: null }],
+      ["an unknown action", { [actionArg]: "delete" }],
+      ["a null action", { [actionArg]: null }],
+      ["a null key", { [keyArg]: null }],
+    ];
+    const before = await stored(current.id);
+    for (const [label, change] of cases) {
+      const call = { [idArg]: current.id, [actionArg]: "unpublish", [keyArg]: randomUUID(), [payloadArg]: { expectedRowVersion: rv }, ...change };
+      const result = await f.actors.authorA.client.rpc(name as never, call as never);
+      expect({ label, rejected: result.error !== null || (result.data as { status?: string })?.status === "invalid" })
+        .toEqual({ label, rejected: true });
+    }
+    expect(await stored(current.id)).toEqual(before);
+    expect(await ledgerRows(current.id)).toBe(0);
   });
 
   it("SYS-10.1 the private lifecycle request ledger is unreachable by every API role", async () => {
