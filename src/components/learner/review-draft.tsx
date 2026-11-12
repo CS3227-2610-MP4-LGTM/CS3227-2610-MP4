@@ -180,15 +180,16 @@ export function ReviewDraft({ accountId, challenge, openSubmission, previousSubm
     </p>
     {atLimit && <p role="status">Comment limit reached. Remove a comment to add another.</p>}
     {announcement && <p role="status">{announcement}</p>}
-    <CodeDiffView code={challenge.code} afterLine={line => line.newLine === null ? null :
-      <div className="review-line">
-        <button type="button" className="button secondary" aria-label={`Add comment on line ${line.newLine}`}
+    <CodeDiffView code={challenge.code} gutterControl={line => line.newLine === null ? null :
+        <button type="button" className="review-add-comment" aria-label={`Add comment on line ${line.newLine}`}
           ref={button => {
             if (button) lineActions.current.set(line.newLine, button);
             else lineActions.current.delete(line.newLine);
           }}
           disabled={locked || editor !== null || atLimit}
-          onClick={() => { setAnnouncement(""); setEditor({ id: null, line: line.newLine, body: "" }); }}>Add comment</button>
+          onClick={() => { setAnnouncement(""); setEditor({ id: null, line: line.newLine, body: "" }); }}><span aria-hidden="true">+</span></button>
+    } afterLine={line => line.newLine === null || (!byLine.has(line.newLine) && editor?.line !== line.newLine) ? null :
+      <div className="review-line">
         {byLine.get(line.newLine)?.map(comment =>
           <div className="review-comment" key={comment.id}>
             <p className="field-help">Line {comment.line}</p>

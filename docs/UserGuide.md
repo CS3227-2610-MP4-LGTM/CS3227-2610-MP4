@@ -177,7 +177,9 @@ see **No challenges available.**
 The challenge page shows the title, description, metadata and the code.
 
 1. Find a line you think has a problem.
-2. Select **Add comment** under that line.
+2. Move the pointer over the line to show the **+** control in its gutter,
+   then select it. With a keyboard, Tab to **Add comment on line N** and
+   press Enter or Space. On devices without hover, the **+** stays visible.
 3. Type your comment in **Comment on line N**. Say what is wrong, why it
    matters and how to fix it. Grading rewards all three.
 4. Select **Add comment** to save it, or **Cancel**.
