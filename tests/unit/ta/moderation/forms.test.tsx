@@ -65,7 +65,7 @@ it("TA-03.3 announces pending, disables duplicate save and updates only from ret
   expect(save).toHaveBeenCalledTimes(1); expect(screen.queryByText("59 / 100")).toBeNull();
   const override = { id: id(910), actorId: id(21), createdAt: "2026-01-01T00:00:09Z", auditOrder: 3, score: 59, reason: "Reviewed the existing evidence" };
   await act(async () => finish({ status: "ok", override, grading: { ...s.grading, effective: { score: 59, passed: false, source: "ta" }, overrides: [...s.grading.overrides, override] } }));
-  await screen.findByText("Grade override saved."); expect(screen.getByText("59 / 100")).toBeTruthy(); expect(screen.getByText("Not passed")).toBeTruthy();
+  await screen.findByText("Grade override saved."); expect(screen.getByText("59 / 100")).toBeTruthy(); expect(within(screen.getByRole("region", { name: "Current grade" })).getByText("Not passed", { exact: true })).toBeTruthy();
   expect(screen.queryByLabelText("Reason")).toBeNull(); expect(s).toEqual(old);
 });
 it("TA-02.6 appends correction, marks selected flag resolved, preserves original reasons and grade", async () => {
