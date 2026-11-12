@@ -1343,7 +1343,9 @@ the limits above remain unchanged.
   errors; 401/403/503 per SYS-11; 404 `NOT_FOUND` for an absent submission
   or a comment outside it; 409 `INVALID_STATE` for ineligible comments,
   an already-reported pair and an in-progress replay, distinguished by stable
-  server messages as T-11 distinguishes its in-progress state; 409
+  server messages as T-11 distinguishes its in-progress state. Define those
+  three messages once as shared constants in `src/lib/learner/` (as T-11's
+  `submissionErrorMessages`), used by both the route and the client; 409
   `IDEMPOTENCY_CONFLICT`; 413 `PAYLOAD_TOO_LARGE`; 429 `RATE_LIMITED`; and
   503 `SERVICE_UNAVAILABLE` split into definitive and uncertain outcomes by
   T-11's rollback classification.
