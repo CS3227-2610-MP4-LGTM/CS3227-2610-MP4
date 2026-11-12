@@ -8,7 +8,7 @@ Reads. This header allocates no tasks.
 
 ## Capacity
 
-At most 17 tasks total, with at most 5 in Foundations and 4 each in Learner,
+At most 19 tasks total, with at most 5 in Foundations, 6 in Learner and 4 each in
 Author and TA. A task covers at most 3 stories of one role, or one foundation area,
 and fits one implementer run. One task is one issue, one PR and one loop run.
 Done tasks still count. If a feature exceeds capacity, the planner stops and
