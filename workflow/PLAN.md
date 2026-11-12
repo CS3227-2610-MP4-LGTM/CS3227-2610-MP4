@@ -1925,7 +1925,7 @@ the limits above remain unchanged.
   T-22's decision stands: republishing an unchanged candidate stays
   allowed.
 - **Depends on:** T-20, T-22, T-11, T-13
-- **Status:** todo
+- **Status:** done
 
 ## TA
 
