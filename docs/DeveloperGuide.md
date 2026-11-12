@@ -1317,6 +1317,93 @@ or the published pointer directly. See the
   at phone width, opens the revision, checks a Learner sees the challenge
   without answers or hints, and checks cross-Author denial.
 
+### Author unpublish and archive
+
+On the challenge detail page, a published challenge offers **Unpublish** and
+**Archive**; a draft or unpublished challenge offers **Archive** only. An
+archived challenge shows neither, plus the existing “Archived challenges can't
+be edited.” Any challenge with a live revision also shows **View published
+challenge**, which opens the owner's revision view.
+
+Each action asks first:
+
+- **Unpublish challenge**: “Unpublish this challenge? Learners won't be able to
+  start or retry it.”
+- **Archive challenge**: “Archive this challenge? This can't be undone.
+  Editing, publishing and new attempts will be unavailable.”
+
+While the request runs, the page shows “Unpublishing…” or “Archiving…” and both
+actions are disabled. On success the app returns to **My challenges** and
+announces “Challenge unpublished.” or “Challenge archived.” once.
+
+| Outcome | Message | Recovery |
+| --- | --- | --- |
+| Changed elsewhere, or already in a state the action can't leave | “This challenge changed. Reload it before continuing.” | **Reload challenge** |
+| Failed | “We couldn't unpublish the challenge. Try again.” / “We couldn't archive the challenge. Try again.” | Confirm the action again (a new request) |
+| Unconfirmed | “We couldn't confirm the change. Refresh the challenge before continuing.” | **Refresh challenge** replays the same request, so it never applies twice |
+
+An unpublished challenge leaves the Learner catalogue, and its detail page shows
+“Access denied” to Learners; nobody can start a first attempt or a retry.
+Existing attempts, grades, TA views and the published revision stay unchanged.
+An unpublished challenge can be edited and published again as a new revision.
+Archiving is terminal: edits, generation, decisions and publication are refused.
+
+#### Author lifecycle contracts
+
+`POST /api/v1/author/challenges/:id/unpublish` and
+`POST /api/v1/author/challenges/:id/archive` follow the Author draft contract
+rules above. Each needs an `Idempotency-Key` UUID and a body of exactly
+`expectedRowVersion` (a positive integer); any other field is 400 and a body
+over 128 KiB is 413. Success is 200 `{ data: { id, status, rowVersion } }`.
+
+| Result | Response |
+| --- | --- |
+| Transition not allowed (for example unpublishing a draft, or anything archived) | 409 `INVALID_STATE`, with the reload message |
+| Stale `expectedRowVersion` | 409 `VERSION_CONFLICT` |
+| Same key, different body | 409 `IDEMPOTENCY_CONFLICT` |
+| Same key still running | 409 `INVALID_STATE` |
+| Another user's challenge, or a non-Author | 403 |
+| Anonymous | 401 |
+| Absent challenge | 404 |
+
+Allowed transitions are published → unpublished, and draft, published or
+unpublished → archived. A change increments `rowVersion` only. The draft, its
+version, proposal sets, revisions and the published-revision pointer are kept.
+
+The
+[Author lifecycle migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261114120000_author_lifecycle.sql)
+adds `public.change_author_challenge_lifecycle(uuid, text, uuid, jsonb)`.
+SYS-10.3 has no named admin use for lifecycle changes, so this is a
+user-scoped `SECURITY DEFINER` function with an empty `search_path`,
+executable only by `authenticated`. It validates the payload and checks the
+stored Author role and ownership itself. It locks the challenge row
+`for update`, the same lock attempt creation takes, so a lifecycle change and
+a first attempt always commit in one order. Then it checks the version and
+transition.
+
+Requests are recorded in the private `author_lifecycle_requests` ledger. Keys
+are scoped to actor, challenge and action, with a server-computed fingerprint.
+Both successes and failed checks (`VERSION_CONFLICT`, `INVALID_STATE`) are
+recorded, so replaying a key returns its recorded outcome and never applies
+later, as INTEGRATION-SPEC §3 requires. A new key can always try again. The
+ledger has RLS on and no table grants. Authors still have no direct write
+grant on challenges. See the
+[server lifecycle contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/author/lifecycle.ts).
+
+#### Author lifecycle checks
+
+- `bun run test tests/unit/author` covers the actions, confirmations,
+  pending and recovery states, client status mapping, and request validation
+  with a mocked client.
+- `bun run test:integration tests/integration/author/lifecycle.test.ts`
+  exercises transitions, replay (including recorded failures), concurrent
+  duplicates, the race between an unpublish and a first attempt, route
+  400/413 cases, direct calls with invalid payloads or from other roles,
+  grants and the ledger against local Supabase.
+- `bun run test:e2e tests/e2e/author/lifecycle.spec.ts` unpublishes and
+  archives by keyboard at phone width, checks that a Learner can no longer open
+  the challenge, and checks that an archived challenge's detail is read-only.
+
 ### Auth tests and settings
 
 `bun run test` runs unit tests without Supabase. Start the local stack before

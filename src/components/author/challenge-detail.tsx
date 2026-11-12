@@ -7,16 +7,25 @@ import { CodeDiffView } from "@/components/code-diff";
 import {
   authorChallengesHref, editDraftHref, labelFor, proposalsHref, statusLabels, type DraftReadOutcome, type DraftView,
 } from "@/lib/author/drafts";
+import type { LifecycleResult } from "@/lib/author/lifecycle";
+import { revisionHref } from "@/lib/author/publication";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { projectNewFile } from "@/lib/code-projection";
 import { categoryLabels, difficultyLabels, languageLabels, type Language } from "@/lib/learner/challenges";
 import { GenerateProposals, type Generate } from "./generate-proposals";
+import { LifecycleActions, type ChangeLifecycle } from "./lifecycle-actions";
 
-export function AuthorChallengeDetail({ challengeId, read, generate, onGenerated }: {
+export function AuthorChallengeDetail({
+  challengeId, read, generate, onGenerated, unpublish, archive, onLifecycleChanged,
+}: {
   challengeId: string;
   read: () => Promise<DraftReadOutcome>;
   generate?: Generate;
   onGenerated?: (draft: DraftView) => void;
+  /** AUT-06.4–06.6: lifecycle actions; the route returns to “My challenges” on success. */
+  unpublish?: ChangeLifecycle;
+  archive?: ChangeLifecycle;
+  onLifecycleChanged?: (challenge: LifecycleResult) => void;
 }) {
   const reportAccessFailure = useReportWorkspaceAccessFailure();
   const [result, setResult] = useState<DraftReadOutcome>();
@@ -80,8 +89,13 @@ export function AuthorChallengeDetail({ challengeId, read, generate, onGenerated
     <div className="form-actions">
       {!archived && <Link href={editDraftHref(draft.id)} className="button primary">Edit draft</Link>}
       {draft.proposals.length > 0 && <Link href={proposalsHref(draft.id)} className="button secondary">Proposal preview</Link>}
+      {draft.publishedRevisionId && <Link href={revisionHref(draft.id, draft.publishedRevisionId)} className="button secondary">
+        View published challenge
+      </Link>}
       {back}
     </div>
+    {unpublish && archive && onLifecycleChanged && <LifecycleActions draft={draft} unpublish={unpublish} archive={archive}
+      onChanged={onLifecycleChanged} reload={() => void load()} />}
     {generate && onGenerated && <GenerateProposals draft={draft} generate={generate} onGenerated={onGenerated}
       reload={() => void load()} />}
     <h2>Working draft code</h2>

@@ -3,6 +3,7 @@ import {
   type AuthorWriteResult, type DecisionResult, type DraftPatch, type DraftValues, type ExpectedVersions, type FieldErrors,
   type FinalPreviewResult, type GenerationResult,
 } from "@/lib/author/drafts";
+import type { LifecycleAction, LifecycleResult } from "@/lib/author/lifecycle";
 import { publicationMessages, type AuthorPublication, type AuthorRevision } from "@/lib/author/publication";
 import type { WorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { accountAccessHeader } from "@/lib/learner/challenges";
@@ -235,3 +236,45 @@ export async function readRevision(id: string, revisionId: string): Promise<Revi
     return { status: "unavailable" };
   }
 }
+
+export type LifecycleStatus = "conflict" | "failed" | "uncertain";
+export type LifecycleChangeResult =
+  | { status: "ok"; challenge: LifecycleResult } | { status: LifecycleStatus } | WorkspaceAccessFailure;
+
+/** AUT-06.4–06.6: one explicit lifecycle action under the caller's Idempotency-Key; never retried here. */
+async function changeLifecycle(
+  action: LifecycleAction, id: string, versions: { expectedRowVersion: number }, idempotencyKey: string, accountId?: string,
+): Promise<LifecycleChangeResult> {
+  let response: Response;
+  try {
+    const headers = new Headers({ "Content-Type": "application/json", "Idempotency-Key": idempotencyKey });
+    if (accountId) headers.set(workspaceAccountHeader, accountId);
+    response = await fetch(`${base}/${encodeURIComponent(id)}/${action}`, {
+      method: "POST", headers, body: JSON.stringify({ expectedRowVersion: versions.expectedRowVersion }), cache: "no-store",
+    });
+    // A lost or unreadable success is never reported as a failure.
+    if (response.ok) return { status: "ok", challenge: (await response.json()).data as LifecycleResult };
+  } catch {
+    return { status: "uncertain" };
+  }
+  const access = accessFailure(response);
+  if (access) return access;
+  const error = await errorBody(response);
+  switch (response.status) {
+    case 409:
+      if (error?.code === "VERSION_CONFLICT") return { status: "conflict" };
+      // An in-progress duplicate may still commit; resolve it with the same key.
+      if (error?.code === "INVALID_STATE" && error.message === authorErrorMessages.inProgress) return { status: "uncertain" };
+      // The challenge reached a state this action cannot leave, for example in another tab.
+      if (error?.code === "INVALID_STATE") return { status: "conflict" };
+      return { status: "failed" };
+    case 503: return { status: error?.message === authorErrorMessages.unavailable ? "failed" : "uncertain" };
+    case 400: case 403: case 404: case 413: return { status: "failed" };
+    default: return { status: "uncertain" };
+  }
+}
+
+export const unpublishChallenge = (id: string, versions: { expectedRowVersion: number }, key: string, accountId?: string) =>
+  changeLifecycle("unpublish", id, versions, key, accountId);
+export const archiveChallenge = (id: string, versions: { expectedRowVersion: number }, key: string, accountId?: string) =>
+  changeLifecycle("archive", id, versions, key, accountId);

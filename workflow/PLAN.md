@@ -1822,6 +1822,111 @@ the limits above remain unchanged.
 - **Depends on:** T-04, T-05, T-21
 - **Status:** done
 
+### T-23: Unpublish and archive challenges
+
+- **Issue:** #84
+- **Covers:** AUT-06.4–06.7. AUT-06.2's remaining parts: “Unpublish” on
+  published challenges, “Archive” on every nonarchived state, and the current
+  published revision on own challenge detail (a link to T-22's revision view).
+  AUT-06.6 for the lifecycle actions only; T-20 already covers save conflicts
+  and failures. SYS-02.1–02.2, SYS-04.1–04.2, SYS-08.1–08.3, SYS-09,
+  SYS-10.1–10.2, SYS-11, SYS-12.1 (Author rows of Learner-facing challenge
+  material; Learner and TA history after a lifecycle change), SYS-14.3,
+  SYS-17 and SYS-19 apply to the new Author writes and UI. No AI request and
+  no SEC requirement: AUT-06 makes no model call.
+- **Route:** high
+- **Reads:** `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Author,
+  §4 Product decisions → Hints and attempts and Shared vocabularies, and §5
+  Navigation and UI. `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted
+  input and submitted code, SYS-04 — Shared building blocks, SYS-08 —
+  Authorization at the data boundary, SYS-09 — Authentication with Cache
+  Components, SYS-10 — Database enforcement and privileged access, SYS-11 —
+  Authentication and authorization failures, SYS-12 — Record access and audit
+  (Learner-facing challenge material and Submissions),
+  SYS-14 — Delivery and database evolution (SYS-14.3), SYS-17 — Simple,
+  accessible UI and SYS-19 — Test strategy. `workflow/specs/INTEGRATION-SPEC.md`
+  §1 Scope and contract conventions → Shared values and bounds, §2 Domain
+  model and publication lifecycle (challenges, challenge_revisions,
+  submissions) → SYS-12 decision: immutable published revisions, §3 API
+  contracts → Transport, concurrency and errors and Author surface (`POST
+  /author/challenges/:id/unpublish`, `POST /author/challenges/:id/archive`),
+  §6 Shared deterministic seed fixtures (Author A/B identities, C1/C2
+  ownership, Submissions and expected outcomes, and Derived fixture
+  scenarios → “Unpublish or archive C1”) and §7 Integration verification.
+  `workflow/specs/stories/AUT-06-maintain-challenges.md`,
+  `workflow/specs/stories/AUT-05-publish-a-challenge.md` (AUT-05.7), and
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  (ACC-03.2, ACC-03.4–03.8). The Decisions and carried-over T-22 notes in
+  `workflow/handoffs/84-author-lifecycle.md`.
+- **Tests:** unit (`tests/unit/author/`) for strict lifecycle request and
+  response shapes: unknown fields, `expectedRowVersion`, UUID path IDs and a
+  required `Idempotency-Key` UUID; the `{ id, status, rowVersion }` result;
+  the exact AUT-06.4–06.6 messages and the INTEGRATION-SPEC §3 code for every
+  failure; and the client status mapping (success, ineligible state,
+  conflict, failed, uncertain and access failures). jsdom component tests
+  cover challenge detail offering “Unpublish” only when published, “Archive”
+  for every nonarchived state and neither when archived (“Archived challenges
+  can't be edited.” and no restore or delete action); a “View published
+  challenge” link when a published revision exists; both confirmation
+  dialogs with their exact text, “Cancel” making no request and returning
+  focus; “Unpublishing…” and “Archiving…” with duplicate submission
+  prevented; success returning to “My challenges” with “Challenge
+  unpublished.” or “Challenge archived.” announced; the conflict message
+  with “Reload challenge”; each confirmed failure message; and the uncertain
+  message with “Refresh challenge” resolving the same key, never retrying as
+  a new action. Local Supabase integration (`tests/integration/author/`)
+  uses real local Auth with Authors A and B, Learners, a TA and an anonymous
+  caller. Exercise both Route Handlers for 401, 403, 404, 400, 409 and 413.
+  Verify allowed transitions only (published → unpublished; draft,
+  published or unpublished → archived), 409 `INVALID_STATE` for every other
+  transition, 409 `VERSION_CONFLICT` for a stale `expectedRowVersion`, and
+  that each success increments rowVersion once, keeps `publishedRevisionId`,
+  and leaves drafts, proposal sets, revisions, answers, hints and
+  submissions unchanged. Cover replays returning the recorded result, a
+  changed payload returning 409 `IDEMPOTENCY_CONFLICT`, concurrent
+  duplicates executing once, and archive replay on an archived challenge.
+  Verify direct user-scoped status or pointer writes stay denied, and any
+  new function or ledger has only the grants it needs. Cover AUT-06.7
+  ordering against `create_learner_submission`: after unpublish or archive
+  commits, catalogue, detail, first attempts and retries are denied; an
+  attempt committed first keeps its pinned revision, grade, hints and
+  history for its Learner and TAs; Authors still cannot read submissions or
+  grades. Cover that an unpublished challenge can be edited and republished
+  through T-22 (new revision, status `published`) and that an archived one
+  refuses edits, generation, decisions and publication. Production-build e2e
+  (`tests/e2e/author/`) covers keyboard unpublish and archive from challenge
+  detail with confirmation, the success notice on “My challenges” and the
+  Learner catalogue no longer listing the challenge, at 320 CSS pixels
+  without page-level horizontal scrolling. The orchestrator runs every
+  database-backed check; specialists report them as unrun.
+- **Config paths:** none; reuse T-20's `author` integration-suite inclusion.
+- **Constraints:** Before writing Next.js code, read the installed
+  `node_modules/next/dist/docs/` guides for Route Handlers. Add `POST
+  /api/v1/author/challenges/[id]/unpublish` and `POST
+  /api/v1/author/challenges/[id]/archive`, sharing validated contracts in
+  `src/server/author/`. Each entry point verifies the session and stored
+  Author role through `src/server/author/access.ts`, checks ownership and
+  state, and prevents cross-request caching. Lifecycle writes stay
+  user-scoped: SYS-10.3 has no lifecycle named use, so do not use the admin
+  client. Add one user-scoped database function (in the style of T-21's
+  `decide_author_proposal`), executable only by `authenticated`, with an
+  idempotency ledger that has RLS on and no table grants. It locks the
+  challenge row (`for update`, the same lock `create_learner_submission`,
+  generation and publication take), rechecks the stored Author role,
+  ownership, the allowed transition and `expectedRowVersion`, then changes
+  status and increments rowVersion only. It never deletes or edits drafts,
+  proposal sets, revisions, answers, hints or submissions, and keeps the
+  published pointer. Add a migration and regenerate
+  `src/lib/supabase/database.types.ts`. Add the actions to T-20's challenge
+  detail with the shared `src/components/account/confirmation-dialog.tsx`
+  and its focus rules; success navigates
+  to “My challenges” with a one-time notice. Do not change Learner or TA
+  code unless a test shows an existing path ignores the lifecycle state.
+  T-22's decision stands: republishing an unchanged candidate stays
+  allowed.
+- **Depends on:** T-20, T-22, T-11, T-13
+- **Status:** todo
+
 ## TA
 
 ### T-30: Inspect submissions and retained assessment evidence
