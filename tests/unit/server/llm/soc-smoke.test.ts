@@ -37,7 +37,7 @@ const endpoint = "https://soclaas-api.comp.nus.edu.sg/v1/chat/completions";
 const key = "dev-key-offline-only";
 const reasoning = "raw reasoning sentinel";
 const upstream = "raw provider failure sentinel";
-const appCaps = { inject_flaws: 1280, generate_hints: 384, assess_review: 576, summarize_learner: 1024 };
+const appCaps = { inject_flaws: 1800, generate_hints: 384, assess_review: 576, summarize_learner: 1024 };
 
 const defaultCase = (operation: Operation, caseId?: string): SmokeCase => ({
   ...(caseId ? { caseId } : {}),

@@ -10,7 +10,7 @@ vi.mock("server-only", () => ({}));
 
 const destination = "https://soclaas-api.comp.nus.edu.sg/v1/chat/completions";
 const model = "qwen3.6:35b";
-const caps = { inject_flaws: 1280, generate_hints: 384, assess_review: 576, summarize_learner: 1024 };
+const caps = { inject_flaws: 1800, generate_hints: 384, assess_review: 576, summarize_learner: 1024 };
 const key = "offline-key-sentinel";
 const reasoning = "private-reasoning-sentinel";
 const upstream = "private-upstream-error-sentinel";
@@ -377,7 +377,7 @@ it.each([false, true])("SEC-04.3 pins summary categories and evidence for altern
 });
 
 const semanticGuidance: Record<Operation, RegExp[]> = {
-  inject_flaws: [/categor/i, /overlap|disjoint/i, /exact.*(line|source)|(line|source).*exact/i],
+  inject_flaws: [/categor/i, /overlap|disjoint/i, /exact.*(line|source)|(line|source).*exact/i, /explanation and fix.*one or two sentences/i],
   generate_hints: [/plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
   assess_review: [/independent/i, /matched flaw/i, /plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
   summarize_learner: [/evidence/i, /supplied|provided|input/i],

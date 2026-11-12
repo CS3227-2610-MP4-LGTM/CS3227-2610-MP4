@@ -261,16 +261,30 @@ export function validateInput(value: unknown): InputEnvelope {
     return parsed;
 }
 export function assembleCandidate(source: string, values: unknown[]) {
-    const codeValue = parse(code, source), proposals = values.map(p => parse(proposal, p));
-    if (!unique(proposals.map(p => p.key)))
+    const codeValue = parse(code, source), parsedProposals = values.map(p => parse(proposal, p));
+    if (!unique(parsedProposals.map(p => p.key)))
         fail("INVALID_AI_OUTPUT");
     const trailing = codeValue.endsWith("\n"), lines = codeValue.replace(/\n$/, "").split("\n"), result: string[] = [], flaws: (Proposal & {
         startLine: number;
         endLine: number;
     })[] = [];
+    const proposals = parsedProposals.map(p => {
+        const snippetLines = p.originalSnippet.split("\n");
+        let sourceStartLine: number | undefined;
+        for (let start = 0; start + snippetLines.length <= lines.length; start++) {
+            if (!snippetLines.every((line, offset) => lines[start + offset] === line))
+                continue;
+            if (sourceStartLine !== undefined)
+                fail("INVALID_AI_OUTPUT");
+            sourceStartLine = start + 1;
+        }
+        if (sourceStartLine === undefined)
+            fail("INVALID_AI_OUTPUT");
+        return { ...p, sourceStartLine, sourceEndLine: sourceStartLine + snippetLines.length - 1 };
+    });
     let consumed = 0;
     for (const p of [...proposals].sort((a, b) => a.sourceStartLine - b.sourceStartLine)) {
-        if (p.sourceStartLine <= consumed || p.sourceEndLine < p.sourceStartLine || p.sourceEndLine > lines.length || lines.slice(p.sourceStartLine - 1, p.sourceEndLine).join("\n") !== p.originalSnippet)
+        if (p.sourceStartLine <= consumed)
             fail("INVALID_AI_OUTPUT");
         result.push(...lines.slice(consumed, p.sourceStartLine - 1));
         const startLine = result.length + 1;
@@ -287,6 +301,7 @@ export function assembleCandidate(source: string, values: unknown[]) {
     parse(code, candidate);
     return {
         code: candidate,
+        proposals,
         flaws
     };
 }
@@ -328,7 +343,7 @@ export function validateOutput(snapshot: unknown, value: unknown, options?: {
     if (captured.operation === "inject_flaws" && result.operation === "inject_flaws") {
         if (result.payload.proposals.length !== captured.payload.flawCount || result.payload.proposals.some(p => !captured.payload.categories.includes(p.category)))
             fail("INVALID_AI_OUTPUT");
-        assembleCandidate(captured.payload.workingCode, result.payload.proposals);
+        result.payload.proposals = assembleCandidate(captured.payload.workingCode, result.payload.proposals).proposals;
     }
     else if (captured.operation === "generate_hints" && result.operation === "generate_hints") {
         const keys = captured.payload.flaws.map(f => f.key);

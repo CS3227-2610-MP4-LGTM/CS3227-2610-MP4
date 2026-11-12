@@ -53,8 +53,6 @@ describe("strict four-operation contracts", () => {
     [proposals[0], { ...proposals[1], key: proposals[0].key }],
     [{ ...proposals[0], category: "security" }, proposals[1]],
     [{ ...proposals[0], sourceStartLine: 0 }, proposals[1]],
-    [{ ...proposals[0], sourceEndLine: 1000 }, proposals[1]],
-    [{ ...proposals[0], sourceEndLine: 2 }, proposals[1]],
     [{ ...proposals[0], originalSnippet: "wrong snapshot" }, proposals[1]],
     [{ ...proposals[0], replacementSnippet: "" }, proposals[1]],
     [{ ...proposals[0], replacementSnippet: "return 1;\n" }, proposals[1]],
@@ -63,6 +61,40 @@ describe("strict four-operation contracts", () => {
     [{ ...proposals[0], explanation: "x".repeat(2001) }, proposals[1]],
   ].map(proposals => ({ proposals })))("SEC-02.1 rejects a whole malformed/overlapping proposal set %#", ({ proposals }) => {
     invalid(() => validate("inject_flaws", envelope("inject_flaws", { proposals })));
+  });
+  it("SEC-02.1 derives unique whole-line source ranges despite wrong model numbers", () => {
+    const workingCode = "header\n  first();\n  second();\ntail\n";
+    const supplied = [
+      { ...proposals[0], sourceStartLine: 1000, sourceEndLine: 1,
+        originalSnippet: "  first();\n  second();", replacementSnippet: "  changed();" },
+      { ...proposals[1], sourceStartLine: 2, sourceEndLine: 2,
+        originalSnippet: "tail", replacementSnippet: "end" },
+    ];
+    const input = envelope("inject_flaws", { ...inputs.inject_flaws.payload as object, workingCode });
+    const normalized = supplied.map((p, i) => ({ ...p, sourceStartLine: i ? 4 : 2, sourceEndLine: i ? 4 : 3 }));
+    expect(validateOutput(input, envelope("inject_flaws", { proposals: supplied })))
+      .toEqual(envelope("inject_flaws", { proposals: normalized }));
+    const candidate = assembleCandidate(workingCode, supplied);
+    expect(candidate.proposals).toEqual(normalized);
+    expect(candidate.code).toBe("header\n  changed();\nend\n");
+    expect(candidate.flaws).toMatchObject([
+      { sourceStartLine: 2, sourceEndLine: 3, startLine: 2, endLine: 2 },
+      { sourceStartLine: 4, sourceEndLine: 4, startLine: 3, endLine: 3 },
+    ]);
+    expect(supplied[0].sourceStartLine).toBe(1000);
+  });
+  it.each([
+    { label: "absent snippet", workingCode: "alpha\nbeta", snippets: ["missing"] },
+    { label: "snippet appearing twice", workingCode: "alpha\nbeta\nalpha", snippets: ["alpha"] },
+    { label: "overlapping occurrences of one snippet", workingCode: "a\na\na", snippets: ["a\na"] },
+    { label: "partial-line snippet", workingCode: "  alpha();\nbeta", snippets: ["alpha();"] },
+    { label: "overlapping derived ranges", workingCode: "alpha\nbeta\ngamma", snippets: ["alpha\nbeta", "beta\ngamma"] },
+  ])("SEC-02.1 rejects the whole result for $label", ({ workingCode, snippets }) => {
+    const input = envelope("inject_flaws", { ...inputs.inject_flaws.payload as object, workingCode, flawCount: snippets.length });
+    const supplied = snippets.map((originalSnippet, i) => ({ ...proposals[i % proposals.length],
+      sourceStartLine: i + 1, sourceEndLine: i + 1, originalSnippet }));
+    invalid(() => validateOutput(input, envelope("inject_flaws", { proposals: supplied })));
+    invalid(() => assembleCandidate(workingCode, supplied));
   });
   it("SEC-02.1 derives shifted ranges in source order and preserves trailing LF", () => {
     const code = 'def quotient(a, b):\n    if b == 0:\n        raise ValueError("zero divisor")\n    return a / b\n';
