@@ -28,4 +28,6 @@ Moderate AI grades and see AI summaries of learner blind spots.
 
 Code submitted to the app is displayed, never executed.
 
+[User Guide](UserGuide.md)
+
 [Developer Guide](DeveloperGuide.md)

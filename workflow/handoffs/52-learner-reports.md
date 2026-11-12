@@ -36,7 +36,7 @@ Claude Code sessions have no readable rollout for `rollout-summary.ts`; Tokens r
 | 2 | Tests / G2 (stopped at G2) | Final (from session 3 resume prompt): 248.1k | Decision 1 shared-constants PLAN amendment was still uncommitted at resume; carried forward and given its own commit command at G2. |
 | 3 | Implement; stopped before Review | Final (from session 4 resume prompt): 214.4k | G2 commits `b434a1e` and `f6c2cde` verified at resume; no gaps. `bunx supabase migration up` was denied; Shawn chose `bun run db:reset` instead. |
 | 4 | Review (results recorded, REV-01 fixed), Docs; stopped before Close-out | Final (from session 5 resume prompt): 110.3k | Pre-review digest recomputed and matched; HEAD `f6c2cde` unchanged; no gaps. |
-| 5 | Close-out; stopped at G4 | unavailable in-session; human to record in the session log | HEAD `f6c2cde` unchanged; human docs-only edit to the Developer Guide made between sessions, recorded in the Docs row. |
+| 5 | Close-out; stopped at G4 | Final (Shawn, at log request): 76.1k | HEAD `f6c2cde` unchanged; human docs-only edit to the Developer Guide made between sessions, recorded in the Docs row. |
 
 End each main session after updating this handoff at every gate, including G3 decisions. A resumed session first verifies the gate commit named in its resume prompt and its scope in Git, records the previous session's final readout if available (otherwise `unavailable`), and lists resume gaps.
 
