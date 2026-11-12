@@ -1371,7 +1371,7 @@ unpublished → archived. A change increments `rowVersion` only. The draft, its
 version, proposal sets, revisions and the published-revision pointer are kept.
 
 The
-[Author lifecycle migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261114120000_author_lifecycle.sql)
+[Author lifecycle migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261115130000_author_lifecycle.sql)
 adds `public.change_author_challenge_lifecycle(uuid, text, uuid, jsonb)`.
 SYS-10.3 has no named admin use for lifecycle changes, so this is a
 user-scoped `SECURITY DEFINER` function with an empty `search_path`,
