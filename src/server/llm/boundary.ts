@@ -152,7 +152,8 @@ export function createLlmBoundary(options: RunnerOptions & { client: Client }) {
                 fail("INVALID_STATE");
         }
         const proposals = await checked(client.from("proposals").select("id,category,source_start_line,source_end_line,original_snippet,replacement_snippet,explanation,fix").eq("proposal_set_id", draft.generation_id).order("source_start_line").order("id"));
-        const decisions = proposals.length ? await checked(client.from("proposal_decisions").select("proposal_id,decision").in("proposal_id", proposals.map(p => p.id))) : [];
+        // Ordered so the post-dispatch recapture fingerprints identically when nothing changed.
+        const decisions = proposals.length ? await checked(client.from("proposal_decisions").select("proposal_id,decision").in("proposal_id", proposals.map(p => p.id)).order("proposal_id")) : [];
         if (!proposals.length || decisions.length !== proposals.length || decisions.some(d => d.decision === "pending"))
             fail("INVALID_STATE");
         const approved = proposals.filter(p => decisions.some(d => d.proposal_id === p.id && d.decision === "approved"));
