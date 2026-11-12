@@ -35,9 +35,14 @@ export async function createLearnerHistoryFixture({ pageSize = 51 }: { pageSize?
       comments.push(commentId);
       await insert(h.db, "public.submission_comments", { id: commentId, submission_id: submissionId, ordinal, ...note });
     }
+    // The canonical reader projects a submission with no grading run as pending, and a running
+    // run older than its 60-second deadline as failed. Seed accordingly; the running run is dated
+    // ahead so it stays unexpired however long a suite or browser journey takes.
+    if (state === "pending") return comments;
     const run = id(serial++);
     await insert(h.db, "public.grading_runs", {
-      id: run, submission_id: submissionId, run_number: 1, state, created_at: time,
+      id: run, submission_id: submissionId, run_number: 1, state,
+      created_at: state === "running" ? new Date(Date.now() + 3_600_000).toISOString() : time,
       finished_at: state === "completed" || state === "failed" ? time : null,
       failure_code: state === "failed" ? "AI_UNAVAILABLE" : null,
     });
