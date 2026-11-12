@@ -46,12 +46,12 @@ it("TA-01.5 keeps original 25/fail separate from effective override 70/pass and 
   const original = within(screen.getByRole("region", { name: "Original assessment" }));
   const current = within(screen.getByRole("region", { name: "Current grade" }));
   expect(original.getByText("25 / 100")).toBeTruthy();
-  expect(original.getByText(/fail/i)).toBeTruthy();
+  expect(original.getByText("Not passed", { exact: true })).toBeTruthy();
   expect(original.getByText(/pass mark.*60|60.*pass mark/i)).toBeTruthy();
   for (const label of [/identification/i, /explanation/i, /fix/i, /matched/i, /missed/i]) expect(original.getAllByText(label).length).toBeGreaterThan(0);
   expect(current.getByText("70 / 100")).toBeTruthy();
   expect(current.getByText("TA override")).toBeTruthy();
-  expect(current.getByText(/pass/i)).toBeTruthy();
+  expect(current.getByText("Passed", { exact: true })).toBeTruthy();
   expect(screen.getAllByText("Not assessed").length).toBeGreaterThan(0);
   expect(document.body.textContent).toContain("The consequence and proposed fix are clear.");
   expect(document.body.textContent).toMatch(/unmatched/i);

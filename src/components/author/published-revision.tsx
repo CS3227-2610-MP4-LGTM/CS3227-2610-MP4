@@ -22,19 +22,23 @@ export function PublishedRevision({ revision }: { revision: AuthorRevision }) {
       <dt>Difficulty</dt><dd>{labelFor(difficultyLabels, challenge.difficulty)}</dd>
     </dl>
     <p>{challenge.description}</p>
-    <h2>Code changes</h2>
-    <CodeDiffView code={challenge.code} label="Published code changes" showPath={false} />
-    <h2>Answer key</h2>
-    <ol>
-      {answerKey.map(flaw => <li key={flaw.id}>
-        <h3>{labelFor(categoryLabels, flaw.category)}</h3>
-        <p>{range(flaw.startLine, flaw.endLine)}</p>
-        <p>Explanation: {flaw.explanation}</p>
-        <p>Fix: {flaw.fix}</p>
-        <h4>Hint</h4>
-        {hints.filter(hint => hint.flawId === flaw.id).map(hint => <p key={hint.id}>{hint.text}</p>)}
-      </li>)}
-    </ol>
+    <section aria-labelledby="published-code-heading">
+      <h2 id="published-code-heading">Code changes</h2>
+      <CodeDiffView code={challenge.code} label="Published code changes" showPath={false} />
+    </section>
+    <section aria-labelledby="published-answer-key-heading">
+      <h2 id="published-answer-key-heading">Answer key</h2>
+      <ol>
+        {answerKey.map(flaw => <li key={flaw.id}>
+          <h3>{labelFor(categoryLabels, flaw.category)}</h3>
+          <p>{range(flaw.startLine, flaw.endLine)}</p>
+          <p>Explanation: {flaw.explanation}</p>
+          <p>Fix: {flaw.fix}</p>
+          <h4>Hint</h4>
+          {hints.filter(hint => hint.flawId === flaw.id).map(hint => <p key={hint.id}>{hint.text}</p>)}
+        </li>)}
+      </ol>
+    </section>
     <div className="form-actions">
       <Link href={authorChallengesHref} className="button secondary">Back to challenges</Link>
     </div>

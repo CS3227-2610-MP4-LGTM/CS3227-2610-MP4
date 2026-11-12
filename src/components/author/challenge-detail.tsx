@@ -98,7 +98,9 @@ export function AuthorChallengeDetail({
       onChanged={onLifecycleChanged} reload={() => void load()} />}
     {generate && onGenerated && <GenerateProposals draft={draft} generate={generate} onGenerated={onGenerated}
       reload={() => void load()} />}
-    <h2>Working draft code</h2>
-    <CodeDiffView code={projectNewFile(draft.language as Language, draft.workingCode)} />
+    <section aria-labelledby="working-code-heading">
+      <h2 id="working-code-heading">Working draft code</h2>
+      <CodeDiffView code={projectNewFile(draft.language as Language, draft.workingCode)} />
+    </section>
   </section>;
 }
