@@ -97,7 +97,7 @@ test("LRN-05.1 LRN-05.2 LRN-05.4 SYS-19.2 starts pending grading once and reopen
   }
 
   await expect(exactText(page, "Original assessment")).toHaveCount(1);
-  await expect(page.getByText(/^\d+ \/ 100$/)).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Original assessment", exact: true }).getByText(/^\d+ \/ 100$/)).toHaveCount(1);
   await expect(exactText(page, "Explanation credit")).toHaveCount(1);
   await expect(exactText(page, "Fix credit")).toHaveCount(1);
   await page.reload();
