@@ -8,18 +8,21 @@ import {
   authorChallengesHref, proposalsHref, type AuthorDraft, type AuthorReadResult, type DraftPatch, type DraftValues,
   type ExpectedVersions,
 } from "@/lib/author/drafts";
+import { lifecycleMessages, type LifecycleResult } from "@/lib/author/lifecycle";
 import { publicationHref, publicationMessages, type AuthorRevision } from "@/lib/author/publication";
 import { isWorkspaceAccessFailure } from "@/lib/auth/workspace-access";
 import { AuthorChallengeDetail } from "./challenge-detail";
 import { AuthorChallengeList } from "./challenge-list";
 import {
-  createDraft, decideProposal, generateProposals, patchDraft, publishChallenge, readChallengePage, readDraft,
-  readFinalPreview, readRevision, type RevisionReadResult,
+  archiveChallenge, createDraft, decideProposal, generateProposals, patchDraft, publishChallenge, readChallengePage, readDraft,
+  readFinalPreview, readRevision, unpublishChallenge, type RevisionReadResult,
 } from "./client";
 import { CreateChallengeForm } from "./create-challenge-form";
 import { EditDraftForm } from "./edit-draft-form";
 import { FlawConfiguration } from "./flaw-configuration";
-import { rememberProposalsGenerated, takeDraftSaved, takeProposalsGenerated } from "./notices";
+import {
+  rememberLifecycleChange, rememberProposalsGenerated, takeDraftSaved, takeLifecycleChange, takeProposalsGenerated,
+} from "./notices";
 import { ProposalPreview, type Decide } from "./proposal-preview";
 import { PublicationResult } from "./publication-result";
 import { PublishedRevision } from "./published-revision";
@@ -29,10 +32,19 @@ export function AuthorListRoute() {
   const notices = params.getAll("notice");
   const accountCreated = notices.length === 1 && notices[0] === "account-created";
   if (accountCreated) params.delete("notice");
+  const [changed, setChanged] = useState<string | null>(null);
+  useEffect(() => {
+    // Session storage exists only in the browser, so the one-time notice is read after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setChanged(takeLifecycleChange());
+  }, []);
+  const lifecycleNotice = changed === "unpublished" ? lifecycleMessages.unpublished
+    : changed === "archived" ? lifecycleMessages.archived : null;
   return <>
     <p className="eyebrow">Your workspace</p>
     <h1>My challenges</h1>
     {accountCreated && <p className="notice" role="status">Account created.</p>}
+    <div role="status" aria-live="polite">{lifecycleNotice && <p className="notice">{lifecycleNotice}</p>}</div>
     <AuthorChallengeList search={params.toString()} readPage={readChallengePage}
       navigate={href => window.history.pushState(null, "", href)} />
   </>;
@@ -155,10 +167,21 @@ export function EditDraftRoute({ challengeId, accountId }: { challengeId: string
 }
 
 export function ChallengeDetailRoute({ challengeId, accountId }: { challengeId: string; accountId?: string }) {
+  const router = useRouter();
   const read = useCallback(() => readDraft(challengeId), [challengeId]);
   const { generate } = useDraftIo(challengeId, accountId);
   const openProposals = useOpenProposals(challengeId);
-  return <AuthorChallengeDetail challengeId={challengeId} read={read} generate={generate} onGenerated={openProposals} />;
+  const unpublish = useCallback((versions: { expectedRowVersion: number }, key: string) =>
+    unpublishChallenge(challengeId, versions, key, accountId), [challengeId, accountId]);
+  const archive = useCallback((versions: { expectedRowVersion: number }, key: string) =>
+    archiveChallenge(challengeId, versions, key, accountId), [challengeId, accountId]);
+  // AUT-06.4/06.5: success returns to “My challenges” with its one-time notice.
+  const onLifecycleChanged = useCallback((challenge: LifecycleResult) => {
+    rememberLifecycleChange(challenge.status);
+    router.push(authorChallengesHref);
+  }, [router]);
+  return <AuthorChallengeDetail challengeId={challengeId} read={read} generate={generate} onGenerated={openProposals}
+    unpublish={unpublish} archive={archive} onLifecycleChanged={onLifecycleChanged} />;
 }
 
 export function ProposalsRoute({ challengeId, accountId }: { challengeId: string; accountId?: string }) {

@@ -80,3 +80,13 @@ export function publicationErrorResponse(code: string): Response {
   const [status, errorCode, message] = publicationErrors[code];
   return Response.json({ error: { code: errorCode, message } }, { status, headers });
 }
+
+/**
+ * AUT-06.6: a lifecycle INVALID_STATE means the challenge reached a state this
+ * action cannot leave (for example archived in another tab), so it uses the
+ * reload message rather than the archived-edit message.
+ */
+export function lifecycleErrorResponse(result: AuthorFailure): Response {
+  if (result.status !== "invalid_state") return authorErrorResponse(result);
+  return Response.json({ error: { code: "INVALID_STATE", message: messages.versionConflict } }, { status: 409, headers });
+}

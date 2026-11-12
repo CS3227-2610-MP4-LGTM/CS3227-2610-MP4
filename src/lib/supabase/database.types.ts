@@ -57,6 +57,20 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"author_lifecycle_requests": {
+                  Row: {
+                    "action": string,"actor_id": string,"challenge_id": string,"created_at": string,"fingerprint": string,"idempotency_key": string,"result_row_version": number | null,"result_status": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "action": string,"actor_id": string,"challenge_id": string,"created_at"?: string,"fingerprint": string,"idempotency_key": string,"result_row_version"?: number | null,"result_status": string
+                  }
+                  Update: {
+                    "action"?: string,"actor_id"?: string,"challenge_id"?: string,"created_at"?: string,"fingerprint"?: string,"idempotency_key"?: string,"result_row_version"?: number | null,"result_status"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"author_proposal_requests": {
                   Row: {
                     "actor_id": string,"challenge_id": string,"expires_at": string,"failure_code": string | null,"idempotency_key": string,"proposal_set_id": string | null,"request_fingerprint": string,"state": string
@@ -841,6 +855,9 @@ isOneToOne: false
                            },
 "challenge_generation_access":
 { Args: { "resource_id": string }; Returns: string
+                           },
+"change_author_challenge_lifecycle":
+{ Args: { "p_action": string,"p_challenge_id": string,"p_idempotency_key": string,"p_payload": Json }; Returns: Json
                            },
 "complete_learner_grading":
 { Args: { "p_account_id": string,"p_grading_run_id": string,"p_payload": Json,"p_submission_id": string }; Returns: Json

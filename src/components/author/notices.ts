@@ -41,3 +41,24 @@ export function takeDraftSaved(challengeId: string) {
     return false;
   }
 }
+
+const lifecycleKey = "lgtm:author:lifecycle-notice";
+
+/** A one-time AUT-06.4/06.5 success notice from challenge detail to “My challenges”. */
+export function rememberLifecycleChange(status: string) {
+  try {
+    window.sessionStorage.setItem(lifecycleKey, status);
+  } catch {
+    // Storage can be blocked; the notice is optional and the list shows the new status.
+  }
+}
+
+export function takeLifecycleChange() {
+  try {
+    const status = window.sessionStorage.getItem(lifecycleKey);
+    window.sessionStorage.removeItem(lifecycleKey);
+    return status;
+  } catch {
+    return null;
+  }
+}
