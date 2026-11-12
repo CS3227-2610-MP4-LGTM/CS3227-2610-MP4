@@ -6,6 +6,8 @@ export async function readTaData<T>(path: string): Promise<{ status: "ok"; data:
   try {
     const response = await fetch(`/api/v1/ta/${path}`, { cache: "no-store" });
     if (response.ok) return { status: "ok", data: (await response.json()).data };
+    // Consume error bodies before classifying; a failed read must preserve the status.
+    await response.text().catch(() => "");
     const access = response.headers.get(accountAccessHeader);
     if (response.status === 401) return { status: "unauthenticated" };
     if (response.status === 403) return { status: access === "account_unavailable" ? access : "role_denied" };
