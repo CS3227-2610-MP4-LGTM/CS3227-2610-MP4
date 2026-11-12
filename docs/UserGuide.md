@@ -38,7 +38,8 @@ email address.
 
 ### Create an account and choose a role
 
-1. Open <https://lgtm-cs3227.vercel.app>. You arrive at **Sign in**.
+1. Open <https://lgtm-cs3227.vercel.app>. If already signed in, select
+   **Sign out** first to reach **Sign in**.
 2. Select **Create an account**.
 3. Enter a **Display name** of up to 80 characters. Other users may see it.
 4. Enter your **Email** and a **Password** of at least 6 characters.
@@ -84,7 +85,7 @@ If you have unsaved review comments, LGTM asks you first. See
 | Role | What you do |
 | --- | --- |
 | Learner | Browse published challenges, comment on lines of code, submit a review, read your grade and feedback, use hints, retry once and report comments you think were marked wrongly. |
-| Author | Create a draft from working code, ask AI to propose flaws, approve or reject each one, preview the result and publish it for Learners. |
+| Author | Create a draft from working code, ask AI to propose flaws, approve or reject each one, preview and publish it, then unpublish or permanently archive challenges. |
 | TA | Inspect any submission with its private answer key, work through flagged submissions, override grades, resolve flags and read each learner's progress and AI summary. |
 
 ## Navigating LGTM
@@ -130,7 +131,7 @@ leave a review that has comments, LGTM shows **Leave this review?** with
 - Select **Leave review** to discard the comments and continue.
 
 This applies to the top-bar links, **Sign out** and the browser's back button.
-Reloading or closing the tab shows your browser's own warning instead.
+Reloading or closing the tab uses your browser's own warning where supported.
 
 ### When LGTM cannot confirm an action
 
@@ -141,14 +142,15 @@ confirm submission.** and a **Check** button, such as **Check submission**,
 publication**.
 
 Select the **Check** button before you change anything. It looks up the same
-request and never does the action twice.
+request and never does the action twice. Lifecycle changes use
+**Refresh challenge** for this recovery; see [Unpublish a challenge](#unpublish-a-challenge).
 
 ### Access and account screens
 
 | Screen | What it means | What to do |
 | --- | --- | --- |
 | **Access denied** — **This page isn't available for your role.** | The page belongs to another role. | Select **Go to my workspace**. |
-| **Access denied** — **This item isn't available to your account.** | The item belongs to someone else. | Select **Go to my workspace**. |
+| **Access denied** — **This item isn't available to your account.** | The item belongs to someone else, or the challenge is unpublished or archived. | Select **Go to my workspace**. |
 | **Account unavailable** — **We couldn't load a valid account profile.** | Your account profile couldn't be read. | Select **Try again**. If it persists, select **Sign out** and report it. |
 | **Service unavailable** — **We can't check your account right now. Try again.** | The account service didn't respond. | Select **Try again**, or **Sign out**. |
 
@@ -172,6 +174,17 @@ see **No challenges available.**
 
 **Next:** [Review a challenge](#review-a-challenge).
 
+Filters combine: a challenge must match every chosen filter. The URL preserves
+filters and pagination for reload and browser Back or Forward. Changing a
+filter returns to the first page; **Next page** and **First page** keep filters.
+If the URL is invalid or its page is stale, use **Clear filters**. A failed
+read offers **Try again** for the same request. The results region announces
+**Loading challenges…** and pagination focuses **Results**.
+
+Opening a challenge creates no attempt. After unpublication or archiving it
+leaves the catalogue and its challenge link shows **Access denied**. Your
+existing attempts remain in [Review history](#check-your-review-history).
+
 ### Review a challenge
 
 The challenge page shows the title, description, metadata and the code.
@@ -182,7 +195,7 @@ The challenge page shows the title, description, metadata and the code.
    press Enter or Space. On devices without hover, the **+** stays visible.
 3. Type your comment in **Comment on line N**. Say what is wrong, why it
    matters and how to fix it. Grading rewards all three.
-4. Select **Add comment** to save it, or **Cancel**.
+4. Select **Add comment** to keep it in this page's draft, or **Cancel**.
 
 To change a comment, select **Edit**, change the text and select **Save
 comment**. To delete it, select **Remove**.
@@ -195,6 +208,11 @@ Comments aren't saved until you submit. See
 [Unsaved review comments](#unsaved-review-comments).
 
 **Next:** [Submit your review](#submit-your-review).
+
+Comments appear in line order, then in the order added on each line. Leading
+and trailing whitespace is trimmed; blank comments are rejected. Closing an
+empty editor with **Cancel** adds nothing. Unsaved editor text also triggers
+the [leave warning](#unsaved-review-comments).
 
 ### Submit your review
 
@@ -213,12 +231,18 @@ challenge.** and **View first attempt**.
 
 **Next:** [Read your result](#read-your-result).
 
+If submission cannot be confirmed, the draft stays locked. **Check submission**
+checks the same request; **Submission is still being confirmed. Check again.**
+means you should check again later. A confirmed rejection keeps your draft
+visible. If the revision changed or became unavailable, return to **Challenges**;
+an attempt-limit rejection points to **Review history**.
+
 ### Read your result
 
 Grading starts by itself when the **Review result** page opens. You see
 **Grading pending**, then **Grading your review…**. Stay on the page; it
-updates on its own. If you leave first, grading starts the next time you open
-the result.
+updates on its own. If grading has not started when you leave, reopening the result starts it.
+Reopening a running result checks its current status.
 
 When grading finishes, the page shows:
 
@@ -237,7 +261,7 @@ When grading finishes, the page shows:
 - **Next actions**: **Retry challenge**, or the reason you can't retry.
 
 If grading fails, you see **Grading failed. Your review is still saved.** with
-the reason. Select **Retry grading** to try again. A failed grade never shows
+the reason. Select **Retry grading** when offered to try again. A failed grade never shows
 as a score of zero. See [Troubleshooting](#troubleshooting) for each reason.
 
 **Next:** [Use hints](#use-hints), [Retry a challenge](#retry-a-challenge) or
@@ -257,6 +281,11 @@ When you have seen them all, you see **All hints shown**. If you missed no
 flaws, you see **No hints needed for missed flaws.** Hints were written when
 the challenge was published, so showing one doesn't use AI.
 
+Hints start collapsed whenever you reopen a result. They remain available on
+your completed results after a challenge is unpublished or archived. Each
+attempt's hints follow its own original assessment. On a read failure choose
+**Try again**; an ineligible hint offers **Refresh result**.
+
 ### Retry a challenge
 
 You get one retry per challenge, after your first attempt is graded.
@@ -270,6 +299,22 @@ You get one retry per challenge, after your first attempt is graded.
 **Success:** the second attempt's **Review result** opens and grading starts.
 Both attempts stay in your history. Your first attempt's result then shows
 **You have used your retry.**
+
+A passing first grade also allows a retry. Eligibility requires the original
+assessment to complete, even if a TA has overridden the grade. The challenge
+must still be published. The result explains unavailable retries in this order:
+
+1. **Retry is available after your first assessment completes.**
+2. **You have used your retry.**
+3. **Retry is unavailable while this challenge is not published.**
+
+Use **Check retry availability** if the eligibility read fails. A retry uses
+the first attempt's code even if a newer revision is published. Reloading or
+discarding the draft restores fresh copies of the first attempt's comments.
+Browser Back/Forward rechecks eligibility. An ineligible retry page shows
+**Retry unavailable**, its reason and **Back to result**; a temporary read
+failure offers **Try again** at the same URL. Attempt two cannot be retried.
+Submission checks eligibility again and keeps the draft on a confirmed rejection.
 
 ### Report an unmatched comment
 
@@ -289,6 +334,14 @@ flag appears under **Moderation flags** with **Awaiting TA review.**
 You can report each unmatched comment once. **Duplicate** and **Matched**
 comments can't be reported.
 
+Only completed results offer reports. You cannot edit or withdraw a report,
+even after a TA resolves it. Historical attempts remain reportable after
+unpublication or archive. Only one report can be in progress at a time.
+While sending, editing and **Cancel** are disabled. If the outcome is uncertain,
+your reason stays read-only and **Check report** safely checks the same action.
+A confirmed temporary failure restores the form and reason for **Send report**.
+Signing in again never automatically resends a report.
+
 ### Check your review history
 
 1. Select **Review history** in the top bar.
@@ -298,6 +351,18 @@ comments can't be reported.
 
 With no reviews yet, you see **No reviews yet.** To go back to the catalogue,
 select **Browse challenges**.
+
+**Next page** and **First page** keep the requested page in the URL for reload
+and Back/Forward. A bad history cursor offers **First page**; a read failure
+offers **Try again**. Pending, running and failed attempts have no effective
+score; a completed zero is shown as zero.
+
+Results remain readable after a new revision, unpublication or archive, with
+the title and code you reviewed. **Current grade** stays separate from
+**Original assessment**. **Override history** and each flag's **Resolution
+history** retain full reasons and all corrections, oldest first, with actor
+labelled **TA action**. The latest entries are marked **Current override** or
+**Latest resolution**. Resolving a flag alone never changes your grade.
 
 ## Author guide
 
@@ -355,6 +420,11 @@ Select **Generate new proposals** or **Cancel**.
 Generation uses AI and counts toward your [usage limits](#usage-limits). See
 [Flaw proposals](#flaw-proposals) for what it does and how it fails.
 
+An unconfirmed generation offers **Check generation**, which checks the same
+request. If another tab changed the draft, select **Reload draft** before
+trying again. A failed generation keeps the current proposals; **Try again**,
+when offered, starts a new attempt from the current saved draft.
+
 ### Approve or reject proposals
 
 On **Proposal preview**, each proposal shows its category, its **Source** line
@@ -364,11 +434,18 @@ range in your working code, the **Original code**, the **Replacement code**, an
 1. Read each proposal.
 2. Select **Approve** to keep it or **Reject** to drop it. You see **Saving
    decision…**, then **Decision:** shows **Approved** or **Rejected**.
-3. You can change a decision at any time before you publish.
+3. You can change a decision while the challenge is not archived. After
+   publication, this changes the draft; the published revision stays unchanged
+   until you publish again.
 
 Until every proposal has a decision, you see **Decide every proposal to
 preview the final challenge.** If you reject them all, you see **Approve at
 least one proposal to preview or publish.**
+
+Proposal text cannot be edited. A failed decision can be retried with
+**Approve** or **Reject**; an uncertain one offers **Refresh draft** and a stale
+one offers **Reload draft**. With no proposals, select **Back to configuration**
+from **Generate proposals before reviewing flaws.**
 
 ### Preview the final challenge
 
@@ -403,6 +480,13 @@ Publishing uses AI to write the hints and counts toward your
 [usage limits](#usage-limits). The challenge isn't published until every hint
 is ready. See [Hints at publication](#hints-at-publication).
 
+You can publish again without changing the draft or decisions. Each new
+publication creates another revision and uses AI again. If publication fails,
+an existing live revision stays available; a draft that has never been
+published stays private. An unconfirmed or timed-out publication offers
+**Check publication** before another attempt. A stale draft requires
+**Reload draft**. Failures also offer **Back to proposal preview**.
+
 ### Find and edit your challenges
 
 **My challenges** lists your challenges with their **Status**, **Language** and
@@ -415,9 +499,76 @@ filter** to show all.
 3. Select **Proposal preview** to return to existing proposals.
 
 Editing a published challenge changes only your working draft. The page shows
-**The published revision stays live until you publish a new revision.** To
+**A published revision is live. Edits change only the working draft until a new revision is published.** To
 update what Learners see, generate proposals, decide them and publish again.
 That creates a new revision. Learners keep their earlier attempts.
+
+Choose **Load more** to append another page. **Status** includes **Draft**,
+**Published**, **Unpublished** and **Archived**. Archived detail is read-only and
+shows **Archived challenges can't be edited.** A retained revision remains
+available to its Author through **View published challenge**, even when the
+challenge is no longer available to Learners. The retained revision link or
+publication metadata does not mean the challenge is currently in the catalogue;
+check **Status**.
+
+Both edit forms save only changed values; trimming text back to its saved value
+leaves the save button disabled. Any accepted edit clears current proposals
+and decisions, with **Clear the current proposals?** asking first when needed.
+**Cancel** keeps them. Stale saves offer **Reload challenge** or **Reload draft**;
+an unconfirmed save offers **Refresh challenge** or **Refresh draft**.
+
+### Unpublish a challenge
+
+Unpublishing removes a published challenge from Learners' **Challenges**.
+Learners cannot open its challenge page, start a first attempt or retry it.
+The working draft and published revision are kept, so you can edit and publish
+again as a new revision.
+
+1. Open **My challenges**, then **View challenge** on a **Published** challenge.
+2. Select **Unpublish**.
+3. In **Unpublish challenge**, read **Unpublish this challenge? Learners won't
+   be able to start or retry it.**
+4. Select **Unpublish** to confirm, or **Cancel** to leave it published.
+
+While saving, you see **Unpublishing…** and both lifecycle actions are disabled.
+On success, **My challenges** opens with **Challenge unpublished.** Use the
+**Status** filter's **Unpublished** option to find it.
+
+Existing Learner attempts, grades, feedback, eligible hints and moderation
+history remain accessible through **Review history**. TAs still see the pinned
+submissions, private answer evidence and grades, and can moderate them. Their
+retained progress evidence is unchanged; unpublished challenges no longer
+qualify as recommended practice.
+
+### Archive a challenge
+
+Archiving permanently retires a **Draft**, **Published** or **Unpublished**
+challenge. It cannot be edited, have proposals generated or decisions changed,
+be published or be restored. Archiving a published challenge also removes it
+from the Learner catalogue and blocks first attempts and retries.
+
+1. Open **My challenges**, then **View challenge** on a nonarchived challenge.
+2. Select **Archive**.
+3. In **Archive challenge**, read **Archive this challenge? This can't be
+   undone. Editing, publishing and new attempts will be unavailable.**
+4. Select **Archive** to confirm, or **Cancel** to leave it as it is.
+
+While saving, you see **Archiving…**. On success, **My challenges** opens with
+**Challenge archived.** Use **Status → Archived** to find it. Its detail shows
+**Archived challenges can't be edited.** and offers no **Edit draft**,
+**Unpublish** or **Archive** action. There is no restore or delete action.
+
+As with unpublishing, Learners retain existing results and TAs retain submission
+inspection, answer evidence, moderation and progress history. Archived
+challenges are excluded from recommendations. Stored revisions are retained.
+
+For either lifecycle action:
+
+| Message | What to do |
+| --- | --- |
+| **This challenge changed. Reload it before continuing.** | Select **Reload challenge** before starting another action. |
+| **We couldn't unpublish the challenge. Try again.** or **We couldn't archive the challenge. Try again.** | Start the action and confirm again. |
+| **We couldn't confirm the change. Refresh the challenge before continuing.** | Select **Refresh challenge** to check the same request safely; both actions stay disabled until resolved. |
 
 ## TA guide
 
@@ -440,6 +591,18 @@ The **Submission** page shows:
 
 Select **Refresh submission** to load the latest state.
 
+Filters combine and the URL preserves applied filters and page cursors for
+reload and Back/Forward. **Next page** and **First page** retain filters.
+**Enter a valid ID.** means the filter needs a full UUID. An invalid page offers
+**First page** or **Clear filters**; a failed read offers **Try again**.
+Pending, running and failed grades have no score; a completed zero shows
+**0 / 100**. **Refresh submission** only rereads stored evidence. Submissions
+stay readable and moderatable after edits, republication, unpublication or
+archive. A missing record shows **Submission not found.**
+
+**Back to submissions** is always available. Entries opened from flags or a
+learner page also offer **Back to flagged submissions** or **Back to learner**.
+
 ### Work through flagged submissions
 
 1. Select **Flagged submissions** in the top bar. It shows open flags by
@@ -452,6 +615,11 @@ The submission opens with that flag marked **Selected flag**. Select **Back to
 flagged submissions** to return. See
 [Grading and moderation flags](#grading-and-moderation-flags) for what each
 reason means.
+
+Applied filters and page cursors stay in the URL. An empty filtered queue
+offers **Show open flags**; an invalid queue page offers **First page** and a
+failed read offers **Try again**. A missing selected flag shows
+**Flag not found.** with **Back to flagged submissions**.
 
 ### Override a grade
 
@@ -482,6 +650,14 @@ Resolving a flag doesn't change the grade. To change the grade, also
 [override it](#override-a-grade). To correct a resolved flag, select **Add
 correction**.
 
+The histories show the TA's ID, UTC recorded time and full reason. Saving
+disables moderation forms and **Refresh submission**; validation focuses the
+first invalid field. On a temporary failure, **Try again** safely retries the
+same unchanged action, even after **Refresh submission**. A state/conflict
+rejection requires refreshing and starting a new action. Signing in or account
+recovery never automatically resubmits a decision. Overrides leave matching,
+per-flaw credits, hints, progress evidence and flags unchanged and do not rerun AI.
+
 ### Review learner performance
 
 1. Select **Learners** in the top bar.
@@ -501,6 +677,22 @@ correction**.
 Select **View submissions** to see this learner's submissions. Select
 **Refresh progress and recommendations** to reload those sections.
 
+Category rates show two decimal places: **Not observed** means no eligible
+flaws, while **0.00%** means flaws were observed but none identified. All five
+categories stay visible with no evidence. Progress includes completed first
+attempts on unpublished and archived challenges.
+
+Recommendations target up to two weakest observed categories and show up to
+five eligible challenges. Any earlier attempt, including a pending or failed
+one or one on an older revision, excludes a challenge. Cards do not assign
+practice or start a review. No observations or candidates shows
+**No eligible recommendations right now.**
+
+Progress and recommendations load independently and each has **Try again**.
+Failed refreshes retain good content labelled **Previously loaded progress** or
+**Previously loaded recommendations**. **Back to learners** returns to the
+directory, where **Next page** and **First page** preserve the requested page.
+
 ### Generate a performance summary
 
 1. On **Learner performance**, select **Generate summary**. If a summary
@@ -517,6 +709,15 @@ a new summary to include current evidence.**
 
 Generating a summary uses AI and counts toward your
 [usage limits](#usage-limits). See [Performance summaries](#performance-summaries).
+
+Opening or refreshing learner performance never generates a summary. Use
+**Refresh learner performance** to reread the stored summary and freshness.
+An existing summary stays visible as **Previous summary** during generation
+and survives a failed generation. If the generation outcome is uncertain,
+refresh to check for a saved result before generating again. A read failure
+can retain **Previously loaded summary; freshness unavailable.** Supporting
+links open retained submissions with **Back to learner**. Empty summary sections
+are valid. Summaries change no grade, flag, progress or recommendation.
 
 ## AI features
 
@@ -692,9 +893,9 @@ Daily limits reset at 00:00 UTC, which is 08:00 in Singapore (SGT).
 - **No running code:** LGTM never runs code or tests. Reviews are read-only.
 - **One file per challenge:** Authors paste a single file of up to 20,000
   bytes, in Python, Java, JavaScript or TypeScript only.
-- **Challenge status filter:** the Author **Status** filter also lists
-  **Unpublished** and **Archived**. No challenge can reach those statuses yet,
-  so those filters show **No matching challenges.**
+- **Archiving is permanent:** archived challenges cannot be edited, published
+  or restored. Existing submissions remain available. See
+  [Archive a challenge](#archive-a-challenge).
 - **TA filters use IDs:** the **Challenge ID** filter needs a challenge's ID,
   which TA screens don't show. Use **Learner ID** or the challenge title on
   the cards instead.
@@ -722,7 +923,7 @@ For AI failures, see the tables under [AI features](#ai-features).
 | **Local sign-out completed, but the service could not confirm sign-out. Sign in again to continue.** | You are signed out in this browser. Sign in to continue. |
 | **We couldn't confirm sign-out. Try again.** | Select **Sign out** again. |
 | **This page isn't available for your role.** | Select **Go to my workspace**. See [Access and account screens](#access-and-account-screens). |
-| **This item isn't available to your account.** | The item belongs to someone else. Select **Go to my workspace**. |
+| **This item isn't available to your account.** | The item belongs to someone else, or the challenge is unpublished or archived. Select **Go to my workspace**. |
 | **We couldn't load challenges. Try again.** | Select **Try again**. |
 | **These filters or this page aren't valid.** | Select **Clear filters**. |
 | **We couldn't find this challenge.** | Select **Back to challenges** and pick another. |

@@ -6,79 +6,58 @@ nav_order: 3
 
 # LGTM Developer Guide
 
-## Git workflow
+This guide explains the implemented application and the repository workflow.
+For screen instructions, use the [User Guide](UserGuide.md).
 
-We use the forking workflow. The team repository,
-[CS3227-2610-MP4-LGTM/CS3227-2610-MP4](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4),
-is `upstream`; each member works in their own fork, which is `origin`.
-Nobody pushes to `upstream` directly; all changes arrive through PRs.
+## Contents
 
-One-time setup, after forking on GitHub:
+- [Acknowledgements](#acknowledgements)
+- [Setting up](#setting-up)
+- [Development workflow](#development-workflow)
+- [Architecture](#architecture)
+- [Shared UI conventions](#shared-ui-conventions)
+- [Data model](#data-model)
+- [Account features](#account-features)
+- [Learner features](#learner-features)
+- [Author features](#author-features)
+- [TA features](#ta-features)
+- [Authentication and authorization](#authentication-and-authorization)
+- [AI features and the LLM module](#ai-features-and-the-llm-module)
+- [Security](#security)
+- [How to test](#how-to-test)
+- [Deployment and environments](#deployment-and-environments)
+- [Design considerations](#design-considerations)
+- [Requirements appendix](#requirements-appendix)
+- [Known limitations](#known-limitations)
 
-```bash
-git clone git@github.com:<your-username>/CS3227-2610-MP4.git
-cd CS3227-2610-MP4
-git remote add upstream https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4.git
-git remote set-url --push upstream no_push   # guard against pushing upstream
-```
+## Acknowledgements
 
-For each change:
+### AI assistance
 
-```bash
-git fetch upstream
-git switch -c <type>/<issue>-<slug> upstream/master
-# ...work, commit with Conventional Commits...
-git push -u origin <type>/<issue>-<slug>
-gh pr create --repo CS3227-2610-MP4-LGTM/CS3227-2610-MP4 --base master
-```
+Codex and Claude Code assist with planning, acceptance tests, implementation,
+independent review and documentation through the checked
+[development workflow](#development-workflow). Humans approve gates, review
+outputs, commit changes and open PRs.
 
-To keep your fork's `master` current:
+### Third-party software and services
 
-```bash
-git switch master
-git pull --ff-only upstream master
-git push origin master
-```
+LGTM uses Next.js 16 (App Router and Turbopack), React 19, TypeScript 5,
+Tailwind CSS 4 and Zod 4. Supabase supplies Postgres, Auth and the local service
+stack (including Storage); SoCLaaS supplies hosted AI inference. Bun runs
+repository commands, Vitest runs unit/integration tests and Playwright runs
+browser journeys. Docker hosts local Supabase. GitHub provides source hosting,
+Actions and Pages; Vercel hosts the application. The product site uses Just the
+Docs and Jekyll plugins described under [deployment](#product-site-github-pages).
+Pinned package versions and scripts are recorded in [package.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/package.json).
 
-## Database (Supabase)
+### Scaffold
 
-LGTM stores its data in Supabase (Postgres, Auth and Storage). Development
-and tests run against a local Supabase stack in Docker; nobody connects to a
-hosted project from their machine.
+The application was scaffolded with `create-next-app`.
 
-### Hosted projects
+## Setting up
 
-The `CS3227-2610-MP4-LGTM` organisation has two projects, both in Singapore
-(Southeast Asia):
-
-| Project | Purpose |
-| --- | --- |
-| `lgtm-dev` | Shared development and preview deployments |
-| `lgtm-prod` | Production |
-
-Both have the Data API enabled, **do not** expose new tables automatically,
-and enable row level security (RLS) on new tables automatically. The local
-stack mirrors these settings (`auto_expose_new_tables = false` in
-`supabase/config.toml`, plus the `enable_rls_on_new_tables` migration), so a
-migration that works locally behaves the same way on hosted projects.
-
-Humans and deployment workflows apply migrations to hosted projects. Agents use
-local Supabase only. The denied-command lists live in
-[Codex guardrails](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/rules/guardrails.rules) and
-[Claude settings](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.claude/settings.json), covering commands such as `link`,
-`db pull`, `migration repair` and `inspect` through plain, bunx and npx invocations.
-
-CLI 3.0.0 defaults `db reset`, `db lint` and `gen types --lang typescript` to
-local targets. These forms, local stack commands, `migration new`,
-`functions new/serve`, and all repository `db:*` scripts remain available,
-including `bun run db:reset` and `bun run db:types`.
-
-Codex matches literal prefixes: for reset, lint and type generation, hosted-target
-flags are blocked only as separate tokens immediately after the subcommand.
-Attached values (`gen types --remote=project`), flags after other arguments
-(`gen types --lang typescript --remote`), and global options before blocked
-prefixes remain gaps. Claude also matches trailing and attached hosted flags.
-These limits never authorize hosted access.
+Use Bun 1.4.3 and Node 24, as recorded in [package.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/package.json) and [.node-version](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.node-version).
+Install the pinned dependencies with `bun install --frozen-lockfile`.
 
 ### Prerequisites
 
@@ -123,6 +102,308 @@ Never prefix `SUPABASE_SECRET_KEY` with `NEXT_PUBLIC_` and never commit
 | `bun run db:reset` | Recreates the local database from `supabase/migrations/` and `supabase/seed.sql` |
 | `bun run db:types` | Regenerates `src/lib/supabase/database.types.ts` for `public`, `graphql_public` and `private` from the local database |
 
+Run `bun run dev` after configuring the local stack, then open
+<http://localhost:3000>. Local development and CI use the fake provider; configure
+`APP_ENV=local` and `AI_PROVIDER=fake` locally. See
+[Provider configuration](#provider-configuration) for hosted environments.
+
+## Development workflow
+
+### Git workflow
+
+We use the forking workflow. The team repository,
+[CS3227-2610-MP4-LGTM/CS3227-2610-MP4](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4),
+is `upstream`; each member works in their own fork, which is `origin`.
+Nobody pushes to `upstream` directly; all changes arrive through PRs.
+
+One-time setup, after forking on GitHub:
+
+```bash
+git clone git@github.com:<your-username>/CS3227-2610-MP4.git
+cd CS3227-2610-MP4
+git remote add upstream https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4.git
+git remote set-url --push upstream no_push   # guard against pushing upstream
+```
+
+For each change:
+
+```bash
+git fetch upstream
+git switch -c <type>/<issue>-<slug> upstream/master
+# ...work, commit with Conventional Commits...
+git push -u origin <type>/<issue>-<slug>
+gh pr create --repo CS3227-2610-MP4-LGTM/CS3227-2610-MP4 --base master
+```
+
+To keep your fork's `master` current:
+
+```bash
+git switch master
+git pull --ff-only upstream master
+git push origin master
+```
+
+### Agent loop, gates and independent review
+
+Start feature work in a human-led main session with
+[sdd-orchestrate](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.agents/skills/sdd-orchestrate/SKILL.md).
+The orchestrator routes work, checks gates itself and maintains the
+feature handoff. Specialists return evidence, never write their own handoffs
+or spawn more agents. Humans own commits and PRs.
+After each stage, the orchestrator records the agent's rollout token total
+in the handoff (or `unavailable`), and at close-out records its own session total.
+Use [`--per-turn`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/rollout-summary.ts#L6) for per-response token records.
+
+Low handles copy, styling, docs and comments without behaviour changes in the
+main session, with targeted checks and no handoff. Standard handles behaviour
+on existing foundations: main-session tests and implementation, independent
+reviewer, then main-session docs. High uses every specialist for auth/session/
+role work, database enforcement, privileged access, AI/SEC work or CI/deploy
+changes. The planner proposes routes; actual changes can escalate them. Only
+a human can downgrade with a recorded reason.
+
+The loop is Ready → Plan → Tests → Implement → Review → Docs → Close-out.
+G1 approves and commits the plan in the feature's own PR; G2 reads and commits
+failing acceptance tests before code; G3 resolves blocked work or decisions;
+G4 runs `bun run verify` and `bun run test:e2e`, commits, logs and opens the PR.
+Existing tasks skip planning. Agent checks use targeted tests, lint and
+typecheck because full verify is unreliable inside agent sessions. Tests use
+local Supabase and the fake LLM provider. The orchestration skill owns the
+gate messages, fix-round limit and human commit sequence.
+
+This uses **orchestrator–subagent** coordination for the loop and
+**generator–verifier** coordination between implementer and reviewer. On high,
+correctness and security reviewers run in parallel and write nothing. Each
+gets fresh context without the parent conversation or handoff, so findings
+come from code and tests. Before and after reviews, the orchestrator compares
+tree hashes: a sandbox label or a report cannot establish that no files
+changed. A mismatch invalidates the review and stops for a human.
+
+Every task's Reads names exact spec headings and story files. Each specialist
+skill adds its fixed reading set; agents extract those sections rather than
+loading complete specs. Spawn prompts place fixed instructions before task
+values to share a cacheable prefix. Sessions without spawning follow the same
+stages themselves and request fresh review sessions at the review gate.
+
+All roles use `gpt-6.1-sol` for consistent model behaviour. Effort follows the
+work: planner high for decomposition and capacity decisions; test-writer,
+implementer and reviewer medium for bounded code work; security-reviewer high
+for access and adversarial paths; docs low for checked guide updates. Low-route
+main-session work uses low effort.
+
+Reviewer files request a read-only sandbox, but the workflow does not rely
+on it. The orchestrator's before/after tree comparison is the check.
+
+### Session logs
+
+At close-out, humans record the session under `logs/<github-user>/` using the
+repository's [session-log skill](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.agents/skills/session-log/SKILL.md).
+Use a numbered `NNN-session-name.md` file with the goal, scope, session metadata,
+key prompts, decisions and changed files. Obtain Codex metadata through
+`bun workflow/scripts/rollout-summary.ts --id <thread-id>` immediately before
+writing; copy available totals verbatim and mark unknown values rather than
+estimating. The CLI safely projects approved metadata; do not inspect raw
+rollouts, which may contain prompts or secrets.
+
+### Workflow file reference
+
+The following inventory describes every current file under `workflow/`.
+Handoffs are feature coordination records, not specifications or product status
+pages. Their retained decisions and checks explain the work they accompanied.
+
+#### Planning and templates
+
+| File | Purpose |
+| --- | --- |
+| [PLAN.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/PLAN.md) | Task format, capacity, role groups, approved tasks and their todo/in-progress/blocked/done status. |
+| [templates/handoff.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/templates/handoff.md) | Template for a standard/high feature route, stages, evidence, decisions, findings and next action. |
+| [templates/story-spec.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/templates/story-spec.md) | Story template for dependencies, acceptance criteria, use cases, edge cases and UI/AI notes. |
+
+#### Specifications
+
+| File | Purpose |
+| --- | --- |
+| [specs/AI-SECURITY-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md) | SEC requirements, AI threats, bounded inference and protected-data controls. |
+| [specs/INTEGRATION-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md) | Shared domain model, API/LLM contracts, grading rules, fixtures and integration verification. |
+| [specs/PRODUCT-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/PRODUCT-SPEC.md) | Product decisions, roles, story index and UI vocabulary. |
+| [specs/README.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/README.md) | Specification boundaries, identifiers and focused reading conventions. |
+| [specs/TECHNICAL-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md) | SYS requirements for architecture, identity, access and environments. |
+| [specs/stories/ACC-01-sign-up-with-a-role.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/ACC-01-sign-up-with-a-role.md) | ACC-01 — Sign up with a role; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/ACC-02-sign-in-and-sign-out.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/ACC-02-sign-in-and-sign-out.md) | ACC-02 — Sign in and sign out; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/ACC-03-role-based-landing-and-navigation.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md) | ACC-03 — Role-based landing and navigation; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/AUT-01-create-a-draft.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/AUT-01-create-a-draft.md) | AUT-01 — Create a draft; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/AUT-02-configure-flaws.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/AUT-02-configure-flaws.md) | AUT-02 — Configure flaws; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/AUT-03-generate-flaw-proposals.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/AUT-03-generate-flaw-proposals.md) | AUT-03 — Generate flaw proposals; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/AUT-04-preview-and-decide-flaws.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/AUT-04-preview-and-decide-flaws.md) | AUT-04 — Preview and decide flaws; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/AUT-05-publish-a-challenge.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/AUT-05-publish-a-challenge.md) | AUT-05 — Publish a challenge; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/AUT-06-maintain-challenges.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/AUT-06-maintain-challenges.md) | AUT-06 — Maintain challenges; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-01-browse-challenges.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-01-browse-challenges.md) | LRN-01 — Browse challenges; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-02-view-a-challenge-as-a-pr.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-02-view-a-challenge-as-a-pr.md) | LRN-02 — View a challenge as a PR; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-03-manage-line-comments.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-03-manage-line-comments.md) | LRN-03 — Manage line comments; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-04-submit-a-final-review.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-04-submit-a-final-review.md) | LRN-04 — Submit a final review; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-05-grade-a-submitted-review.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-05-grade-a-submitted-review.md) | LRN-05 — Grade a submitted review; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-06-feedback-hints-and-retry.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-06-feedback-hints-and-retry.md) | LRN-06 — Feedback, hints and retry; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-07-report-an-unmatched-comment.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-07-report-an-unmatched-comment.md) | LRN-07 — Report an unmatched comment; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/LRN-08-review-history.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/LRN-08-review-history.md) | LRN-08 — Review history; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/TA-01-inspect-submissions.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/TA-01-inspect-submissions.md) | TA-01 — Inspect submissions; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/TA-02-resolve-flagged-submissions.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/TA-02-resolve-flagged-submissions.md) | TA-02 — Resolve flagged submissions; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/TA-03-override-a-grade.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/TA-03-override-a-grade.md) | TA-03 — Override a grade; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/TA-04-learner-performance-summary.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/TA-04-learner-performance-summary.md) | TA-04 — Learner performance summary; story requirements, criteria, use cases and edge cases. |
+| [specs/stories/TA-05-category-progress-and-recommendations.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/TA-05-category-progress-and-recommendations.md) | TA-05 — Category progress and recommendations; story requirements, criteria, use cases and edge cases. |
+
+#### Feature handoffs
+
+| File | Purpose |
+| --- | --- |
+| [handoffs/12-auth-core.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/12-auth-core.md) | Coordination evidence and decisions for 12 — auth-core. |
+| [handoffs/37-domain-schema.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/37-domain-schema.md) | Coordination evidence and decisions for 37 — domain-schema. |
+| [handoffs/38-llm-boundary.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/38-llm-boundary.md) | Coordination evidence and decisions for 38 — llm-boundary. |
+| [handoffs/39-account-pages.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/39-account-pages.md) | Coordination evidence and decisions for 39 — account-pages. |
+| [handoffs/49-learner-browse.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/49-learner-browse.md) | Coordination evidence and decisions for 49 — learner-browse. |
+| [handoffs/50-learner-review-submit.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/50-learner-review-submit.md) | Coordination evidence and decisions for 50 — learner-review-submit. |
+| [handoffs/51-learner-grading.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/51-learner-grading.md) | Coordination evidence and decisions for 51 — Learner grading. |
+| [handoffs/52-learner-feedback-retry.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/52-learner-feedback-retry.md) | Coordination evidence and decisions for 52 — Learner feedback, hints and Retry challenge. |
+| [handoffs/52-learner-history.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/52-learner-history.md) | Coordination evidence and decisions for 52 part 1 — Learner review history. |
+| [handoffs/52-learner-reports.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/52-learner-reports.md) | Coordination evidence and decisions for 52 part 2 — Learner reports. |
+| [handoffs/53-ta-inspection.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/53-ta-inspection.md) | Coordination evidence and decisions for 53 — ta-inspection. |
+| [handoffs/54-ta-moderation.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/54-ta-moderation.md) | Coordination evidence and decisions for 54 — ta-moderation. |
+| [handoffs/55-learner-progress.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/55-learner-progress.md) | Coordination evidence and decisions for 55 — learner-progress. |
+| [handoffs/56-learner-performance-summaries.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/56-learner-performance-summaries.md) | Coordination evidence and decisions for 56 — learner-performance-summaries. |
+| [handoffs/66-live-soc-provider.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/66-live-soc-provider.md) | Coordination evidence and decisions for 66 — Live SoC provider. |
+| [handoffs/77-constrained-llm-output.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/77-constrained-llm-output.md) | Coordination evidence and decisions for 77 — Constrained live SoC output. |
+| [handoffs/81-author-drafts.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/81-author-drafts.md) | Coordination evidence and decisions for 81 — author-drafts. |
+| [handoffs/82-author-proposals.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/82-author-proposals.md) | Coordination evidence and decisions for 82 — author-proposals. |
+| [handoffs/83-author-publication.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/83-author-publication.md) | Coordination evidence and decisions for 83 — author-publication. |
+
+#### Scripts and fixtures
+
+| File | Purpose |
+| --- | --- |
+| [scripts/fixtures/soc-smoke/assess-review-e6.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/fixtures/soc-smoke/assess-review-e6.json) | 21 labelled E6 single-match assessment cases for expected explanation/fix credit. |
+| [scripts/fixtures/soc-smoke/assess-review-multi-match.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/fixtures/soc-smoke/assess-review-multi-match.json) | Labelled multi-match credit cases keyed by flaw/comment pair. |
+| [scripts/fixtures/soc-smoke/assess-review.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/fixtures/soc-smoke/assess-review.json) | Matched-comment assessment smoke inputs. |
+| [scripts/fixtures/soc-smoke/generate-hints.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/fixtures/soc-smoke/generate-hints.json) | Publication-hint smoke inputs and retained-flaw context. |
+| [scripts/fixtures/soc-smoke/inject-flaws-stress.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/fixtures/soc-smoke/inject-flaws-stress.json) | Separate five-flaw injection stress case. |
+| [scripts/fixtures/soc-smoke/inject-flaws.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/fixtures/soc-smoke/inject-flaws.json) | Flaw-injection smoke inputs. |
+| [scripts/fixtures/soc-smoke/summarize-learner.json](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/fixtures/soc-smoke/summarize-learner.json) | Learner-summary smoke inputs. |
+| [scripts/rollout-files.ts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/rollout-files.ts) | Safe rollout discovery and selection scoped to repository/session; reads only matching JSONL files without following symlinks. |
+| [scripts/rollout-parser.ts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/rollout-parser.ts) | Pure projection of rollout records into approved session/token and per-response fields; omits raw records and parse errors. |
+| [scripts/rollout-summary.ts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/rollout-summary.ts) | Metadata CLI: select by ID/path or list sessions; optional per-turn JSON/CSV and token-count fallback. |
+| [scripts/soc-smoke.ts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/soc-smoke.ts) | Explicitly authorized manual live-provider smoke runner; validation and labelled credit comparisons produce sanitized CSV. |
+
+Agent definitions and limits live in [.codex/config.toml](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/config.toml) and [.codex/agents/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/agents/).
+Canonical procedures live in [.agents/skills/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.agents/skills/);
+[.claude/skills/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.claude/skills/) contains matching Claude Code pointer stubs.
+
+## Architecture
+
+### Layers and request flow
+
+| Layer | Responsibility |
+| --- | --- |
+| `src/app/` | App Router pages and `/api/v1` route handlers; protected page boundaries defer request-time account reads. |
+| `src/components/` | Account and role screens, client state, confirmations and shared code rendering. |
+| `src/lib/` | Client-safe types, vocabularies, Zod schemas, deterministic grading/progress helpers and Supabase browser client/types. |
+| `src/server/` | Server-only auth, role services, validated HTTP adapters and user/admin Supabase clients. |
+| `src/server/llm/` | Shared authorization, snapshot capture, provider dispatch, output validation and usage accounting. |
+| `supabase/` | Local configuration, migrations and seed data; Postgres constraints, grants, RLS and narrow RPCs enforce persistence. |
+
+A page resolves the verified account and stored role, then loads authorized
+role data. A mutation passes from the component through the HTTP adapter's Zod
+validation to a server service and a constrained database RPC. The RPC checks
+identity, ownership and state under its locks, and commits atomically. The
+client treats an unconfirmed reply as uncertain and recovers using the same
+mutation key. AI services additionally capture persisted evidence through the
+[shared LLM boundary](#ai-features-and-the-llm-module); no database transaction
+spans a provider request.
+
+All HTTP fields, bounds, response envelopes, status codes, pagination and
+concurrency rules have one authoritative home in [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+Feature sections below link its role surfaces and explain implementation
+choices rather than duplicating those contracts.
+
+### Page routes
+
+These page paths compose the role workspaces; HTTP contracts are separate.
+Exact labels and navigation steps live in the [User Guide](UserGuide.md#navigating-lgtm).
+
+| Role | Page routes |
+| --- | --- |
+| Account | `/sign-up`, `/sign-in`; `/` redirects a usable account to its role landing. |
+| Learner | `/learner/challenges`, `/learner/challenges/:id`; `/learner/history`, `/learner/history/:submissionId`, `/learner/history/:submissionId/retry`. |
+| Author | `/author/challenges`, `/author/challenges/new`, `/author/challenges/:id`, `/author/challenges/:id/edit`, `/author/challenges/:id/configuration`, `/author/challenges/:id/proposals`, `/author/challenges/:id/publication`, `/author/challenges/:id/revisions/:revisionId`. |
+| TA | `/ta/submissions`, `/ta/submissions/:id`, `/ta/flags`, `/ta/learners`, `/ta/learners/:learnerId`. |
+
+TA submission page context `from=flags` enables a queue return, while
+`from=learner&learnerId=<matching learner UUID>` enables a learner return.
+Context is validated and does not enter the detail API contract.
+
+### Supabase clients
+
+| Import | Use in | Acts as |
+| --- | --- | --- |
+| `@/lib/supabase/client` | Client Components | The signed-in user (RLS applies) |
+| `@/server/supabase/server` | Server Components, Server Functions, Route Handlers | The signed-in user, read from request cookies |
+| `@/server/supabase/admin` | Server code, after authorizing the caller | Service role (bypasses RLS) |
+
+Prefer the user-scoped clients so RLS enforces access. Use the admin client
+only for the named SYS-10.3 operations after their authorization preconditions;
+the application auth flow never uses it.
+
+## Shared UI conventions
+
+Protected screens share [WorkspacePage](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/workspace-page.tsx)
+and [WorkspaceAccessBoundary](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/workspace-access-boundary.tsx).
+Identity/role failures replace protected content and do not automatically replay
+mutations after recovery. Shared navigation and recovery instructions belong in
+[the User Guide](UserGuide.md#navigating-lgtm).
+
+Role lists preserve applied filters and cursors in URLs; Author lists append
+pages. Pagination announces loading and restores heading focus. Forms focus the
+first invalid field, disable conflicting actions while pending and retain safe
+input on failures. Confirmations support keyboard focus and cancellation;
+phone-width journeys check 320 CSS pixels.
+
+[CodeDiffView](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/code-diff.tsx) accepts an already-authorized
+`CodeDiff`, renders source literally and provides a focusable scrolling region
+for long lines. Its optional `gutterControl` and `afterLine` slots support
+Learner comment controls and annotations; callers choose labels and whether to
+show the path. Learner projection contains only flawed source as numbered
+additions to a single language-derived filename; a trailing newline adds no
+extra line. Author publication and TA inspection use the working-to-flawed diff.
+See [Learner projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/projection.ts) and
+[shared source projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/code-projection.ts).
+
+## Data model
+
+Supabase stores LGTM data in Postgres and Auth. The authoritative entities and
+publication lifecycle are in [INTEGRATION-SPEC §2](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#2-domain-model-and-publication-lifecycle).
+Profiles bind accounts to immutable roles. Challenges retain a mutable working
+draft and proposal sets; immutable revisions hold published material.
+Submissions pin revisions, grading runs preserve original assessments, and
+append-only overrides/resolutions preserve moderation history. Private request
+ledgers and usage events support replay and accounting independently of public
+role projections.
+
+### Domain schema
+
+The domain foundation uses explicit grants and RLS. `authenticated` can select from
+role-readable domain tables under policies that use the stored profile role
+and record ownership or moderation scope. `anon` and `service_role` have no
+table access to the new domain records. None of these roles has a write grant
+on them. The private audit-order table has explicit RLS and revokes, and the
+migration revokes default function execution and sequence privileges. See the
+[domain schema migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261107120000_domain_schema.sql).
+
+Learners can read the live revision and revisions pinned by their own
+submissions. Answer keys and cached hint text are separate from those revision
+rows and remain restricted to the owning Author and TAs within their read
+scope. The owning Learner and TAs can read grade results, comment feedback and
+eligible hint references. Flaw matches and grade-to-run provenance stay in
+separate TA-only tables. A database trigger preserves a grading run's
+submission, run number and creation time and prevents any transition out of
+`completed`, including for trusted SQL writers.
+
 ### Changing the schema
 
 1. Create a migration: `bunx supabase migration new <name>`.
@@ -154,140 +435,47 @@ for the approved admin operations in
 bypassing RLS does not supply table privileges. Explicit grants do not
 authorize any additional admin-client use.
 
-### Domain schema
-
-Domain tables use explicit grants and RLS. `authenticated` can select from
-role-readable domain tables under policies that use the stored profile role
-and record ownership or moderation scope. `anon` and `service_role` have no
-table access to the new domain records. None of these roles has a write grant
-on them. The private audit-order table has explicit RLS and revokes, and the
-migration revokes default function execution and sequence privileges. See the
-[domain schema migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261107120000_domain_schema.sql).
-
-Learners can read the live revision and revisions pinned by their own
-submissions. Answer keys and cached hint text are separate from those revision
-rows and remain restricted to the owning Author and TAs within their read
-scope. The owning Learner and TAs can read grade results, comment feedback and
-eligible hint references. Flaw matches and grade-to-run provenance stay in
-separate TA-only tables. A database trigger preserves a grading run's
-submission, run number and creation time and prevents any transition out of
-`completed`, including for trusted SQL writers.
-
-### Clients
-
-| Import | Use in | Acts as |
-| --- | --- | --- |
-| `@/lib/supabase/client` | Client Components | The signed-in user (RLS applies) |
-| `@/server/supabase/server` | Server Components, Server Functions, Route Handlers | The signed-in user, read from request cookies |
-| `@/server/supabase/admin` | Server code, after authorizing the caller | Service role (bypasses RLS) |
-
-Prefer the user-scoped clients so RLS enforces access. Use the admin client
-only for the named SYS-10.3 operations after their authorization preconditions;
-the application auth flow never uses it.
-
-### Auth foundation
-
-The server-only helpers in
-[`src/server/auth/`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/service.ts)
-provide `signUp`, `signIn` and local-scope `signOut`. Sign-up validates a
-request against
-[SYS-05's credential rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle)
-and
-[SYS-06's profile rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-06--profile-provisioning-and-immutable-role).
-A private trigger provisions the profile atomically with the Auth account.
-
-Auth helpers return categories and field-error codes without UI copy or raw
-provider diagnostics. They distinguish authenticated success, confirmed
-creation without a session, rejection, throttling and service unavailability.
-Sign-out clears current-browser auth cookies even when the provider cannot
-confirm local-scope revocation; it reports that failure separately.
-
-[`getAccount` and `readProfile`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/account.ts)
-verify identity with `auth.getUser()` and read the stored `public.profiles`
-role. Failure categories map to HTTP 401, 403 and 503 through `authErrorResponse`.
-
-In later migrations, RLS policies needing the caller's role must read
-`private.profile_roles` (own row only), not `profiles`, to avoid policy
-recursion. This constrained projection is populated by the provisioning trigger
-and bound to the immutable public profile by its `(id, role)` foreign key.
-
-[`src/proxy.ts`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/proxy.ts)
-refreshes session transport and forwards refreshed cookies to server reads,
-preserving SSR cache-prevention headers. Protected operations still authorize
-at their own server boundary.
+## Account features
 
 ### Account pages
 
-Visitors create an account at `/sign-up` or enter an existing account at
-`/sign-in`. A usable signed-in account opening either page or `/` goes to its
-stored role's landing:
-
-| Role | Landing | Navigation |
-| --- | --- | --- |
-| Learner | `/learner/challenges` — “Challenges” | Challenges; Review history |
-| Author | `/author/challenges` — “My challenges” | My challenges; Create challenge |
-| TA | `/ta/submissions` — “Submissions” | Submissions; Flagged submissions; Learners |
-
-Shared navigation shows the account's display name, role and “Sign out”.
-Signed-out protected access opens sign-in. Cross-role access shows
-“Access denied” with “Go to my workspace”.
-Invalid profiles show “Account unavailable”; account-service failures show
-“Service unavailable”. Both recovery screens offer “Try again” and “Sign out”.
+Flow: account creation or sign-in resolves the permanent role workspace;
+sign-out clears the current browser session. See
+[Getting started](UserGuide.md#getting-started) and
+[account recovery](UserGuide.md#access-and-account-screens).
 
 The shared
-[`AccountEntry`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/account-entry.tsx)
-and [`WorkspacePage`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/workspace-page.tsx)
-boundaries recheck verified identity and stored role on each request. Pages put
-session work behind Suspense and `connection()` with Cache Components enabled;
+[AccountEntry](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/account-entry.tsx)
+and [WorkspacePage](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/account/workspace-page.tsx)
+recheck verified identity and stored role on each request. Pages put session
+work behind Suspense and `connection()` with Cache Components enabled;
 protected results use no cache scopes. The
 [auth actions](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/actions.ts)
 invalidate the root layout before redirecting after authentication changes so
 prior account navigation is discarded. Sign-in always uses the role landing.
+See [Authentication and authorization](#authentication-and-authorization) for
+the service and database foundation.
+
+Account pages use server actions backed by validated auth services, rather
+than a separate account REST surface. [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts) defines the protected
+role endpoints' session/error conventions; credential and session requirements
+are in [SYS-05](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle).
+Persistence: [auth-core migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261106151000_auth_core.sql).
+
+Checks: `bun run test tests/unit/auth tests/unit/account`;
+`bun run test:integration tests/integration/auth`;
+`bun run test:e2e tests/e2e/account`.
+See [How to test](#how-to-test) for local services and hosted settings.
+
+## Learner features
 
 ### Learner challenge catalogue and PR view
 
-In **Challenges**, use **Language**, **Difficulty** and **Flaw category** to
-narrow the published catalogue. Each card shows its title, description,
-language, difficulty and flaw categories. Selected filters combine with AND.
-The URL stores the filters and page cursor for reload and browser Back or
-Forward. Changing a filter starts at the first page. **Next page** and
-**First page** keep the filters, and **Clear filters** resets the catalogue.
+Flow: filter the published catalogue, then open a challenge without creating
+an attempt. See [Find a challenge](UserGuide.md#find-a-challenge) and
+[Review a challenge](UserGuide.md#review-a-challenge).
 
-The results region announces “Loading challenges…” and focuses **Results**
-after pagination. “No challenges available.” is the unfiltered empty state.
-“No challenges match these filters.” appears when a filter is active and there
-are no matches. For invalid filters or a stale page, use **Clear filters**.
-For a read failure, **Try again** repeats the current page request.
-
-Choose **View challenge** to open the PR view. The title, **Description**,
-**Language**, **Difficulty** and **Flaw categories** appear above **Source**.
-The focusable source region scrolls independently for long lines and displays
-the published source as numbered additions to a single file.
-**Back to challenges** returns to the catalogue. Opening the view creates no attempt.
-If the signed-in Learner already has a first attempt on the challenge,
-**View first attempt** links to that attempt's history URL even if the attempt
-used an older revision or grading is pending or failed.
-
-“Loading challenge…” covers both the material and first-attempt reads.
-**Try again** repeats both checks on a read failure. A missing challenge shows
-“Challenge not found”. An unpublished or archived challenge shows
-“Access denied” with “This item isn't available to your account.” Account failures
-follow the shared workspace recovery above.
-
-#### Learner read contracts
-
-| Endpoint | Request and success data |
-| --- | --- |
-| `GET /api/v1/challenges` | Optional `language`, `difficulty`, `category`, `cursor` and `limit`. Returns `{ items, nextCursor }` with only live published cards. Default limit 20, with API limits 1–50. |
-| `GET /api/v1/challenges/:id` | UUID path parameter and no query parameters. Returns the live card fields and its `CodeDiff` projection. |
-
-Responses use `{ data }` or `{ error: { code, message } }` with
-`Cache-Control: private, no-store`. Invalid input returns 400. Missing sessions
-return 401. Unusable profiles, wrong roles and existing non-live records
-return 403. An absent challenge returns 404 on detail and an unavailable read
-returns 503. The list sorts by descending publication time and ascending
-challenge ID. Use the returned cursor with the same filters. Its anchor must
-still match the filtered live revision.
+Contracts: [Learner contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface).
 
 The server readers verify the account and stored Learner role for each
 protected read and use the signed-in user's Supabase client. The catalogue and
@@ -301,12 +489,8 @@ See the [server readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4
 and [Learner browse migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108130000_learner_browse.sql).
 
 The open view keeps the loaded revision ID and source together. Fresh reads
-follow the live pointer. The shared renderer takes an authorized `CodeDiff`
-and renders text literally. For Learners, the server projects only the flawed
-source as additions, with one-based line numbers and a language-derived
-filename. A trailing newline adds no extra line.
-See [CodeDiffView](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/components/code-diff.tsx)
-and the [Learner projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/projection.ts).
+follow the live pointer; source projection uses the
+[shared renderer](#shared-ui-conventions).
 
 #### Learner browse checks
 
@@ -322,45 +506,15 @@ and the [Learner projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610
 
 ### Learner first review
 
-On a challenge you have yet to submit, choose **Add comment** on a source line.
-Each line can have multiple comments. Use **Edit** or **Remove** to revise the
-draft, or **Cancel** to close the open editor. Comments are ordered by line,
-then by the order you added them on that line. You can draft up to 50 comments
-with up to 2,000 Unicode code points per comment after trimming. A comment must
-contain text.
+Flow: draft line comments in page memory, confirm submission, then open the
+pinned result and start grading separately. See
+[Review a challenge](UserGuide.md#review-a-challenge),
+[Submit your review](UserGuide.md#submit-your-review) and
+[uncertain actions](UserGuide.md#when-lgtm-cannot-confirm-an-action).
 
-Drafts stay in the current page's memory. With draft comments or unsaved editor
-text, leaving in the app opens **Leave this review?**. Choose **Keep reviewing**
-to stay or **Leave review** to discard the draft and continue. Reloading or
-closing the page uses the browser's warning where supported. Successful
-submission and an expired session that cannot refresh bypass the leave dialog.
-
-Finish or cancel the open comment editor before choosing **Submit review**.
-The **Submit review?** dialog shows the comment count and warns when there are
-no comments. **Keep reviewing** returns to the draft.
-**Confirm submission** submits the loaded revision and locks the draft while the
-request is in progress. A confirmed review opens **Review result** with the
-pinned **Source**, read-only **Submitted comments** and automatic grading.
-
-If the app cannot confirm the outcome, the draft stays locked. **Check
-submission** replays the same request. A temporary failure during that check
-keeps the outcome uncertain so you can check again. After a confirmed rejection,
-the draft stays visible. A changed or unavailable revision requires returning
-to **Challenges**, and an attempt-limit rejection points to **Review history**.
-
-#### Learner submission contract
-
-For the POST contract, see “Learner surface” and “Transport, concurrency and
-errors” in [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
-Comment lines must be in nondecreasing order.
-
-The workspace sends `X-LGTM-Workspace-Account-Id` with its loaded account UUID
-on both submission and status checks. The header is optional on the POST.
-When present, it must be a UUID that matches the verified account or the route
-rejects the request before the database call. This prevents a stale tab from
-submitting its draft under another account's active session. The verified
-session determines the actor. When an `Origin` is supplied, the route checks
-it against the inbound `Host` and request protocol.
+Contracts: [Learner contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface) and [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+Comment ordering follows the submission contract. Workspace account and Origin
+checks are shared with [other protected mutations](#security).
 
 The user-scoped submission function checks the stored Learner role and locks
 the challenge row while checking publication, the live revision and attempt
@@ -368,8 +522,7 @@ eligibility. In one transaction it creates the first attempt, assigns comment
 IDs and zero-based ordinals, and records the outcome in the private submission
 ledger. The ledger keys each request by actor, challenge and idempotency key
 and compares a fingerprint of the validated input. Replays of a recorded request
-return its outcome. Changing the payload under the same key returns
-`409 IDEMPOTENCY_CONFLICT`. A definitive rejection from the publication,
+return its outcome. Changing the payload under the same key conflicts. A definitive rejection from the publication,
 attempt or revision-line checks is recorded without creating a submission.
 A request rejected by HTTP validation before the database call leaves the
 ledger untouched.
@@ -394,31 +547,17 @@ and [Learner submission migration](https://github.com/CS3227-2610-MP4-LGTM/CS322
 
 ### Learner grading
 
-**Review result** shows the challenge, attempt number, submission time, pinned
-code and read-only comments. Opening a pending result starts grading
-automatically. **Grading pending** and **Grading your review…** show progress
-until the grade succeeds or fails. Reopening the page observes a running grade
-or displays the stored **Original assessment** when grading has completed.
+Flow: opening a pending result automatically starts assessment; completed
+results retain the original grade separately from TA overrides. Failed grading
+preserves the submission, and explicit grading retry assesses that same attempt.
+See [Read your result](UserGuide.md#read-your-result) and
+[grading failures](UserGuide.md#review-grading).
 
-**Original assessment** shows the score out of 100, pass mark, pass status,
-component points and matched and missed flaw counts. After grading, the
-**Submitted comments** section becomes **Earned credit**, where each comment
-is **Matched**, **Unmatched** or **Duplicate**.
-Matched comments show **Explanation credit** and **Fix credit**. Unmatched and
-duplicate comments show **No credit** and dashes for both credits.
-
-A failed grade leaves the review saved and gives the reason. **Retry grading**
-reruns assessment of the same submission after a retryable failure. If the
-review exceeds the AI input limit, the page shows the size-limit message and
-keeps the submitted evidence available. Choose **Try again** if the result
-could not load, or **Check status** if the page could not confirm the grading
-state.
-
-[**Retry challenge**](#learner-feedback-hints-and-retry) starts a second review
-attempt after a completed first assessment.
-
-For request and response contracts, see “Learner surface” and “Transport,
-concurrency and errors” in [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+Contracts: [Learner contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface). The service matches against the pinned
+revision, requests credit assessment through the
+[LLM module](#ai-features-and-the-llm-module), then computes and stores the
+original score. Empty match sets require no model dispatch or quota.
+Persistence: [grading migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261110120000_learner_grading.sql).
 
 Run the grading unit checks with `bun run test tests/unit/learner`. With
 local Supabase running, use `bun run test:integration tests/integration/domain/learner-grading.test.ts tests/integration/llm/learner-grading tests/integration/ta/progress/learner-grading.test.ts`
@@ -428,70 +567,25 @@ with the fake provider.
 
 ### Learner feedback, hints and retry
 
-After the original assessment completes, **Earned credit** shows **Feedback**
-as plain text alongside the credits for each matched comment. **Missed
-criteria** lists matched comments that received less than full credit for
-**Explanation**, **Actionable fix** or both. It also shows missed flaw counts
-by category in the same order as the catalogue's **Flaw category** choices.
-The counts keep the flaws' locations and answers private. When neither list
-has entries, the section shows “No missed criteria in this assessment.”
+Flow: read per-comment feedback and missed criteria, reveal cached hints, then
+retry once after a completed first assessment while the challenge remains
+published. See [Use hints](UserGuide.md#use-hints) and
+[Retry a challenge](UserGuide.md#retry-a-challenge).
 
-Choose **Show hint** under a category to reveal its next eligible hint.
-**Loading hint…** pauses that control while earlier hints stay visible.
-After the last hint in the category, the control gives way to **All hints
-shown**. With no missed flaws, the result shows “No hints needed for missed
-flaws.” Hints start collapsed each time you reopen the result. Each reveal
-is quota-free and reads approved cached text on demand.
-Eligible hints remain available on completed results after unpublication or
-archiving. A second attempt uses its own original assessment's eligible hints.
+Contracts: [Learner contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface). Hints are plain text fetched independently
+of the result, quota-free and collapsed on reopening. Eligibility follows the
+original assessment even if a TA override exists. Existing completed results
+retain eligible hints after unpublication/archive; attempt two uses its own
+original assessment for hint eligibility.
 
-“We couldn't load this hint. Try again.” offers **Try again** for the same
-hint. “This hint isn't available for this review.” offers **Refresh result**
-to recheck eligibility. Account failures use the shared workspace recovery.
+The retry editor starts with independent copies of attempt one's comments and
+its pinned source, even after republication. It rechecks eligibility on entry,
+including browser-history restoration, and again on submission. Eligibility
+checks prioritize incomplete original assessment, used retry, then nonpublished
+challenge. Failed entry reads preserve the URL; an ineligible entry exposes the
+reason. Reloading/discarding starts from fresh comment copies.
 
-#### Retry a challenge
-
-Under **Next actions**, **Retry challenge** is available once the first
-attempt's original assessment completes, provided the challenge is still
-published and you have no second attempt. A passing score qualifies.
-Eligibility requires a completed original assessment even when a TA override
-exists. The first result checks these reasons in order.
-
-1. “Retry is available after your first assessment completes.”
-2. “You have used your retry.”
-3. “Retry is unavailable while this challenge is not published.”
-
-If the result can't check eligibility, use **Check retry availability**.
-**Browse challenges** remains available in the result navigation.
-
-The link opens `/learner/history/:submissionId/retry` with the first attempt's
-ID. **Loading retry…** appears while the page checks access and eligibility,
-including when browser history restores the page. An eligible entry opens
-**Retry review** with the challenge title and **Attempt 2**. The draft uses
-the first attempt's pinned code even after a newer revision is published.
-It starts with independent, editable copies of the original comments in
-their submitted order. Reloading or returning after discarding edits starts
-from fresh copies.
-
-The retry uses the [same draft and submission controls](#learner-first-review),
-including **Leave this review?** when leaving with copied comments or draft
-work, **Confirm submission** to send the review and **Check submission** if
-the outcome is uncertain. Successful submission opens **Review result** for
-attempt two. If eligibility changes after the editor opens, submission
-rechecks it and keeps the draft visible on rejection.
-
-A failed entry read shows **Retry unavailable** and “We couldn't load your
-retry. Try again.” Use **Try again** at the same URL. An owned but ineligible
-entry shows **Retry unavailable**, the reason and **Back to result**. Opening
-the retry URL for attempt two shows “A second attempt cannot be retried.”
-A missing attempt shows **Review not found**. Access failures use the shared
-workspace recovery.
-
-#### Feedback and retry contracts
-
-`GET /api/v1/submissions/:id/hints/:hintId` follows the Learner surface in
-[INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface)
-and is sent with `Cache-Control: private, no-store`. The authenticated-only
+The authenticated-only
 `read_learner_submission_hint` database function checks the stored Learner
 role, submission ownership, pinned revision and the exact completed original
 grade's eligible hint for a missed flaw. Hint text is fetched separately from
@@ -535,55 +629,24 @@ bun run test:e2e tests/e2e/learner/feedback-and-retry-challenge.spec.ts tests/e2
 
 ### Learner review history
 
-Open **Review history** at `/learner/history` to revisit your own submissions.
-Each attempt appears separately with **Challenge**, **Attempt**, **Submitted**
-(in UTC), **Grading status**, **Effective score** and **Open flags**. The title
-and **View result** open that attempt's result. Completed attempts show their
-effective score out of 100; **Pending**, **Running** and **Failed** attempts
-show **Not available**. An empty list shows “No reviews yet.” and keeps catalogue
-navigation available.
+Flow: revisit each own attempt and its retained result, current grade and
+moderation history. See [Check your review history](UserGuide.md#check-your-review-history).
 
-**Next page** puts the cursor in the URL; **First page** removes it. Back and
-reload restore the requested page. Reads announce **Loading review history…**
-and disable pagination. “We couldn't load review history. Try again.” offers
-**Try again** for the same URL. “This history page isn't valid.” offers
-**First page** back to `/learner/history`. Pagination focuses the history heading;
-opening a result focuses **Review result**.
+Contracts: [Learner contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface). New publication, unpublication and archive
+preserve the submitted title, pinned source, comments, original assessment,
+permitted hints and moderation records. List reads start no grading and write
+no grades or usage. Original assessment and effective grade remain separate;
+resolutions alone never change a grade.
 
-On a completed result, **Current grade** shows the effective score and pass
-status, labelled **Original AI assessment** or **TA override**. **Original
-assessment**, its component credits, feedback, hints and retry eligibility remain
-separate. Noncompleted results show “Current grade not available.”
-
-**Override history** and each flag's **Resolution history** retain every stored
-entry and correction in server audit order, oldest first, including tied times.
-Entries show **TA action**, UTC recorded time and the full plain-text reason;
-Learner screens omit actor identities. **Current override** and **Latest
-resolution** identify the latest entries. **Moderation flags** keeps both open
-and resolved flags visible. With no entries, the page says **No TA overrides.**,
-**No moderation flags.** or **Awaiting TA review.**, as appropriate. Resolving a
-flag does not itself change the grade. These sections are read-only.
-
-Newer publication, unpublication and archiving preserve own history entries
-and result links, including the submitted title, pinned Learner-visible code,
-comments, original assessment, permitted hints and moderation. Access remains
-scoped to the signed-in Learner; retry availability follows the existing
-[challenge retry rules](#retry-a-challenge).
-
-#### History read contracts
-
-`GET /api/v1/submissions` returns `Page<SubmissionCard>` with private, no-store
-responses. It accepts optional `limit` (default 20, range 1–50), `cursor` (at most
-512 characters) and `challengeId`; unknown, duplicate, malformed and
-filter-mismatched query values are rejected. Ordering is submission time
-descending, then submission ID ascending. Cursors retain the filter and order.
-See the [Learner surface contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface).
+Override/resolution entries use server audit order, oldest first even for tied
+timestamps. Learner projections omit actor identity while retaining full stored
+reasons and every correction. Retry follows
+[the existing eligibility checks](#learner-feedback-hints-and-retry).
 
 The authenticated-only `list_learner_submissions` RPC derives ownership from
 verified identity and stored role. It bounds candidates before invoking the
 private `learner_submission_card` helper, which reuses the canonical result
-projection. List reads start no grading and write no grades or usage records.
-Result and moderation DTOs retain their existing signatures. Shared flag labels
+projection. Result and moderation DTOs retain their existing signatures. Shared flag labels
 live in `src/lib/moderation/flags.ts`; `src/lib/ta/moderation.ts` re-exports them
 for existing TA consumers. See the [history migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261114130000_learner_history.sql).
 
@@ -602,54 +665,19 @@ bun run test:e2e tests/e2e/learner/history.spec.ts --project chromium --repeat-e
 
 ### Learner unmatched-comment reports
 
-On your own completed result, each unmatched comment under **Earned credit**
-that has no report yet offers **Report unmatched comment**. Matched and
-duplicate comments, and pending, running or failed results, offer no report.
-Each attempt follows these rules on its own, including historical results after
-a challenge is unpublished or archived.
+Flow: report a completed result's unmatched comment with a reason, then let a
+TA resolve the resulting flag. See
+[Report an unmatched comment](UserGuide.md#report-an-unmatched-comment).
+A comment can be reported once, independently per attempt, including retained
+results after unpublication/archive. Reporting changes no grade, match,
+comment or answer key and starts no regrading. No report is automatically
+replayed after account recovery.
 
-The form repeats the selected comment and line read-only, explains “Reporting
-does not change your grade.”, and asks for a required **Reason** of up to 2,000
-characters after trimming. **Send report** checks it first: “Enter a reason.”
-or “Reason is too long.” keeps your text and focuses **Reason**. **Cancel**
-closes the form without a report. While sending, the button reads **Sending
-report…** and editing and **Cancel** are disabled. Success shows “Report sent. A
-TA can review this comment.”, replaces the action with **Reported** and adds the
-flag under **Moderation flags**. A comment can be reported once; **Reported**
-stays after reload and after a TA resolves the flag, with no edit or withdrawal.
-Reporting never changes either grade, matching, comments or the answer key, and
-starts no regrading. Only one report can be in progress at a time.
-
-If the outcome is unknown, the page shows “We couldn't confirm your report. Check
-report again.” and keeps the reason read-only. **Check report** (**Checking
-report…** while pending) resends the same request; “Your report is still being
-confirmed. Check again.” keeps that check. Other outcomes:
-
-| Message | Next step |
-| --- | --- |
-| “We couldn't send your report. Try again.” or “Too many requests. Try again later.” | The form returns with your reason; **Send report** sends a new request. |
-| “This comment has already been reported.” | The result refreshes to show **Reported** and the existing flag. |
-| “This comment isn't available for reporting.” | **Back to result** reloads the result without reporting. |
-| “We couldn't reuse this report request. Refresh the result to check your reports.” | **Refresh result** reloads; nothing is sent automatically. |
-
-Sign-in and access failures use the [account recovery](#account-pages) flow; no
-report is replayed after signing in again. TAs filter these flags with **Learner
-reported an unmatched comment** in [Flagged submissions](#ta-flag-resolution-and-grade-overrides).
-
-#### Report contract and persistence
-
-`POST /api/v1/submissions/:id/reports` follows the
-[Learner surface contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface), the
-[transport rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#transport-concurrency-and-errors) and the
-[flag rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#flags). It reuses the request checks from
-[Learner first review](#learner-first-review) (same-origin `Origin`, workspace
-account header and `Idempotency-Key`) and accepts bodies up to 64 KiB. The three
-409 `INVALID_STATE` outcomes (ineligible comment, existing report and in-progress
-replay) are told apart by the shared messages in
-[`src/lib/learner/reports.ts`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/learner/reports.ts).
-A 503 says “We couldn't send your report. Try again.” when the write is known to
-have rolled back, and “We couldn't confirm your report. Check report again.” when
-it may have committed or the acknowledgement does not match the request.
+Contracts: [Learner contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface) and [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+The route shares the [mutation checks and body cap](#protected-mutations-and-caching) and maps existing-report, ineligible-comment and in-progress outcomes through
+[shared report messages](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/learner/reports.ts).
+Known rollback returns a confirmed failure; a possibly committed write or a
+mismatched acknowledgement remains uncertain and requires checking the same key.
 
 The [report migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261115120000_learner_reports.sql)
 adds `public.create_learner_report`, a security-definer function with an empty
@@ -675,403 +703,21 @@ bun run test:integration tests/integration/domain/learner-reports.test.ts
 bun run test:e2e tests/e2e/learner/reports.spec.ts --project chromium --repeat-each 3
 ```
 
-### TA submission inspection
-
-Sign in as a TA to open **Submissions** at `/ta/submissions`. Each attempt has
-its own card with the learner's display name and ID, challenge title, attempt
-number, UTC submission time, grading status, effective score and open flag count.
-Use **Learner ID** and **Challenge ID** (UUIDs), and **Grading status** to filter,
-then choose **Apply filters**. Filters combine with AND and start at the first
-page. **Clear filters** resets the list. The URL preserves applied filters and
-pagination for reload and browser Back or Forward. **Next page** and **First
-page** keep the applied filters.
-
-“No submissions yet.” is the unfiltered empty state; “No submissions match
-these filters.” is the filtered empty state. Invalid IDs show “Enter a valid
-ID.” An invalid URL or cursor shows “This submissions page isn't valid.”;
-use **First page** or **Clear filters** to recover. Loading announces “Loading
-submissions…”. A read failure offers **Try again** for the current request.
-
-Choose **View submission** to open `/ta/submissions/:id`. The **Submission**
-view shows the attempt's pinned revision through the shared read-only diff
-renderer and its ordered **Submitted comments**, including line numbers,
-matching, duplicate/unmatched status, explanation and fix credit, and feedback.
-**Original assessment** shows the stored AI score, pass/fail result, pass mark
-60, point breakdown and matched/missed counts. **Current grade** separately
-shows the effective score and whether it comes from the original AI assessment
-or a stored TA override. **Private answer key** shows each flaw's locations,
-original/replacement snippets, explanation, fix and per-flaw assessment.
-**Override history** and **Resolution history** show stored moderation decisions.
-
-Pending, running and failed grading have no available score; a completed zero
-is displayed as `0 / 100`. **Refresh submission** rereads stored evidence without
-starting grading or changing moderation records. Reopening a submission retains
-its pinned evidence after challenge edits, republication, unpublication or
-archiving. Code, snippets and comments are displayed as text and never executed.
-
-Loading announces “Loading submission…”. A missing record shows “Submission
-not found.”; a read failure offers **Try again**. **Back to submissions** is
-always available. Valid page context `from=flags` adds **Back to flagged
-submissions**; `from=learner&learnerId=<matching learner UUID>` adds **Back to
-learner**. Account
-and role failures use the shared workspace recovery described above.
-
-#### TA read contracts
-
-| Endpoint | Request and success data |
-| --- | --- |
-| `GET /api/v1/ta/submissions` | Optional `learnerId`, `challengeId`, `gradingState`, `cursor` and `limit`. Returns `{ items, nextCursor }`; default limit 20, API limits 1–50. Grading states are `pending`, `running`, `failed`, `completed`. |
-| `GET /api/v1/ta/submissions/:id` | UUID path parameter, no query parameters. Returns the pinned submission, comments, private answer key, matching, per-flaw `assessments`, original/effective grades and stored override/flag/resolution records. Page return context is not sent to this endpoint. |
-
-Both endpoints verify identity and the stored TA role before reading through
-the signed-in user's Supabase client and RLS. Projections expose learner IDs
-and display names without email addresses. Responses use `{ data }` or
-`{ error: { code, message } }` and `Cache-Control: private, no-store`.
-Invalid inputs return 400, missing sessions 401, wrong roles or unusable profiles
-403, absent detail records 404 and unavailable reads 503. Unknown or duplicate
-query fields are rejected. The list sorts by descending submission time and
-ascending submission ID; cursors are bounded and bound to the same filters.
-Protected page shells defer account reads behind Suspense and `connection()`;
-protected results have no cache scopes.
-
-See the [TA server readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/submissions.ts)
-and [list migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108090000_ta_submission_page.sql).
-
-#### TA inspection checks
-
-- `bun run test tests/unit/ta/inspection` covers validation, filter-bound
-  cursors, list/detail rendering, stored assessment states and recovery.
-- With local Supabase running,
-  `bun run test:integration tests/integration/ta/inspection/reads.test.ts`
-  checks protected reads, direct RLS access, retained revision evidence and
-  GET-only behavior with fixture records.
-- `bun run test:e2e tests/e2e/ta/inspection` uses the production build and local
-  Supabase for URL history, refresh/retry, account transitions, return links,
-  keyboard access and 320 CSS pixel width.
-
-### TA learner progress and recommendations
-
-Open **Learners** at `/ta/learners`. Cards show display names and learner IDs,
-so learners with the same name can be distinguished without exposing email.
-Choose **View learner** to open **Learner performance** at
-`/ta/learners/:learnerId`. **Next page** and **First page** navigate the directory;
-its URL preserves pagination for reload and browser Back/Forward. An empty
-list says “No learners yet.” An invalid page offers **First page**; read errors
-provide **Try again**. Missing learners show “Learner not found.”
-
-**Category progress** shows Logic bug, Edge case, Error handling, Security and
-Performance, with identified/total flaws, identification rate and completed
-first-attempt counts. Rates display two decimal places. “Not observed” means
-there are no eligible flaws in that category; `0.00%` means flaws were observed
-but none identified. All five categories remain visible with no evidence.
-Progress uses original matching from completed first attempts across retained
-history, including unpublished and archived challenges. Pending, running and
-failed grading, learner retries and grade overrides do not change these counts.
-
-**Recommended challenges** is rule-based advice, with up to five published,
-unattempted challenges showing language, difficulty and practice categories.
-Any prior attempt excludes that challenge, including failed or pending attempts
-and attempts on older revisions. Recommendations target the two weakest
-observed categories (or the only observed category). No observations or eligible
-candidates shows “No eligible recommendations right now.” Cards offer advice
-without assigning practice or starting a review.
-
-Both sections load independently on entry. **Refresh progress and
-recommendations** rereads current history and publication eligibility. Each
-section has its own **Try again**; one failure leaves the other's successful
-result visible. Failed refreshes retain successful content labelled
-“Previously loaded progress” or “Previously loaded recommendations”. These reads
-make no AI request. The separate [Performance summary](#ta-performance-summaries)
-region reads retained AI advice and generates only on explicit action.
-
-**View submissions** opens the learner-filtered submissions list. Open an attempt
-there and use **Back to learner** to return. **Back to learners** returns to the
-directory. Account and role failures use shared workspace recovery.
-
-#### Learner progress read contracts
-
-| Endpoint | Request and success data |
-| --- | --- |
-| `GET /api/v1/ta/learners` | Optional `cursor` and `limit` (default 20, range 1–50). Returns `{ items: [{ id, displayName }], nextCursor }`. |
-| `GET /api/v1/ta/learners/:id/progress` | UUID path parameter; no query fields. Returns `{ learnerId, categories }`, with `category`, `totalFlaws`, `identifiedFlaws`, `identificationRate` and `completedFirstAttempts` per category. Rate is a fraction rounded to four decimal places, or null. |
-| `GET /api/v1/ta/learners/:id/recommendations` | UUID path parameter; optional `limit` (default 5, range 1–10). Returns `{ items: [{ challenge, targetCategories }] }`; `challenge` follows the shared ChallengeCard contract. |
-
-These GET endpoints use the TA identity/role guard, user-scoped reads and the
-same response envelopes, private/no-store headers and error status mapping as
-TA inspection. Unknown and repeated query fields are rejected. Learner identity
-is resolved server-side for the detail page; there is no separate identity GET
-endpoint. A missing learner returns not-found; a target with another role is
-forbidden.
-
-Directory ordering is profile creation time descending, then ID ascending;
-bounded opaque cursors carry that anchor. The migration adds `profiles.created_at`,
-revokes authenticated table-wide SELECT, and grants SELECT only on `id`,
-`display_name` and `role`, subject to existing RLS. Do not use wildcard profile
-projections. The narrow security-definer RPCs
-`list_ta_learners(p_limit, p_before, p_after_id)` and
-`read_ta_learner(p_learner_id)` verify the caller's stored TA role with a fixed
-empty search path. Execution is granted to authenticated users, revoked from
-PUBLIC, anon and service_role; direct timestamp reads remain unavailable.
-
-The shared aggregator counts original matched flaws over eligible pinned
-first-attempt evidence. Recommendation weakness ordering uses unrounded ratios,
-then greater total flaws, then shared category order. Candidates sort by more
-target-category matches, easier difficulty, then challenge ID ascending. Reads
-recompute eligibility without changing submissions, grades, challenges or summaries.
-
-See the [progress readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/progress.ts),
-[shared aggregation and selection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/ta/progress.ts)
-and [identity migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261109160000_ta_learner_progress.sql).
-
-#### Learner progress checks
-
-- `bun run test tests/unit/ta/progress` covers aggregation, deterministic rules,
-  validation, directory/detail rendering and independent section recovery.
-- With local Supabase running, `bun run test:integration tests/integration/ta/progress`
-  covers protected reads, RPC/grant boundaries and retained original evidence.
-- `bun run test:e2e tests/e2e/ta/progress` covers production browser navigation,
-  refresh/retry, submission round trips, keyboard access and phone-width layouts.
-
-### TA performance summaries
-
-On **Learner performance**, **Performance summary** reads the latest stored
-summary without calling the model. “No performance summary yet.” offers
-**Generate summary**; a stored result offers **Regenerate summary**. Opening,
-reloading or returning to the page never starts generation automatically.
-
-Stored results show “AI-generated summary — review the supporting submissions.”,
-a **Generated** timestamp in UTC, and **Strengths**, **Blind spots** and
-**Suggested next steps**. Each item shows its category, full plain text and
-**View supporting submission** links. Those links open retained submission
-evidence with **Back to learner** return navigation. Empty sections have explicit
-empty messages; they are not read failures. Treat the advice as a prompt for TA
-judgement: generation changes no grade, flag, progress or recommendation.
-
-Freshness compares evidence fingerprints, not the generated date. A stale result
-remains readable with “This summary is out of date. Generate a new summary to
-include current evidence.” **Refresh learner performance** rereads the stored
-result and freshness. Progress and recommendations continue to load and recover
-independently of the summary.
-
-Explicit generation shows “Generating performance summary…” and disables its
-controls. While pending, an existing result remains visible as **Previous summary**.
-Success shows “Performance summary generated.” and focuses the summary heading.
-Failures preserve the previous result and offer these recoveries:
-
-| Failure | Message and recovery |
-| --- | --- |
-| No completed submission | “A completed submission is required to generate a summary.” — **View submissions**. |
-| Oversized evidence | “There is too much evidence to generate this summary.” — **Refresh learner performance**. |
-| Usage/concurrency limit | “Summary generation is temporarily limited. Try again later.” — **Try again**. |
-| Timeout | “Summary generation timed out. Try again.” — **Try again**. |
-| Invalid model output | “We couldn't generate a valid summary. Try again.” — **Try again**. |
-| Provider/accounting/service failure | “Summary generation is unavailable. Try again.” — **Try again**. |
-
-Retries require an explicit action. If the reply is lost or otherwise uncertain,
-use **Refresh learner performance** to discover a committed result without
-automatically repeating generation. A read failure says “We couldn't load the
-performance summary. Try again.” and offers **Try again** for the read. Already
-loaded output stays visible as “Previously loaded summary; freshness unavailable.”
-until a successful refresh. Account failures use shared workspace recovery and
-never automatically replay generation.
-
-#### Summary contracts and persistence
-
-| Endpoint | Request and success data |
-| --- | --- |
-| `GET /api/v1/ta/learners/:id/summary` | UUID learner ID; no query fields. Returns `{ summary: SummaryRecord \| null, stale }`. |
-| `POST /api/v1/ta/learners/:id/summaries` | Strict empty `{}` body, UUID `Idempotency-Key` and same-origin request. Returns `SummaryRecord` with HTTP 201. |
-
-Both endpoints require a verified stored TA role and a learner in moderation
-scope. They use canonical `{ data }` / `{ error }` envelopes and private/no-store
-headers. `SummaryRecord` contains `id`, `learnerId`, `createdAt`, `inputFingerprint`
-and `output`. Output has up to five items in each of `strengths`, `blindSpots`
-and `nextSteps`, with at least one item overall. Each item has a category,
-nonblank text of at most 2,000 Unicode code points and 1–20 unique supporting
-submission IDs. Validation rejects evidence outside the captured snapshot and
-categories absent from that evidence. Text renders inertly; only server-built
-supporting links navigate.
-
-The authorized snapshot selects the latest 20 completed submissions by
-`submittedAt` descending, then ID ascending, including completed retries.
-Category progress still uses all eligible completed first attempts. Model input
-contains selected scores, category counts, comments/feedback and progress;
-it excludes learner names/emails, unrelated learners and private answer
-explanations/fixes. Fingerprints cover that snapshot and effective override
-audit order, so an override can make a retained summary stale without changing
-original identification progress.
-
-Generation uses the shared LLM boundary and usage limits. The dedicated
-`persist_ta_summary(p_input jsonb)` RPC atomically stores validated output and
-its evidence, retaining immutable prior records. Only service_role can execute
-it; the admin client has no direct summary-table access. Its private RLS-protected
-request journal scopes mutation keys to the TA and learner: duplicate calls
-replay recorded results, in-progress duplicates return 409, and the same key
-can be used independently for another learner. A confirmed failed attempt can
-be retried explicitly with a new key. No transaction spans a provider call.
-Final account rechecks preserve 401 for session expiry, 503 for account-service
-outages and 403 for forbidden or changed accounts, without publishing output.
-
-See the [summary service](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/summaries.ts),
-[snapshot capture](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/summary-snapshot.ts)
-and [summary migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261110160000_ta_performance_summaries.sql).
-
-#### Summary checks
-
-- `bun run test tests/unit/ta/summaries` covers rendering, validation, explicit
-  retries, access failures and final account rechecks.
-- With local Supabase running, `bun run test:integration tests/integration/ta/summaries`
-  covers evidence/freshness, grants, atomic persistence, failure preservation
-  and learner-scoped mutation-key replay with fake AI.
-- `bun run test:e2e tests/e2e/ta/summaries` covers production browser generation,
-  supporting-evidence round trips, independent failures, account transitions,
-  keyboard focus and phone-width rendering using local Auth and fake AI.
-
-### TA flag resolution and grade overrides
-
-Open **Flagged submissions** at `/ta/flags`. The queue defaults to **Open**;
-choose **Resolved** under **Status** to inspect prior decisions. **Flag reason**
-offers **All**, **Score near the pass mark**, **AI grading output needed a retry**,
-**Location match and AI assessment disagree**, and **Learner reported an unmatched
-comment**. **Apply filters** combines status and reason and starts at the first
-page. Applied filters and pagination stay in the URL for reload and browser
-Back or Forward; **Next page** and **First page** retain filters. Each entry
-shows the submission ID, reason, status and recorded time. **View submission**
-opens its pinned evidence and marks the **Selected flag**.
-
-An empty default queue shows “No flagged submissions.”; a filtered empty queue
-shows “No flags match these filters.” with **Show open flags**. Loading announces
-“Loading flagged submissions…”. A failed read offers **Try again**; an invalid
-queue URL shows “This queue page isn't valid.” with **First page** recovery.
-
-On the submission, choose **Resolve flag**, select **Upheld** or **Dismissed**
-under **Disposition**, enter a **Reason**, then choose **Save resolution**.
-Either disposition resolves the flag without changing its grade. **Add correction**
-appends another resolution to a resolved flag; earlier entries remain visible.
-**Resolution history** shows each TA's ID, UTC time, disposition and reason,
-with the latest marked **Latest resolution**. A missing selected flag shows
-“Flag not found.” and **Back to flagged submissions**.
-
-For a completed assessment, choose **Override grade**, enter a **Replacement
-score** (a whole number from 0 to 100) and **Reason**, then **Save override**.
-Both forms require a reason of 1–2,000 Unicode code points after trimming.
-**Current grade** uses the latest override and the pass mark of 60;
-**Original assessment** remains unchanged. **Override history** retains each
-TA's ID, time, score and reason and marks **Current override**. To correct a
-score, append another override. Overrides do not change matching, per-flaw
-credit, hints, category evidence or flags, and do not rerun AI grading.
-The form identifies override reasons as learner-visible. [Learner review history](#learner-review-history)
-shows stored reasons and corrections with the generic **TA action** label, while
-TA screens retain their existing actor identity display.
-
-Saving disables the forms and **Refresh submission**. A successful save announces
-“Resolution saved.” or “Grade override saved.”. Validation focuses the first
-invalid field. After a temporary save failure, **Try again** explicitly retries
-the same unchanged action safely, including after **Refresh submission**; refresh
-only rereads stored evidence. A state or conflict rejection requires refreshing
-and starting a new action. Session expiry opens sign-in; role/profile/account
-failures replace protected content with the shared recovery screen. Returning
-after sign-in or account recovery never automatically resubmits a decision.
-
-#### Moderation contracts and persistence
-
-| Endpoint | Request and success data |
-| --- | --- |
-| `GET /api/v1/ta/flags` | Optional `status` (`open` by default, or `resolved`), `kind`, `cursor`, `limit` (default 20, range 1–50). Returns `{ items, nextCursor }`. Kinds are `near_pass_mark`, `grading_output_retried`, `assessment_disagreement`, `learner_report`. |
-| `POST /api/v1/ta/submissions/:id/overrides` | UUID ID and UUID `Idempotency-Key`; strict JSON `{ score, reason }`. Returns `{ override, grading }` with status 201. |
-| `POST /api/v1/ta/flags/:id/resolutions` | UUID ID and UUID `Idempotency-Key`; strict JSON `{ disposition, reason }`, disposition `upheld` or `dismissed`. Returns the updated flag with status 201. |
-
-These contracts verify identity and stored TA role through the user-scoped
-client. They use the same private, no-store envelopes and access recovery as
-TA inspection. Queue ordering is descending flag time, then ascending ID;
-cursors bind to filters and unknown/duplicate query fields are rejected.
-POSTs require a same-origin `Origin`, cap bodies at 32 KiB and validate fields
-with Zod and again in the database. Invalid requests return 400, missing records
-404, oversized bodies 413, and unavailable operations 503. State and idempotency
-conflicts return 409 (`INVALID_STATE`, `VERSION_CONFLICT` or
-`IDEMPOTENCY_CONFLICT`). An override requires a completed stored assessment.
-
-The [moderation migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108150000_ta_moderation.sql)
-grants authenticated callers only constrained moderation RPC execution; the RPC
-checks the TA role. Direct forged inserts, updates and deletes remain denied;
-human moderation never uses the admin client. Actor, timestamp and submission-wide
-`auditOrder` are database-derived. Both append operations lock the same submission
-so concurrent decisions survive with unique audit order, including tied timestamps.
-The highest override audit order determines the effective grade; any resolution
-makes a flag resolved. Historical submissions remain moderatable after challenge
-publication changes. The shared
-[effective-grade projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/grading/effective-grade.ts)
-also supports owning-Learner-authorized stored rows without exposing private keys.
-
-Idempotency is scoped to actor, operation, resource and key. Replaying the same
-canonical payload returns its saved result; changing the payload with that key
-conflicts. The validated incomplete-assessment rejection is retained even if
-grading later completes: a new explicit action needs a new key. Keys/results
-are private, with RLS enabled and table access revoked. Audit append and saved
-result are atomic, so a lost response can be retried without duplicate history.
-
-#### Moderation checks
-
-- `bun run test tests/unit/ta/moderation` covers filters, forms, validation,
-  access recovery and effective-grade projection. Supplementary recovery tests
-  are in `tests/unit/ta/moderation-recovery.test.tsx`.
-- `bun run test:integration tests/integration/ta/moderation/writes.test.ts`
-  uses local Supabase for protected reads/writes, append ordering, idempotency,
-  retained evidence and direct database boundaries.
-- `bun run test:e2e tests/e2e/ta/moderation` exercises queue/detail decisions,
-  retries, session recovery, keyboard access and phone width against a production
-  build with local Supabase and the fake provider.
+## Author features
 
 ### Author challenge drafts
 
-**My challenges** (`/author/challenges`) lists your own challenges, newest
-first, with each challenge's status, language and difficulty. Filter it with
-**Status** (All statuses, Draft, Published, Unpublished, Archived), choose
-**Load more** for the next page, and choose **View challenge** to open one.
-**Create challenge** opens `/author/challenges/new`.
+Flow: save working code and flaw configuration as a private draft, then edit
+changed fields while retaining any live revision. See
+[Create a draft challenge](UserGuide.md#create-a-draft-challenge),
+[Configure flaws](UserGuide.md#configure-flaws) and
+[Find and edit your challenges](UserGuide.md#find-and-edit-your-challenges).
 
-The create form has **Challenge details** (title, description, language,
-difficulty and working code) and **Flaws to inject** (**Flaw count** from 1 to 5
-and 1–5 **Flaw categories**). You may select more categories than the flaw
-count. Titles allow up to 120 Unicode code points and descriptions up to 4,000,
-both after trimming. Working code is one source file of up to 20,000 UTF-8 bytes
-after line endings are normalized to LF. It is displayed, never run. Text
-containing NUL characters or ill-formed Unicode is rejected with the field's
-message. **Save draft** creates a private draft and opens **Flaw
-configuration** with “Draft saved.” If the app cannot confirm the save, the
-form shows **Check save**, which replays the same request so it never creates a
-second draft.
-
-The challenge page (`/author/challenges/:id`) shows the status, whether a
-published revision is live, the metadata, the flaw configuration and the
-**Working draft code**. **Edit draft** opens `/author/challenges/:id/edit`; it is
-not offered for archived challenges, which cannot be edited. **Flaw
-configuration** (`/author/challenges/:id/configuration`) edits only the flaw
-count, categories and difficulty.
-
-Both edit screens send only changed fields; trimmed text that matches the saved
-value is not a change, so **Save changes** and **Save configuration** stay
-disabled until something differs. Every accepted save clears any active
-proposal set, so when one exists the screen first asks **Clear the current
-proposals?**. Editing a published challenge changes only its working draft;
-the published revision stays live. A save after someone else's change shows
-“This challenge changed. Reload it before continuing.” (or “This draft changed.
-Reload it before saving.” on Flaw configuration) and never overwrites the newer
-state. An unconfirmed save offers **Refresh challenge** or **Refresh draft**
-and never reports success.
-
-#### Author draft contracts
-
-The routes implement `GET`/`POST /api/v1/author/challenges` and
-`GET`/`PATCH /api/v1/author/challenges/:id` from “Author surface” in
-[INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
-Every route checks the stored Author role, validates input with Zod and
-responds `private, no-store`. Writes cap bodies at 128 KiB, check a supplied
-`Origin` and optional `X-LGTM-Workspace-Account-Id`, then call a user-scoped
-database function. A create requires an `Idempotency-Key` UUID. An edit needs
-`expectedRowVersion` and `expectedDraftVersion` (1 to 2,147,483,647) plus at
-least one changed field. Categories are stored in vocabulary order, so the same
-selection always fingerprints the same.
+Contracts: [Author contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#author-surface). Routes validate with Zod and use shared
+[protected mutation checks](#security). Categories are stored in vocabulary
+order so equivalent selections fingerprint identically. Code normalizes CRLF/CR
+to LF before UTF-8 measurement; NUL and ill-formed Unicode are rejected.
+Both edit screens send only changed fields; trim-equivalent text is unchanged.
 
 The
 [Author drafts migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261111120000_author_drafts.sql)
@@ -1081,15 +727,15 @@ direct table write grants. Create records each committed request in the
 private `author_challenge_create_requests` ledger, keyed by actor and
 idempotency key with a server-computed fingerprint. A replay returns the
 recorded draft, a changed payload under the same key returns
-`409 IDEMPOTENCY_CONFLICT`, and a concurrent duplicate returns
-`409 INVALID_STATE`, which is safe to replay. Edits lock the challenge row,
-return `409 VERSION_CONFLICT` for stale versions and `409 INVALID_STATE` for
+an idempotency conflict, and a concurrent duplicate returns
+an invalid-state outcome, which is safe to replay. Edits lock the challenge row,
+return a version conflict for stale versions and an invalid-state outcome for
 archived challenges, increment both versions and clear the active proposal
 set. They leave historical proposal sets, published revisions and the live
 pointer unchanged. The ledger and the private field validator have RLS or
 revoked execution and no grants to any app role. Reads use the existing owner
-RLS policies; the detail route uses `challenge_generation_access` to return
-403 for another Author's challenge and 404 for an absent one. See the
+RLS policies; the detail route uses `challenge_generation_access` to distinguish
+another Author's challenge from an absent one according to the access contract. See the
 [server draft contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/author/drafts.ts).
 
 #### Author draft checks
@@ -1104,81 +750,19 @@ RLS policies; the detail route uses `challenge_generation_access` to return
 
 ### Author flaw proposals
 
-The challenge page and **Flaw configuration** both show **AI flaw proposals**
-with the saved flaw count, categories and difficulty, and a **Generate
-proposals** button (not shown for archived challenges). Flaw configuration with
-unsaved changes refuses with “Save your changes before generating proposals.”
-When a proposal set already exists, **Replace the current proposals?** warns
-“New proposals replace the current proposals and reset their decisions.” and
-offers **Generate new proposals** or **Cancel**. While the request runs the
-screen shows “Generating proposals…”.
+Flow: generate a proposal set from saved configuration, decide every proposal,
+and preview a candidate after approving at least one flaw. See
+[Generate flaw proposals](UserGuide.md#generate-flaw-proposals),
+[Approve or reject proposals](UserGuide.md#approve-or-reject-proposals) and
+[Preview the final challenge](UserGuide.md#preview-the-final-challenge).
+Generation replaces the active set and resets decisions only on success;
+failures retain the current set. Generated proposal text is read-only.
 
-On success the app opens **Proposal preview** (`/author/challenges/:id/proposals`),
-moves focus to its heading and announces “Proposals generated. Review every
-proposal before publishing.” A failure keeps the current proposals and shows
-one of:
-
-| Message | **Try again** |
-| --- | --- |
-| “The AI returned invalid proposals. Try again.” | Yes |
-| “Proposal generation timed out. Try again.” | Yes |
-| “We couldn't generate proposals right now. Try again.” | Yes |
-| “AI generation is unavailable within the current limits. Try again later.” | No |
-| “This draft is too large for AI generation. Reduce it before trying again.” | No |
-
-**Try again** starts a new attempt from the draft's current versions. If the
-app cannot confirm the result it shows “We couldn't confirm proposal
-generation.” with **Check generation**, which replays the same request so it
-never creates a second set. A draft changed elsewhere shows “This draft changed.
-Reload it before generating proposals.” with **Reload draft**.
-
-**Proposal preview** labels the list as AI-generated. Each proposal shows its
-category, “Source line N” or “Source lines N–M” of the working code, the
-**Original code** and **Replacement code** in the shared code view, the
-**Explanation**, the **Fix** and its **Decision** (Pending, Approved or
-Rejected), with **Approve** and **Reject** buttons. Generated text cannot be
-edited here. A decision that fails shows “We couldn't save this decision. Try
-again.”; an unconfirmed one shows “We couldn't confirm this decision. Refresh
-the draft.” with **Refresh draft**; a stale one shows “This draft changed. Reload
-it before reviewing proposals.” with **Reload draft**. With no proposals the
-page shows “Generate proposals before reviewing flaws.” and **Back to
-configuration**.
-
-**Preview final challenge** appears only after every proposal is decided
-(otherwise “Decide every proposal to preview the final challenge.”) and at
-least one is approved (otherwise “Approve at least one proposal to preview or
-publish.”). It loads **Final challenge preview**: the working code compared
-with the flawed code Learners will review, plus an **Answer key** listing each
-approved flaw's category and “Final line N” location. If the decisions changed
-since the page loaded, the preview shows the same “This draft changed…”
-conflict and **Reload draft**. **Publish challenge** then appears inside the
-shown preview (see [Author publication](#author-publication)).
-
-#### Author proposal contracts
-
-All three routes follow the Author draft contract rules above (stored Author
-role, Zod, `private, no-store`, 128 KiB body cap, `Origin` and account-header
-checks, 403 for another Author's challenge, 404 for an absent one):
-
-- `POST /api/v1/author/challenges/:id/proposals` needs an `Idempotency-Key` UUID
-  and a body of exactly `expectedRowVersion` and `expectedDraftVersion`. It
-  returns 200 with the draft. Failures use INTEGRATION-SPEC §3 codes: 409
-  `VERSION_CONFLICT`, 409 `INVALID_STATE` (archived, or the same request still
-  running), 409 `IDEMPOTENCY_CONFLICT`, 413 `PAYLOAD_TOO_LARGE`, 422
-  `INVALID_AI_OUTPUT`, 429 `RATE_LIMITED`, 502 `AI_UNAVAILABLE`, 503
-  `SERVICE_UNAVAILABLE` and 504 `AI_TIMEOUT` (also for a result that arrives
-  after the operation expired).
-- `PATCH /api/v1/author/challenges/:id/proposals/:proposalId` takes exactly
-  `expectedRowVersion`, `expectedDraftVersion` and `decision` (`approved` or
-  `rejected`) for a proposal of the active set, and returns the draft.
-- `GET /api/v1/author/challenges/:id/preview` returns the server-assembled
-  `code` diff, the approved `flaws` and the `draftVersion` it was built from. It
-  returns 409 `INVALID_STATE` until every proposal is decided and one is
-  approved. The route checks its diff against the shared `assembleCandidate`
-  and rereads the draft version, so it never mixes decisions from two saves.
-
-A successful generation and each accepted decision increment both `rowVersion`
-and `draftVersion`; a failed, replayed or stale generation changes neither.
+Contracts: [Author contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#author-surface). Routes share the draft access/validation
+rules and [mutation checks](#security). The preview checks its diff with
+`assembleCandidate` and rereads the draft version so it cannot mix decisions
+from two saves. Successful generation and each accepted decision increment
+both versions; failed, replayed or stale generation changes neither.
 
 The
 [Author proposals migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261112120000_author_proposals.sql)
@@ -1219,67 +803,19 @@ pointer directly. See the
 
 ### Author publication
 
-**Publish challenge** appears only inside a shown **Final challenge preview**,
-under **Publication**, which lists the retained flaw count and categories. Any
-saved decision change withdraws the preview and the button. While publishing
-the screen shows “Preparing hints and publishing…”, and generation, decisions
-and the preview button are disabled; while generation runs, publishing is
-disabled. Publishing asks the AI for one hint per retained flaw; the challenge
-is not published until the hints pass validation.
+Flow: publish the shown final preview after hint preparation; inspect the
+resulting immutable revision. See
+[Publish a challenge](UserGuide.md#publish-a-challenge).
+Generation/decisions/preview and publication disable conflicting actions while
+pending. Changing a decision withdraws the preview. A failed republication
+preserves the existing live revision; a never-published draft stays private.
 
-On success the app opens **Publication result**
-(`/author/challenges/:id/publication`), moves focus to its heading, announces
-“Challenge published.” and shows the revision number and publication time,
-with **View published challenge** and **Back to challenges**. **View published
-challenge** opens `/author/challenges/:id/revisions/:revisionId`, the owning
-Author's view of that revision: the real working-to-flawed diff, each retained
-flaw's category, line, explanation and fix, and its hint. All stored text
-renders as plain text. Another Author's revision shows “This challenge isn't
-available to your account.”
-
-A failure leaves the challenge unpublished and shows one of:
-
-| Message | **Try publishing again** |
-| --- | --- |
-| “Review the current proposals and approve at least one flaw before publishing.” | No |
-| “The AI returned invalid hints. The challenge wasn't published.” | Yes |
-| “We couldn't publish the challenge right now.” | Yes |
-| “Publication is unavailable within the current AI limits. Try again later.” | Yes |
-| “This candidate is too large for AI publication.” | No |
-| “Publication timed out. Check publication before trying again.” | After **Check publication** confirms the failure |
-
-**Check publication** replays the same request, so it never publishes twice. An
-unconfirmed result shows “We couldn't confirm publication.” with **Check
-publication**. A challenge changed elsewhere shows “This challenge changed.
-Reload it before publishing.” with **Reload draft**. Each failure in the table
-also offers **Back to proposal preview**.
-
-After publication the draft and its decisions stay in place, so the Author can
-publish again. Each publication creates a new immutable revision, even when
-nothing changed since the last one (a human decision for T-22; it spends AI
-usage again).
-
-#### Author publication contracts
-
-Both routes follow the Author draft contract rules above:
-
-- `POST /api/v1/author/challenges/:id/publish` needs an `Idempotency-Key` UUID
-  and a body of exactly `expectedRowVersion` and `expectedDraftVersion`. It
-  returns 201 with `AuthorPublication` (`id`, `status`, `rowVersion`,
-  `revisionId`, `revisionNumber`, `publishedAt`). An ineligible candidate is 409
-  `INVALID_STATE` with the eligibility message above. Other failures use 409
-  `VERSION_CONFLICT`, 409 `INVALID_STATE` (archived, or the same request still
-  running), 409 `IDEMPOTENCY_CONFLICT`, 413 `PAYLOAD_TOO_LARGE`, 422
-  `INVALID_AI_OUTPUT`, 429 `RATE_LIMITED`, 502 `AI_UNAVAILABLE`, 503
-  `SERVICE_UNAVAILABLE` and 504 `AI_TIMEOUT`.
-- `GET /api/v1/author/challenges/:id/revisions/:revisionId` returns
-  `{ publication, challenge, answerKey, hints }` for the owner's revision; 403
-  for another Author's challenge, 404 for an absent one.
-
-The server checks role, ownership, state, versions and eligibility before
-calling the shared LLM boundary (`generate_hints`), which applies the SEC-03
-hint checks. A successful publication increments `rowVersion` only; the draft
-version and the active proposal set do not change.
+Contracts: [Author contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#author-surface). Role, ownership, state, versions and
+eligibility are checked before `generate_hints` through the shared LLM module,
+including SEC-03 checks. Success increments the row version only; draft version
+and active proposals stay unchanged. Each new publication creates a revision
+even without draft changes and spends AI usage again. Same-key recovery replays
+that publication rather than creating another.
 
 The
 [Author publication migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261113120000_author_publication.sql)
@@ -1319,56 +855,20 @@ or the published pointer directly. See the
 
 ### Author unpublish and archive
 
-On the challenge detail page, a published challenge offers **Unpublish** and
-**Archive**; a draft or unpublished challenge offers **Archive** only. An
-archived challenge shows neither, plus the existing “Archived challenges can't
-be edited.” Any challenge with a live revision also shows **View published
-challenge**, which opens the owner's revision view.
+Flow: confirm unpublishing a published challenge or permanently archiving a
+nonarchived challenge; return to the challenge list. See
+[Unpublish a challenge](UserGuide.md#unpublish-a-challenge) and
+[Archive a challenge](UserGuide.md#archive-a-challenge).
 
-Each action asks first:
-
-- **Unpublish challenge**: “Unpublish this challenge? Learners won't be able to
-  start or retry it.”
-- **Archive challenge**: “Archive this challenge? This can't be undone.
-  Editing, publishing and new attempts will be unavailable.”
-
-While the request runs, the page shows “Unpublishing…” or “Archiving…” and both
-actions are disabled. On success the app returns to **My challenges** and
-announces “Challenge unpublished.” or “Challenge archived.” once.
-
-| Outcome | Message | Recovery |
-| --- | --- | --- |
-| Changed elsewhere, or already in a state the action can't leave | “This challenge changed. Reload it before continuing.” | **Reload challenge** |
-| Failed | “We couldn't unpublish the challenge. Try again.” / “We couldn't archive the challenge. Try again.” | Confirm the action again (a new request) |
-| Unconfirmed | “We couldn't confirm the change. Refresh the challenge before continuing.” | **Refresh challenge** replays the same request, so it never applies twice |
-
-An unpublished challenge leaves the Learner catalogue, and its detail page shows
-“Access denied” to Learners; nobody can start a first attempt or a retry.
-Existing attempts, grades, TA views and the published revision stay unchanged.
-An unpublished challenge can be edited and published again as a new revision.
-Archiving is terminal: edits, generation, decisions and publication are refused.
-
-#### Author lifecycle contracts
-
-`POST /api/v1/author/challenges/:id/unpublish` and
-`POST /api/v1/author/challenges/:id/archive` follow the Author draft contract
-rules above. Each needs an `Idempotency-Key` UUID and a body of exactly
-`expectedRowVersion` (a positive integer); any other field is 400 and a body
-over 128 KiB is 413. Success is 200 `{ data: { id, status, rowVersion } }`.
-
-| Result | Response |
-| --- | --- |
-| Transition not allowed (for example unpublishing a draft, or anything archived) | 409 `INVALID_STATE`, with the reload message |
-| Stale `expectedRowVersion` | 409 `VERSION_CONFLICT` |
-| Same key, different body | 409 `IDEMPOTENCY_CONFLICT` |
-| Same key still running | 409 `INVALID_STATE` |
-| Another user's challenge, or a non-Author | 403 |
-| Anonymous | 401 |
-| Absent challenge | 404 |
+Contracts: [Author contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#author-surface). Both actions use shared
+[mutation checks](#security). Unpublication hides the catalogue/detail and
+blocks first/retry attempts while preserving existing attempts, grades, TA
+views and revision evidence. It permits editing and republication.
+Archive also refuses editing, generation, decisions and publication.
 
 Allowed transitions are published → unpublished, and draft, published or
-unpublished → archived. A change increments `rowVersion` only. The draft, its
-version, proposal sets, revisions and the published-revision pointer are kept.
+unpublished → archived. A change increments the row version only. The draft,
+its version, proposal sets, revisions and published pointer are kept.
 
 The
 [Author lifecycle migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261115130000_author_lifecycle.sql)
@@ -1404,55 +904,233 @@ grant on challenges. See the
   archives by keyboard at phone width, checks that a Learner can no longer open
   the challenge, and checks that an archived challenge's detail is read-only.
 
-### Auth tests and settings
+## TA features
 
-`bun run test` runs unit tests without Supabase. Start the local stack before
-running the separate integration suite:
+### TA submission inspection
 
-```bash
-bun run db:start
-bun run test:integration
-```
+Flow: filter attempts and inspect pinned submission/answer evidence without
+starting grading or changing moderation. See
+[Inspect submissions](UserGuide.md#inspect-submissions).
+Contracts: [TA contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#ta-surface).
 
-Integration tests run in Vitest's Node environment against real local Auth,
-API and Postgres services. Auth tests cover provisioning, immutable roles,
-profile visibility and refresh behavior. Domain tests use `pg` to check RLS,
-grants, constraints and grading-run history with scoped and trusted SQL
-sessions. They roll back seeded domain rows before deleting fixture accounts.
-To run the domain tests alone, use `bun run test:integration tests/integration/domain`.
-Tests capture local CLI configuration in memory. Auth tests inject throttling
-failures to stay within the provider limit. CI's `integration` job runs these
-suites and is required by the `verify` job. Local `bun run verify` runs lint,
-typecheck, unit tests and build. CI uses Node 24 from `.node-version`.
+Readers verify identity/stored TA role and use the caller's client with RLS.
+Projections expose learner IDs/display names without emails and include private
+answer and per-flaw assessment evidence only in TA scope. Return context follows the [page route convention](#page-routes).
+Protected shells defer account reads
+behind Suspense and `connection()` and use no cache scopes.
+Pinned evidence remains readable after edits, republication, unpublication or
+archive. Pending/running/failed grades have no score; a completed zero is real.
+Code, snippets and comments render inertly.
 
-For browser account journeys, install Chromium once, then run:
+See the [TA server readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/submissions.ts) and [list migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108090000_ta_submission_page.sql).
 
-```bash
-bunx playwright install chromium
-bun run test:e2e
-```
+#### TA inspection checks
 
-Keep local Supabase running. Playwright's
-[launcher](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/tests/e2e/account/server.ts)
-gets local settings from the CLI, builds the app and starts an isolated
-production server on port 3100. It does not reuse a development server. The
-suite covers all roles, refresh, cookie deletion, denied access and account
-switching through back, prefetch and reload. Fixtures create and clean up local
-accounts; one worker and zero retries bound Auth traffic. CI's separate `e2e`
-job runs this suite against local Auth and is also required by `verify`.
+- `bun run test tests/unit/ta/inspection` covers validation, filter-bound
+  cursors, list/detail rendering, stored assessment states and recovery.
+- With local Supabase running,
+  `bun run test:integration tests/integration/ta/inspection/reads.test.ts`
+  checks protected reads, direct RLS access, retained revision evidence and
+  GET-only behavior with fixture records.
+- `bun run test:e2e tests/e2e/ta/inspection` uses the production build and local
+  Supabase for URL history, refresh/retry, account transitions, return links,
+  keyboard access and 320 CSS pixel width.
 
-Local `auth.rate_limit.sign_in_sign_ups` is 300 per five minutes per IP to
-support repeated integration/fix-round runs. This does not change hosted
-limits. After changing local Auth configuration, run `bun run db:stop` then
-`bun run db:start` to reload it; stopping preserves local data.
+### TA learner progress and recommendations
 
-Hosted settings require a human dashboard review under
-[SYS-15.2–15.4](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-15--configuration-and-hosted-auth),
-including the authoritative
-[SYS-05 credential policy](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle).
-Local configuration and passing integration tests do not verify hosted settings.
+Flow: open a learner directory entry, inspect category evidence and rule-based
+practice recommendations, then follow supporting submissions. See
+[Review learner performance](UserGuide.md#review-learner-performance).
+Contracts: [TA contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#ta-surface).
 
-## Shared LLM boundary
+Progress uses original matching from completed first attempts across retained
+history, including unpublished/archived challenges. Retries, grade overrides
+and incomplete/failed grades do not change it. All five categories remain
+present; absent evidence is distinct from observed zero identification.
+Recommendations exclude any previously attempted challenge, including older
+revisions and pending/failed attempts. They target the weakest observed
+categories; no eligible evidence/candidates yields an empty result.
+Both sections load and recover independently, retain successful prior reads
+on failed refresh, and make no AI request. The
+[summary region](#ta-performance-summaries) remains independent.
+
+Directory ordering is profile creation time descending, then ID ascending;
+opaque cursors carry that anchor. Learner identity is resolved server-side
+without a separate identity GET endpoint; wrong-role targets are forbidden.
+
+The migration adds `profiles.created_at`,
+revokes authenticated table-wide SELECT, and grants SELECT only on `id`,
+`display_name` and `role`, subject to existing RLS. Do not use wildcard profile
+projections. The narrow security-definer RPCs
+`list_ta_learners(p_limit, p_before, p_after_id)` and
+`read_ta_learner(p_learner_id)` verify the caller's stored TA role with a fixed
+empty search path. Execution is granted to authenticated users, revoked from
+PUBLIC, anon and service_role; direct timestamp reads remain unavailable.
+
+The shared aggregator counts original matched flaws over eligible pinned
+first-attempt evidence. Rounding, category weakness ordering and candidate
+tie-breaks follow
+[INTEGRATION-SPEC §5](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#category-progress-and-recommendations).
+Reads recompute eligibility without changing submissions, grades, challenges or summaries.
+
+See the [progress readers](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/progress.ts),
+[shared aggregation and selection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/ta/progress.ts)
+and [identity migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261109160000_ta_learner_progress.sql).
+
+#### Learner progress checks
+
+- `bun run test tests/unit/ta/progress` covers aggregation, deterministic rules,
+  validation, directory/detail rendering and independent section recovery.
+- With local Supabase running, `bun run test:integration tests/integration/ta/progress`
+  covers protected reads, RPC/grant boundaries and retained original evidence.
+- `bun run test:e2e tests/e2e/ta/progress` covers production browser navigation,
+  refresh/retry, submission round trips, keyboard access and phone-width layouts.
+
+### TA performance summaries
+
+Flow: read retained AI advice, explicitly generate/regenerate and verify its
+supporting evidence. See
+[Generate a performance summary](UserGuide.md#generate-a-performance-summary).
+Opening, reloading and returning never starts generation. Generation changes
+no grade, flag, progress or recommendation. A previous result remains readable
+while pending or after failure; uncertain replies trigger a stored-result read
+rather than automatic generation. Account recovery never replays generation.
+Freshness uses evidence fingerprints rather than generation time. Progress and
+recommendations load independently, including when summary freshness is unknown.
+
+Contracts: [TA contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#ta-surface). Both endpoints require a verified stored TA
+role and a learner in moderation scope. Output text renders inertly; only
+server-built supporting links navigate. Validators reject categories/evidence
+outside the captured snapshot.
+
+The authorized snapshot selects the latest 20 completed submissions by
+`submittedAt` descending, then ID ascending, including completed retries.
+Category progress still uses all eligible completed first attempts. Model input
+contains selected scores, category counts, comments/feedback and progress;
+it excludes learner names/emails, unrelated learners and private answer
+explanations/fixes. Fingerprints cover that snapshot and effective override
+audit order, so an override can make a retained summary stale without changing
+original identification progress.
+
+Generation uses the shared LLM boundary and usage limits. The dedicated
+`persist_ta_summary(p_input jsonb)` RPC atomically stores validated output and
+its evidence, retaining immutable prior records. Only service_role can execute
+it; the admin client has no direct summary-table access. Its private RLS-protected
+request journal scopes mutation keys to the TA and learner: duplicate calls
+replay recorded results, in-progress duplicates return 409, and the same key
+can be used independently for another learner. A confirmed failed attempt can
+be retried explicitly with a new key. No transaction spans a provider call.
+Final account rechecks distinguish session expiry, account-service outages and
+forbidden or changed accounts, without publishing output.
+
+See the [summary service](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/ta/summaries.ts),
+[snapshot capture](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/summary-snapshot.ts)
+and [summary migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261110160000_ta_performance_summaries.sql).
+
+#### Summary checks
+
+- `bun run test tests/unit/ta/summaries` covers rendering, validation, explicit
+  retries, access failures and final account rechecks.
+- With local Supabase running, `bun run test:integration tests/integration/ta/summaries`
+  covers evidence/freshness, grants, atomic persistence, failure preservation
+  and learner-scoped mutation-key replay with fake AI.
+- `bun run test:e2e tests/e2e/ta/summaries` covers production browser generation,
+  supporting-evidence round trips, independent failures, account transitions,
+  keyboard focus and phone-width rendering using local Auth and fake AI.
+
+### TA flag resolution and grade overrides
+
+Flow: inspect the flagged queue, append a resolution/correction, or override a
+completed grade with a reason. See
+[Work through flagged submissions](UserGuide.md#work-through-flagged-submissions),
+[Resolve a flag](UserGuide.md#resolve-a-flag) and
+[Override a grade](UserGuide.md#override-a-grade).
+Contracts: [TA contracts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#ta-surface).
+
+Resolution alone never changes grades. Overrides change only the effective
+grade, preserving matching, per-flaw credit, hints, category evidence, flags and
+original AI grading. Both forms retain all audit entries. Stored reasons are
+Learner-visible with anonymous TA attribution; TA screens retain actor IDs.
+Confirmed save failures allow explicit same-action retry even after a read
+refresh. State/conflict rejection requires a fresh action. Account recovery
+never automatically resubmits moderation.
+
+Queue cursors bind filters. POSTs use the [same-origin check and body cap](#protected-mutations-and-caching)
+and validate with Zod and again in Postgres. An override requires a
+completed stored assessment.
+
+The [moderation migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108150000_ta_moderation.sql)
+grants authenticated callers only constrained moderation RPC execution; the RPC
+checks the TA role. Direct forged inserts, updates and deletes remain denied;
+human moderation never uses the admin client. Actor, timestamp and submission-wide
+`auditOrder` are database-derived. Both append operations lock the same submission
+so concurrent decisions survive with unique audit order, including tied timestamps.
+The highest override audit order determines the effective grade; any resolution
+makes a flag resolved. Historical submissions remain moderatable after challenge
+publication changes. The shared
+[effective-grade projection](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/grading/effective-grade.ts)
+also supports owning-Learner-authorized stored rows without exposing private keys.
+
+Idempotency is scoped to actor, operation, resource and key. Replaying the same
+canonical payload returns its saved result; changing the payload with that key
+conflicts. The validated incomplete-assessment rejection is retained even if
+grading later completes: a new explicit action needs a new key. Keys/results
+are private, with RLS enabled and table access revoked. Audit append and saved
+result are atomic, so a lost response can be retried without duplicate history.
+
+#### Moderation checks
+
+- `bun run test tests/unit/ta/moderation` covers filters, forms, validation,
+  access recovery and effective-grade projection. Supplementary recovery tests
+  are in `tests/unit/ta/moderation-recovery.test.tsx`.
+- `bun run test:integration tests/integration/ta/moderation/writes.test.ts`
+  uses local Supabase for protected reads/writes, append ordering, idempotency,
+  retained evidence and direct database boundaries.
+- `bun run test:e2e tests/e2e/ta/moderation` exercises queue/detail decisions,
+  retries, session recovery, keyboard access and phone width against a production
+  build with local Supabase and the fake provider.
+
+## Authentication and authorization
+
+The server-only helpers in
+[`src/server/auth/`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/service.ts)
+provide `signUp`, `signIn` and local-scope `signOut`. Sign-up validates a
+request against
+[SYS-05's credential rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle)
+and
+[SYS-06's profile rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-06--profile-provisioning-and-immutable-role).
+A private trigger provisions the profile atomically with the Auth account.
+
+Auth helpers return categories and field-error codes without UI copy or raw
+provider diagnostics. They distinguish authenticated success, confirmed
+creation without a session, rejection, throttling and service unavailability.
+Sign-out clears current-browser auth cookies even when the provider cannot
+confirm local-scope revocation; it reports that failure separately.
+
+[`getAccount` and `readProfile`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/auth/account.ts)
+verify identity with `auth.getUser()` and read the stored `public.profiles`
+role. `authErrorResponse` maps failure categories through the
+[shared HTTP contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#transport-concurrency-and-errors).
+
+RLS policies needing the caller's role must read
+`private.profile_roles` (own row only), not `profiles`, to avoid policy
+recursion. This constrained projection is populated by the provisioning trigger
+and bound to the immutable public profile by its `(id, role)` foreign key.
+
+[`src/proxy.ts`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/proxy.ts)
+refreshes session transport and forwards refreshed cookies to server reads,
+preserving SSR cache-prevention headers. Protected operations still authorize
+at their own server boundary.
+
+Page guards improve navigation, while every protected route/service and
+constrained RPC independently checks the verified identity, immutable stored
+role and record scope. Browser-supplied roles or actor IDs never authorize a
+write. See [clients](#supabase-clients), [data grants](#data-model) and
+[Security](#security) for privileged operations and transport controls.
+
+## AI features and the LLM module
+
+### Shared LLM boundary
 
 The server-only modules in
 [`src/server/llm/`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/boundary.ts)
@@ -1469,15 +1147,15 @@ The boundary verifies identity, stored role, ownership and eligible persisted
 state before capturing input or reserving usage, then rechecks identity and the
 captured fingerprint before returning generated data.
 
-Every input and output uses the strict envelope
-`{schemaVersion: 1, operation, payload}`:
+Model input/output envelopes and fields are defined in
+[INTEGRATION-SPEC §4](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#4-server-only-llm-contracts). The operations serve these role flows:
 
 | Operation | Authorized caller and resource | Model input / validated output |
 | --- | --- | --- |
 | `inject_flaws` | Author; owned challenge draft | Working code and flaw configuration / proposals |
 | `generate_hints` | Author; owned challenge draft with resolved proposal decisions | Assembled flawed code and retained flaws / keyed hints |
 | `assess_review` | Learner; own eligible persisted submission | Pinned flawed code and selected flaw/comment pairs / keyed credit assessments and feedback |
-| `summarize_learner` | TA; learner ID | Latest 20 completed submissions and category progress / strengths, blind spots and next steps with evidence |
+| `summarize_learner` | TA; learner ID | Captured completed submissions and category progress / evidence-backed advice |
 
 The grading service matches comments against the pinned revision and binds
 assessment to the active grading run. The boundary rechecks that run before
@@ -1488,8 +1166,9 @@ ownership, run eligibility and the deadline. See the
 [grading service](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/learner/grade-submission.ts).
 
 Contracts reject unknown fields, invalid ranges, duplicate or mismatched keys,
-unsupported values and unsupported evidence. Candidate assembly validates source
-snippets and non-overlapping replacements. Pasted code is normalized and bounded,
+unsupported values and unsupported evidence. The server derives each proposal's source range from a unique whole-line match
+of its original snippet, ignoring model-supplied source line numbers; see
+[Code, proposals and locations](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#code-proposals-and-locations). Pasted code is normalized and bounded,
 never executed. Server-owned instructions remain separate from untrusted data;
 tools, browsing, code execution and callbacks are disabled. Hint and feedback
 checks reject markup, code fences, links and line references. Protected-text
@@ -1509,14 +1188,10 @@ close and expiry; immutable events record operation and attempt transitions.
 `readUsage()` exposes only the verified caller's account usage and budget,
 not environment counters or private model material. Callers cannot reset usage.
 
-Each attempt reserves both account and environment capacity before dispatch:
-
-| Ceiling | Account | Environment |
-| --- | --- | --- |
-| Active operations | 1 | 4 |
-| Attempts per UTC minute | 4 | 20 |
-| Attempts per UTC day | 20 | 100 |
-| Tokens per UTC day | 300,000 | 1,500,000 |
+Each attempt reserves both account and environment capacity before dispatch.
+The [User Guide's limits table](UserGuide.md#limits) explains the account and
+shared ceilings; [SEC-04](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md#sec-04--bound-soc-requests-and-usage)
+defines the request, token, response-size, concurrency and deadline bounds.
 
 Reservations keep their original UTC windows across rollover. Verified usage
 settles once within reserved input/output components; uncertain dispatch or usage
@@ -1526,19 +1201,26 @@ and rejects late settlement. No database transaction spans a provider call.
 Duplicate keys return in-progress/replay metadata without another dispatch;
 accounting does not store generated role results for replay.
 
-The maximum is 32,768 input tokens, 8,192 output tokens, 128 KiB of response,
-15 seconds per attempt and 35 seconds per operation. Input measurement conservatively
-counts the full serialized request's UTF-8 bytes plus overhead. Limits may be
-lowered, never raised above these ceilings. Only invalid output permits one
+Input measurement conservatively counts the full serialized request's UTF-8
+bytes plus overhead. Limits may be lowered, never raised above the SEC-04 ceilings. Only invalid output permits one
 automatic retry, using the same snapshot and operation deadline with a fresh
 reservation. Transport failure and timeout are not retried. Deadlines also cover
 settlement, close and final boundary revalidation.
 
-Success returns `{data: validatedEnvelope, meta: {attempts, outputRetried, deadline}}`;
-duplicate admission returns status metadata, and failures return `{error: {code}}`.
-Safe codes include `INVALID_AI_OUTPUT`, `AI_TIMEOUT`, `AI_UNAVAILABLE` and
-`SERVICE_UNAVAILABLE`; raw provider errors, credentials and private text are
-excluded from diagnostics. Accounting outages fail closed.
+The boundary returns validated results with attempt/retry/deadline metadata;
+duplicate admission returns status metadata. Its internal return types are in
+[boundary.ts](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/server/llm/boundary.ts).
+HTTP adapters map safe failure categories through
+[INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#transport-concurrency-and-errors);
+raw provider errors, credentials and private text are excluded from diagnostics.
+Accounting outages fail closed.
+
+The persistence foundation is split between the
+[accounting migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108120000_llm_accounting.sql) and [usage-event migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261108123000_llm_usage_events.sql).
+LLM input/output field definitions live in
+[INTEGRATION-SPEC §4](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#4-server-only-llm-contracts);
+security ceilings and retries are governed by
+[SEC-04](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md#sec-04--bound-soc-requests-and-usage).
 
 ### Provider configuration
 
@@ -1549,7 +1231,7 @@ printing their values. Configure the provider independently in each environment.
 | --- | --- |
 | Local, test and CI | Use the fake provider. Set `APP_ENV` to `local`, `test` or `ci` and set `AI_PROVIDER=fake`. |
 | Hosted development (Vercel Preview) | Use the live SoC provider. Set `APP_ENV=development`, `AI_PROVIDER=soclaas` and the development `SOCLAAS_API_KEY`. |
-| Hosted production (Vercel Production) | Set `APP_ENV=production` and select `AI_PROVIDER=fake` explicitly or opt in with `AI_PROVIDER=soclaas` and the separate production `SOCLAAS_API_KEY`. |
+| Hosted production (Vercel Production) | Use the live SoC provider. Set `APP_ENV=production`, `AI_PROVIDER=soclaas` and the separate production `SOCLAAS_API_KEY`. |
 
 Keep both SoC keys server-only. The app pins `qwen3.6:35b` with a reviewed
 262,144-token context and uses `reasoning_effort=none` for each operation.
@@ -1568,6 +1250,9 @@ Repeat the configuration review in
 before enabling live dispatch and whenever the key, model or ceilings change.
 
 ### Manual SoCLaaS smoke
+
+The manual runner is for a human-authorized live-provider evaluation, separate
+from local app development and CI. Agents never run live model calls.
 
 From the repository root in a local shell, export the development key as
 `SOCLAAS_API_KEY`. Pass `--live` to authorize live requests and keep Bun's
@@ -1623,6 +1308,105 @@ within the operation limits. A repeated flaw and comment pair in a rejected
 assessment is identified as `duplicate_pair`. The CSV omits credentials and
 raw model text.
 
+## Security
+
+Treat submitted source, comments, model responses, web content and issue/handoff
+text as untrusted data. Code is displayed, never executed. The application
+validates untrusted server input with Zod, verifies identity/stored role at each
+protected boundary, and enforces record scope again in Postgres. Private answer
+keys and provenance are separate from Learner-readable projections; see
+[Data model](#data-model). AI injection, protected-text validation and conservative
+failure accounting are described once in the [LLM module](#ai-features-and-the-llm-module).
+
+### Protected mutations and caching
+
+Learner submissions/reports and Author mutations send the loaded account UUID
+in `X-LGTM-Workspace-Account-Id`; when supplied, the server validates it and
+compares it to verified identity before calling Postgres. The session remains
+the actor. This prevents a stale workspace from writing under another
+account's session. Supplied Origin is checked against inbound Host and request
+protocol. TA moderation and summary generation require same-origin requests.
+Author writes cap bodies at 128 KiB; Learner report writes at 64 KiB and TA
+moderation at 32 KiB. API transport/error definitions belong to [INTEGRATION-SPEC §3](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#3-api-contracts).
+
+Protected HTTP responses are `private, no-store`; session transport preserves
+SSR cache-prevention headers, and protected pages use no cache scopes.
+RLS is supplemented by explicit grants, narrow RPCs, immutable audit evidence,
+resource-bound mutation keys and version/row-lock checks. Service-role bypass
+does not supply missing table privileges or authorize extra operations.
+
+### Secrets and database guardrails
+
+`SOCLAAS_API_KEY` and `SUPABASE_SECRET_KEY` are server-only. Never add a
+`NEXT_PUBLIC_` prefix to them or commit environment files. Errors expose safe
+categories without raw provider/database diagnostics or private model material.
+
+Humans and deployment workflows apply migrations to hosted projects. Agents use
+local Supabase only. The denied-command lists live in
+[Codex guardrails](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/rules/guardrails.rules) and
+[Claude settings](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.claude/settings.json), covering commands such as `link`,
+`db pull`, `migration repair` and `inspect` through plain, bunx and npx invocations.
+
+CLI 3.0.0 defaults `db reset`, `db lint` and `gen types --lang typescript` to
+local targets. These forms, local stack commands, `migration new`,
+`functions new/serve`, and all repository `db:*` scripts remain available,
+including `bun run db:reset` and `bun run db:types`.
+
+Codex matches literal prefixes: for reset, lint and type generation, hosted-target
+flags are blocked only as separate tokens immediately after the subcommand.
+Attached values (`gen types --remote=project`), flags after other arguments
+(`gen types --lang typescript --remote`), and global options before blocked
+prefixes remain gaps. Claude also matches trailing and attached hosted flags.
+These limits never authorize hosted access.
+
+## How to test
+
+`bun run test` runs unit tests without Supabase. Start the local stack before
+running the separate integration suite:
+
+```bash
+bun run db:start
+bun run test:integration
+```
+
+Integration tests run in Vitest's Node environment against real local Auth,
+API and Postgres services. Auth tests cover provisioning, immutable roles,
+profile visibility and refresh behavior. Domain tests use `pg` to check RLS,
+grants, constraints and grading-run history with scoped and trusted SQL
+sessions. They roll back seeded domain rows before deleting fixture accounts.
+To run the domain tests alone, use `bun run test:integration tests/integration/domain`.
+Tests capture local CLI configuration in memory. Auth tests inject throttling
+failures to stay within the provider limit. CI's `integration` job runs these
+suites and is required by the `verify` job. Local `bun run verify` runs lint,
+typecheck, unit tests and build. CI uses Node 24 from `.node-version`.
+
+For browser account journeys, install Chromium once, then run:
+
+```bash
+bunx playwright install chromium
+bun run test:e2e
+```
+
+Keep local Supabase running. Playwright's
+[launcher](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/tests/e2e/account/server.ts)
+gets local settings from the CLI, builds the app and starts an isolated
+production server on port 3100. It does not reuse a development server. The
+suite covers all roles, refresh, cookie deletion, denied access and account
+switching through back, prefetch and reload. Fixtures create and clean up local
+accounts; one worker and zero retries bound Auth traffic. CI's separate `e2e`
+job runs this suite against local Auth and is also required by `verify`.
+
+Local `auth.rate_limit.sign_in_sign_ups` is 300 per five minutes per IP to
+support repeated integration/fix-round runs. This does not change hosted
+limits. After changing local Auth configuration, run `bun run db:stop` then
+`bun run db:start` to reload it; stopping preserves local data.
+
+Hosted settings require a human dashboard review under
+[SYS-15.2–15.4](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-15--configuration-and-hosted-auth),
+including the authoritative
+[SYS-05 credential policy](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md#sys-05--credentials-and-session-lifecycle).
+Local configuration and passing integration tests do not verify hosted settings.
+
 ### Fake provider and targeted tests
 
 The fake provider has deterministic success, malformed-output and failure scenarios.
@@ -1644,7 +1428,45 @@ settings. See the
 for contract signatures; its failing-first execution notes describe the G2 baseline.
 Full verify, production build and browser journeys remain human G4 checks.
 
-## Deployment
+Feature-specific commands appear with each feature above. The main checks are:
+
+| Command | Purpose |
+| --- | --- |
+| `bun run lint` | ESLint. |
+| `bun run typecheck` | Generate Next.js route types, then run `tsc --noEmit`. |
+| `bun run test` | Vitest unit tests without Supabase. |
+| `bun run test:integration` | Local Auth, HTTP and Postgres integration checks. |
+| `bun run test:e2e` | All role browser journeys on local Supabase and a production build. |
+| `bun run build` | Production build. |
+| `bun run verify` | Local lint, typecheck, unit tests and build; CI also requires integration and e2e jobs. |
+
+Agents use targeted checks. Full verify and e2e are human G4 checks; a command
+listed in this guide is not evidence that it has been run for a particular PR.
+
+## Deployment and environments
+
+### Hosted projects
+
+The `CS3227-2610-MP4-LGTM` organisation has two projects, both in Singapore
+(Southeast Asia):
+
+| Project | Purpose |
+| --- | --- |
+| `lgtm-dev` | Shared development and preview deployments |
+| `lgtm-prod` | Production |
+
+Both have the Data API enabled, **do not** expose new tables automatically,
+and enable row level security (RLS) on new tables automatically. The local
+stack mirrors these settings (`auto_expose_new_tables = false` in
+`supabase/config.toml`, plus the `enable_rls_on_new_tables` migration), so a
+migration that works locally behaves the same way on hosted projects.
+
+The [production app](https://lgtm-cs3227.vercel.app) uses `lgtm-prod`;
+the [development app](https://lgtm-cs3227-dev.vercel.app) uses `lgtm-dev`.
+Both hosted environments use the live SoC provider. Local and CI use fake AI.
+See [Provider configuration](#provider-configuration).
+
+### Application deployments
 
 | Workflow | Trigger | GitHub environment | What it deploys |
 | --- | --- | --- | --- |
@@ -1668,14 +1490,13 @@ Configure these secrets and variables in each GitHub environment:
 In Vercel, configure `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `APP_ENV` and
 `AI_PROVIDER` for Preview and Production. Preview uses `lgtm-dev` and
-Production uses `lgtm-prod`. Keep `SUPABASE_SECRET_KEY` server-only. For live
-SoCLaaS, follow [Provider configuration](#provider-configuration) and set the
-server-only `SOCLAAS_API_KEY` in the Vercel environment that opts in.
+Production uses `lgtm-prod`. Keep `SUPABASE_SECRET_KEY` server-only. Follow [Provider configuration](#provider-configuration) and set the separate
+server-only `SOCLAAS_API_KEY` for each hosted Vercel environment.
 
 `vercel.json` selects Singapore (`sin1`), disables Git-triggered deployments,
 and configures no cron jobs.
 
-## Product site (GitHub Pages)
+### Product site (GitHub Pages)
 
 The product page is `docs/index.md`. Keep its description of LGTM and its
 three roles aligned with [the README](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/README.md), which is the source of
@@ -1688,10 +1509,10 @@ pinned to `v0.12.0` with `color_scheme: dark` in `docs/_config.yml`. The
 relative Markdown links to their published URLs. No Gemfile, application
 build or custom deployment workflow is needed.
 
-Both `docs/index.md` and `docs/DeveloperGuide.md` are rendered on the site.
+The product page, User Guide and Developer Guide are rendered on the site.
 Their front matter sets `layout: default`, a navigation `title` and
-`nav_order` (1 for the product page, 2 for the guide). Use relative Markdown
-links within `docs/` so they work on GitHub and the site; use full GitHub URLs
+`nav_order` (1 for the product page, 2 for the User Guide, 3 for this guide).
+Use relative Markdown links within `docs/` so they work on GitHub and the site; use full GitHub URLs
 for links to repository files outside `docs/`.
 
 {% raw %}
@@ -1700,7 +1521,7 @@ In any `docs/` Markdown, wrap literal `{{` and `{%` in
 otherwise Jekyll may silently drop them or break the build.
 {% endraw %}
 
-After the site files reach `master`, a repository maintainer must configure
+The repository publishing settings are configured by a maintainer under
 **Settings → Pages → Build and deployment**:
 
 1. Set **Source** to **Deploy from a branch**.
@@ -1709,78 +1530,53 @@ After the site files reach `master`, a repository maintainer must configure
 
 These are repository settings, not options in `_config.yml`. See GitHub's
 [publishing source documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
-Subsequent changes to `docs/` on `master` trigger GitHub's Pages build. Use the
-published URL shown in Pages settings. Do not add a `.nojekyll` file, which
+Subsequent changes to `docs/` on `master` trigger GitHub's Pages build. The product site is
+[LGTM on GitHub Pages](https://cs3227-2610-mp4-lgtm.github.io/CS3227-2610-MP4/). Do not add a `.nojekyll` file, which
 would bypass Jekyll processing.
 
-## Agent workflow
+## Design considerations
 
-Start feature work in a human-led main session with
-[sdd-orchestrate](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.agents/skills/sdd-orchestrate/SKILL.md).
-The orchestrator routes work, checks gates itself and maintains the
-feature handoff. Specialists return evidence, never write their own handoffs
-or spawn more agents. Humans own commits and PRs.
-After each stage, the orchestrator records the agent's rollout token total
-in the handoff (or `unavailable`), and at close-out records its own session total.
-Use [`--per-turn`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/rollout-summary.ts#L6) for per-response token records.
+- Immutable revisions preserve what a Learner reviewed even while Authors edit
+  or republish. Working drafts and the live revision are separate; the
+  [data model](#data-model) describes the retained records.
+- Deterministic matching/scoring and progress rules surround model assessment.
+  The AI supplies bounded explanation/fix credit and prose, while the server
+  computes grades. TA overrides preserve the original assessment and audit
+  history. See [grading and progress rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#5-deterministic-grading-moderation-and-progress).
+- User-scoped clients and narrow RPCs combine record-level access with atomic
+  writes. Mutation journals recover lost acknowledgements; row versions and
+  locks serialize conflicting edits, lifecycle changes and attempts.
+- AI calls capture authorized evidence before dispatch and revalidate before
+  publication. No database transaction holds a connection over inference;
+  accounting fails closed and retains conservative usage on uncertainty.
+- Shared inert code rendering supports all roles without executing submissions.
+  Hints avoid revealing private locations/answers, and recommendations use
+  explicit rules rather than additional model calls.
 
-Low handles copy, styling, docs and comments without behaviour changes in the
-main session, with targeted checks and no handoff. Standard handles behaviour
-on existing foundations: main-session tests and implementation, independent
-reviewer, then main-session docs. High uses every specialist for auth/session/
-role work, database enforcement, privileged access, AI/SEC work or CI/deploy
-changes. The planner proposes routes; actual changes can escalate them. Only
-a human can downgrade with a recorded reason.
+## Requirements appendix
 
-The loop is Ready → Plan → Tests → Implement → Review → Docs → Close-out.
-G1 approves and commits the plan in the feature's own PR; G2 reads and commits
-failing acceptance tests before code; G3 resolves blocked work or decisions;
-G4 runs `bun run verify` and `bun run test:e2e`, commits, logs and opens the PR.
-Existing tasks skip planning. Agent checks use targeted tests, lint and
-typecheck because full verify is unreliable inside agent sessions. Tests use
-local Supabase and the fake LLM provider. The orchestration skill owns the
-gate messages, fix-round limit and human commit sequence.
+Read only the headings and story files named by the task. The
+[specification index](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/README.md) explains ownership and identifiers.
 
-This uses **orchestrator–subagent** coordination for the loop and
-**generator–verifier** coordination between implementer and reviewer. On high,
-correctness and security reviewers run in parallel and write nothing. Each
-gets fresh context without the parent conversation or handoff, so findings
-come from code and tests. Before and after reviews, the orchestrator compares
-tree hashes: a sandbox label or a report cannot establish that no files
-changed. A mismatch invalidates the review and stops for a human.
-
-Every task's Reads names exact spec headings and story files. Each specialist
-skill adds its fixed reading set; agents extract those sections rather than
-loading complete specs. Spawn prompts place fixed instructions before task
-values to share a cacheable prefix. Sessions without spawning follow the same
-stages themselves and request fresh review sessions at the review gate.
-
-All roles use `gpt-6.1-sol` for consistent model behaviour. Effort follows the
-work: planner high for decomposition and capacity decisions; test-writer,
-implementer and reviewer medium for bounded code work; security-reviewer high
-for access and adversarial paths; docs low for checked guide updates. Low-route
-main-session work uses low effort.
-
-Reviewer files request a read-only sandbox, but the workflow does not rely
-on it. The orchestrator's before/after tree comparison is the check.
-
-| File or location | Purpose |
+| Source | Requirements owned |
 | --- | --- |
-| [workflow/PLAN.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/PLAN.md) | Task format, capacity and role groups; planner adds approved feature tasks. |
-| [workflow/templates/handoff.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/templates/handoff.md) | Template for each feature's coordination record. |
-| `workflow/handoffs/<issue>-<slug>.md` | Per-feature route, stages, decisions, findings and next action; created when a standard/high feature starts. |
-| [workflow/templates/story-spec.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/templates/story-spec.md) | Shared format for story specifications. |
-| [workflow/specs/README.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/README.md) | Spec boundaries, identifiers and reading conventions. |
-| [workflow/specs/PRODUCT-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/PRODUCT-SPEC.md) | Product decisions, story allocation and UI vocabulary. |
-| [workflow/specs/TECHNICAL-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md) | SYS requirements. |
-| [workflow/specs/INTEGRATION-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md) | Data, contracts, fixtures and integration verification. |
-| [workflow/specs/AI-SECURITY-SPEC.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md) | SEC requirements and attack surfaces. |
-| [workflow/specs/stories/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/stories/) | One file per story, using the shared story template. |
-| [workflow/scripts/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/scripts/) | `rollout-summary.ts`: session-log metadata CLI; `rollout-files.ts`: safe rollout discovery and selection; `rollout-parser.ts`: projects records into approved summary fields. |
-| [.codex/config.toml](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/config.toml), [.codex/agents/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.codex/agents) | Agent limits and the six specialist definitions. |
-| [.agents/skills/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.agents/skills) | Canonical procedures: sdd-orchestrate, sdd-plan, sdd-test, sdd-implement, sdd-review, sdd-security-review and sdd-docs. |
-| [.claude/skills/](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/.claude/skills) | Matching pointer stubs for Claude Code. |
+| [PRODUCT-SPEC](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/PRODUCT-SPEC.md) | Product decisions, role/story index and navigation vocabulary. |
+| [TECHNICAL-SPEC](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/TECHNICAL-SPEC.md) | SYS architecture, identity, sessions, record access and environments. |
+| [INTEGRATION-SPEC](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md) | Domain/lifecycle, §3 HTTP contracts, §4 LLM contracts, deterministic grading and seed fixtures. |
+| [AI-SECURITY-SPEC](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/AI-SECURITY-SPEC.md) | SEC validation, injection defenses, bounded requests and private material. |
 
-## Acknowledgements
+Individual account, Learner, Author and TA story files are linked and described
+in the [workflow file reference](#specifications).
 
-The application was scaffolded with `create-next-app`.
+## Known limitations
+
+End-user limitations have one home in the
+[User Guide](UserGuide.md#known-limitations): fixed roles, no account settings
+or recovery features, memory-only review drafts, two attempts and one source
+file in the supported languages.
+
+The app does not show remaining AI quota. Shared environment budgets can block
+an individual account; see [usage limits](UserGuide.md#usage-limits).
+Local tests do not verify hosted dashboard settings. Literal-prefix Codex
+hosted-command guardrails have the gaps documented under
+[Security](#secrets-and-database-guardrails); those gaps grant no hosted access.
