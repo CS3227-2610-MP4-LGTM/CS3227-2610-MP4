@@ -565,6 +565,56 @@ describe("staleness and replay", () => {
     return running;
   }
 
+  /**
+   * Author A's client, except that reads of `proposal_decisions` without an `order` alternate between the
+   * database's row order and its reverse, as Postgres may return unordered rows in any order between reads.
+   */
+  function unorderedDecisionsClient() {
+    const client = f.actors.authorA.client;
+    let unorderedReads = 0;
+    type Builder = PromiseLike<{ data: unknown }> & Record<string | symbol, unknown>;
+    const wrap = (builder: Builder, state: { ordered: boolean }): Builder => new Proxy(builder, {
+      get(target, property) {
+        if (property === "then") {
+          return (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => target.then(result => {
+            if (state.ordered || !Array.isArray(result.data)) return result;
+            unorderedReads += 1;
+            return unorderedReads % 2 === 0 ? { ...result, data: [...result.data].reverse() } : result;
+          }).then(resolve, reject);
+        }
+        const value = Reflect.get(target, property, target);
+        if (typeof value !== "function") return value;
+        return (...args: unknown[]) => {
+          if (property === "order") state.ordered = true;
+          const next = value.apply(target, args);
+          return next && typeof next === "object" && "then" in next ? wrap(next as Builder, state) : next;
+        };
+      },
+    });
+    return new Proxy(client, {
+      get(target, property) {
+        const value = Reflect.get(target, property, target);
+        if (property !== "from") return typeof value === "function" ? value.bind(target) : value;
+        return (table: string) => {
+          const builder = target.from(table) as unknown as Builder;
+          return table === "proposal_decisions" ? wrap(builder, { ordered: false }) : builder;
+        };
+      },
+    }) as SupabaseClient;
+  }
+
+  it("AUT-05.2 AUT-05.6 an unchanged draft publishes even when the database returns its decisions in another order", async () => {
+    const current = await publishable("rejected", "approved");
+    const { POST } = await route(publishes, publishPath);
+    mocks.user = unorderedDecisionsClient();
+    const reply = await respond(await POST(new Request(`${base}/${current.id}/publish`, {
+      method: "POST", headers: headers({ "Idempotency-Key": randomUUID() }), body: JSON.stringify(versionsOf(current)),
+    }), { params: Promise.resolve({ id: current.id }) }));
+    const publication = ok<AuthorPublication>(reply);
+    expect(hintRequests()).toHaveLength(1);
+    expect(await stored(current.id)).toMatchObject({ status: "published", published_revision_id: publication.revisionId, revisions: 1 });
+  });
+
   it("AUT-05.6 SEC-02.2 a draft edit during hint generation prevents the stale candidate publishing", async () => {
     const current = await publishable();
     let edited!: AuthorDraft;
