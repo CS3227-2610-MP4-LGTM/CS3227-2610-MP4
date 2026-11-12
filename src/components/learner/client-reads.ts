@@ -5,6 +5,8 @@ export async function readChallengeData<T>(suffix: string): Promise<{ status: "o
   try {
     const response = await fetch(`/api/v1/challenges${suffix}`, { cache: "no-store" });
     if (response.ok) return { status: "ok", data: (await response.json()).data };
+    // Consume error bodies before classifying; a failed read must preserve the status.
+    await response.text().catch(() => "");
     const access = response.headers.get(accountAccessHeader);
     switch (response.status) {
       case 400: return { status: "invalid" };
