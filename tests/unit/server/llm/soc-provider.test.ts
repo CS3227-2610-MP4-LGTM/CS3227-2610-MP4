@@ -377,7 +377,8 @@ it.each([false, true])("SEC-04.3 pins summary categories and evidence for altern
 });
 
 const semanticGuidance: Record<Operation, RegExp[]> = {
-  inject_flaws: [/categor/i, /overlap|disjoint/i, /exact.*(line|source)|(line|source).*exact/i, /explanation and fix.*one or two sentences/i],
+  inject_flaws: [/categor/i, /overlap|disjoint/i, /exact.*(line|source)|(line|source).*exact/i, /explanation and fix.*one or two sentences/i,
+    /each flaw.*smallest range.*shows it/i, /usually one to three lines/i, /never a whole function/i],
   generate_hints: [/plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
   assess_review: [/independent/i, /matched flaw/i, /plain text/i, /location/i, /snippet/i, /fix/i, /rationale/i],
   summarize_learner: [/evidence/i, /supplied|provided|input/i],
@@ -389,6 +390,9 @@ it.each(operations)("INTEGRATION-SPEC §4 sends semantic guidance for %s and lea
   const system = wire(transport).body.messages[0].content;
   expect(system).not.toMatch(/\bschemaVersion\b|\badditionalProperties\b/);
   for (const guidance of semanticGuidance[operation]) expect(system).toMatch(guidance);
+  if (operation === "inject_flaws") {
+    expect(system).toContain("Decide every flaw before writing any field. Each explanation states only the planted flaw and its consequence in one or two sentences; never deliberate, weigh alternatives or think aloud in any field.");
+  }
   expect(system).toMatch(/untrusted|never.*instructions/i);
   expect(system).not.toContain(workingCode);
   expect(system).not.toContain(retainedFlaws[0].explanation);
