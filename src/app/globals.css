@@ -168,3 +168,33 @@ input[aria-invalid], select[aria-invalid] { border-color: #a12d26; }
 @media (max-width: 640px) {
   .workspace-main dl { grid-template-columns: minmax(0, 35%) minmax(0, 1fr); column-gap: .75rem; }
 }
+
+/* Compact filter controls and grouped TA evidence. */
+.challenge-filters { align-items: end; }
+.challenge-filters > label { margin-bottom: 0; }
+.challenge-filters > .button { align-self: end; justify-self: start; }
+.filter-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .65rem; }
+.filter-actions .button { flex: 0 0 auto; }
+.workspace-main .ta-evidence-list { display: grid; gap: 1rem; list-style: none; padding: 0; }
+.workspace-main .ta-evidence-list > li + li { margin-block-start: 0; }
+.ta-evidence-card { min-width: 0; padding: 1.25rem; border: 1px solid var(--border); border-radius: .75rem; background: white; }
+.ta-evidence-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .65rem 1rem; }
+.workspace-main .ta-evidence-header h3 { display: flex; align-items: center; gap: .65rem; margin: 0; }
+.ta-flaw-number { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem; border-radius: .4rem; background: #e8eee7; color: var(--accent); font-size: .85rem; }
+.ta-match-status { padding: .2rem .6rem; border: 1px solid var(--border); border-radius: 1rem; background: #f6f7f4; font-size: .75rem; font-weight: 600; }
+.ta-evidence-id { color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+.ta-line-reference { color: var(--muted); font-size: .85rem; }
+.ta-snippet-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; margin-block: 1rem; }
+.ta-snippet { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; background: #f6f7f4; }
+.workspace-main .ta-snippet h4 { margin: 0; padding: .5rem .75rem; border-bottom: 1px solid var(--border); font-size: .8rem; color: var(--muted); }
+.ta-evidence .ta-snippet pre { margin: 0; padding: .85rem; font-size: .85rem; line-height: 1.6; white-space: pre; overflow-wrap: normal; }
+.ta-flaw-assessment { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: 1rem; }
+.workspace-main .ta-flaw-assessment h4 { margin: 0 0 .75rem; }
+.workspace-main .ta-flaw-assessment dl { margin: 0; }
+.ta-comment-body { white-space: pre-wrap; }
+@media (max-width: 640px) {
+  .ta-evidence-card { padding: 1rem; }
+  .ta-snippet-pair { grid-template-columns: minmax(0, 1fr); }
+  .workspace-main .ta-evidence-card dl { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+  .workspace-main .ta-evidence-card dd + dt { margin-top: .65rem; }
+}
