@@ -14,6 +14,7 @@ import { retryUnavailableReason } from "@/lib/learner/feedback";
 import { gradingFailureMessages, gradingFailureSchema, gradingIntentHeader, gradingViewSchema, type LearnerGrade } from "@/lib/learner/grading";
 import { historyHref, submissionFailureSchema, submissionSuccessSchema, workspaceAccountHeader, type SubmissionView } from "@/lib/learner/submissions";
 import { ChallengeMetadata } from "./challenge-metadata";
+import { ReportControl, ReportNotice, useCommentReports } from "./comment-report";
 import { MissedCriteria } from "./missed-criteria";
 import { ModerationHistory } from "./moderation-history";
 
@@ -88,6 +89,12 @@ export function GradingResult({
     }
     setSubmission(undefined);
   }
+
+  const reports = useCommentReports({
+    submission, refresh: readStatus,
+    onFlag: flag => setSubmission(view => view && { ...view, flags: [...view.flags.filter(item => item.id !== flag.id), flag] }),
+    onDenied: response => { ++readVersion.current; setReading(false); deny(response); },
+  });
 
   function handleAccountFailure(response: Response) {
     if (!accessFailure(response)) return false;
@@ -296,6 +303,7 @@ export function GradingResult({
     <CodeDiffView code={challenge.code} />
     <section aria-labelledby="submitted-comments">
       <h2 id="submitted-comments">{original ? "Earned credit" : "Submitted comments"}</h2>
+      {original && <ReportNotice reports={reports} />}
       {comments.length ? <ol>
         {comments.map(comment => {
           const assessed = commentResults.get(comment.id);
@@ -314,6 +322,7 @@ export function GradingResult({
                 <dt>Fix credit</dt><dd>{assessed.fixCredit ?? "—"}</dd>
                 {assessed.matched && <><dt>Feedback</dt><dd className="review-comment-body">{assessed.feedback}</dd></>}
               </dl>
+              <ReportControl comment={comment} reports={reports} />
             </>}
           </li>;
         })}

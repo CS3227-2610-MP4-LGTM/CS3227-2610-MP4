@@ -51,6 +51,12 @@ from **Original assessment**; stored overrides and moderation corrections are
 read-only and label the actor as **TA action**. See
 [Learner review history](docs/DeveloperGuide.md#learner-review-history).
 
+On a completed result, choose **Report unmatched comment** on an unmatched comment
+you believe found a real issue missing from the answer key, give a **Reason** and
+choose **Send report**. The comment then shows **Reported** and a TA can review the
+flag; reporting never changes your grade. See
+[Learner unmatched-comment reports](docs/DeveloperGuide.md#learner-unmatched-comment-reports).
+
 [Learner challenge catalogue and PR view](docs/DeveloperGuide.md#learner-challenge-catalogue-and-pr-view) ·
 [Learner first review](docs/DeveloperGuide.md#learner-first-review) ·
 [Learner grading](docs/DeveloperGuide.md#learner-grading) ·
@@ -83,7 +89,7 @@ fake provider. See [Provider configuration](docs/DeveloperGuide.md#provider-conf
 | `bun run typecheck` | Generates route types, then `tsc --noEmit` |
 | `bun run test` | Unit tests (Vitest); no Supabase required |
 | `bun run test:integration` | Auth/API/Postgres integration tests against local Supabase |
-| `bun run test:e2e` | Playwright account, Learner browse, review, grading, hints, challenge retry and review history, TA inspection, moderation and learner-progress journeys against local Supabase and a production build (port 3100) |
+| `bun run test:e2e` | Playwright account, Learner browse, review, grading, hints, challenge retry, review history and unmatched-comment reports, TA inspection, moderation and learner-progress journeys against local Supabase and a production build (port 3100) |
 | `bun run build` | Production build |
 | `bun run verify` | Lint, typecheck, test and build; CI runs this on every PR |
 | `bun run db:start` / `db:stop` / `db:reset` / `db:types` | Local Supabase; see the [Developer Guide](docs/DeveloperGuide.md#scripts) |

@@ -1173,6 +1173,211 @@ the limits above remain unchanged.
   remains blocked and is not a completion dependency or implementation scope.
 - **Status:** done
 
+### T-15: Report an unmatched comment
+
+- **Issue:** #52 (reports split; approved base `upstream/master`
+  `bf16af71e6e82680d15527bc5ad605653dc1fbd9`, which includes T-14 via #99).
+- **Covers:** LRN-07.1–07.7. Apply SYS-02.1–02.2, SYS-04.1–04.2,
+  SYS-08.1–08.3, SYS-09, SYS-10.1–10.2 and SYS-10.4, SYS-11,
+  SYS-12.1, SYS-12.4 (historical access) and SYS-12.5 (forged flags),
+  SYS-14.2–14.3, SYS-17 and SYS-19.1–19.4 to the report write and its
+  result controls. Preserve ACC-03.2–03.9, LRN-05.1–05.7, LRN-06.1–06.7
+  and LRN-08.1–08.8.
+- **Route:** high (new user-callable write function, private ledger, grants
+  and migration).
+- **Reads:** `workflow/specs/stories/LRN-07-report-an-unmatched-comment.md`
+  (all); `workflow/specs/stories/LRN-08-review-history.md` Acceptance
+  criteria (LRN-08.4–08.8: moderation display the new flag appears in);
+  `workflow/specs/stories/LRN-05-grade-a-submitted-review.md` Acceptance
+  criteria (LRN-05.1–05.7: result and comment statuses);
+  `workflow/specs/stories/LRN-06-feedback-hints-and-retry.md` Acceptance
+  criteria (LRN-06.1–06.7: preserved learning sections and Retry challenge);
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  Acceptance criteria (ACC-03.2–03.9: access recovery).
+  `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Learner, §4 Product
+  decisions → Grading and Moderation flags, §5 Navigation and UI (Learner),
+  and §7 Non-functional requirements.
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted
+  code, SYS-04 — Shared building blocks, SYS-08 — Authorization at the data
+  boundary, SYS-09 — Authentication with Cache Components, SYS-10 — Database
+  enforcement and privileged access, SYS-11 — Authentication and authorization
+  failures, SYS-12 — Record access and audit (submissions, original AI grades,
+  learner-raised review flags and TA flag resolutions), SYS-14 — Delivery and
+  database evolution (SYS-14.2–14.3), SYS-17 — Simple, accessible UI, and
+  SYS-19 — Test strategy. `workflow/specs/INTEGRATION-SPEC.md` §1 Scope and
+  contract conventions → Shared values and bounds (report reason `Text(2000)`);
+  §2 Domain model and publication lifecycle (submission, grading and
+  moderation records); §3 API contracts → Transport, concurrency and errors,
+  Shared response types (`Comment`, `SubmissionView`, `LearnerGrade`,
+  `FlagView`) and Learner surface (`POST /submissions/:id/reports` and
+  detail); §5 Deterministic grading, moderation and progress → Matching and
+  score (unmatched versus duplicate comments only) and Flags; §6 Shared
+  deterministic seed fixtures → C1: Checkout totals, Submissions and expected
+  outcomes and Derived fixture scenarios (unpublish/archive); §7 Integration
+  verification (access matrix and forged records). No AI operation or SEC
+  requirement is allocated: a Learner report is not an AI operation.
+- **Tests:** Unit/contracts in `tests/unit/learner/report-contract.test.ts`
+  (new) cover the strict `{ commentId, reason }` request (unknown, missing,
+  malformed and duplicate fields; trimmed `Text(2000)` counted in Unicode code
+  points, blank and over-bound reasons), the strict 201 `FlagView` envelope,
+  Origin, workspace account header and `Idempotency-Key` checks, unused query
+  parameters, body limit, and the mapping of every outcome to its HTTP status,
+  code and message, including definitive versus uncertain service failures.
+  Components in `tests/unit/learner/report-comment.test.tsx` (new) cover the
+  action only on unreported unmatched comments of completed grading (none on
+  matched, duplicate, pending, running or failed; independent per attempt),
+  “Reported” for an existing learner_report including resolved ones, the form
+  text and read-only evidence, validation messages with retained text and
+  focus, Cancel focus return, pending labels and disabled controls, success
+  notice and focus on “Reported”, the returned flag in “Moderation flags”,
+  duplicate rejection with result refresh, unknown outcome with same-key
+  replay through “Check report”, in-progress replay, definitive failure,
+  throttling, new-key resend after a recorded failure, ineligible/not-found
+  with “Back to result”, idempotency conflict with “Refresh result”, ACC-03
+  account outcomes without automatic replay, announcements and inert reasons.
+  Assert the original and effective grade displays, comment statuses and
+  T-13/T-14 sections are unchanged before and after a report.
+  Local Supabase in `tests/integration/domain/learner-reports.test.ts` (new)
+  exercises the POST route, the application function and direct user-scoped
+  RPC with two users per role and anonymous access. Verify 401/403/503
+  categories, explicit authenticated-only execute grant, no PUBLIC/anon/
+  service_role execution, no API-role access to the private ledger, no direct
+  insert on `review_flags`, and that forged learner, kind, source, grade or
+  fingerprint input cannot be supplied. Cover own completed first and second
+  attempts, historical submissions after unpublish and archive, and denial for
+  another Learner's submission, absent submissions, foreign or absent comment
+  IDs, matched and duplicate comments, and pending, running and failed grading.
+  Verify one flag per `(submission, comment)`: a fresh key on a reported pair
+  is rejected without a second flag, replays of the same key and payload return
+  the same flag (including after a TA resolution), a different payload under the
+  same key conflicts, recorded failures replay, a new key after a recorded
+  failure is evaluated afresh, and concurrent duplicates create exactly one
+  flag. Assert byte-identical grades, overrides, matching, comments, answer
+  key, grading runs and usage rows, and no admin or provider dispatch. Read the
+  created flag through `read_learner_submission` and the existing TA flag read.
+  Production-build Chromium in `tests/e2e/learner/reports.spec.ts` (new)
+  covers the keyboard report journey at phone and 320 CSS-pixel widths,
+  cancel, validation, success, “Moderation flags” display, reload keeping
+  “Reported”, a duplicate from a second tab, a second-attempt report, a
+  historical report after archive, and account switching/sign-out with no
+  automatic replay. Before any gate reports Chromium results, run
+  `bun run test:e2e tests/e2e/learner/reports.spec.ts --project chromium --repeat-each 3`.
+  Run as targeted regressions without edits:
+  `tests/unit/learner/grading-result.test.tsx`,
+  `tests/unit/learner/feedback-and-hints.test.tsx`,
+  `tests/unit/learner/retry-challenge.test.tsx`,
+  `tests/unit/learner/history-moderation.test.tsx`,
+  `tests/unit/learner/submission-contract.test.ts`,
+  `tests/unit/ta/moderation/queue.test.tsx`,
+  `tests/integration/domain/learner-history.test.ts`,
+  `tests/integration/domain/learner-submissions.test.ts`,
+  `tests/integration/ta/moderation/writes.test.ts`,
+  `tests/integration/ta/inspection/reads.test.ts`,
+  `tests/e2e/learner/grading.spec.ts`,
+  `tests/e2e/learner/feedback-and-retry-challenge.spec.ts` and
+  `tests/e2e/learner/history.spec.ts`. The orchestrator runs all
+  database-backed checks on local Supabase with the Node version from
+  `.node-version`; specialists report them unrun.
+- **Config paths:** `supabase/migrations/20261115120000_learner_reports.sql`
+  (new) and `src/lib/supabase/database.types.ts` (local generation with the
+  existing `db:types` script). New fixture helpers:
+  `tests/integration/domain/learner-reports-fixture.ts` (consumed by the new
+  integration and browser files) and `tests/unit/learner/report-fixture.ts`.
+  Reuse without edits `tests/integration/domain/learner-history-fixture.ts`,
+  `tests/integration/domain/learner-browse-fixture.ts`,
+  `tests/integration/domain/fixture.ts`, `tests/integration/auth/local.ts`,
+  `tests/integration/ta/inspection/fixture.ts`,
+  `tests/unit/learner/history-fixture.ts`,
+  `tests/unit/learner/grading-fixture.ts`, `tests/e2e/account/server.ts`,
+  `tests/e2e/account/fixtures.ts`, `package.json` (`db:types`,
+  `test:integration` and `test:e2e` scripts), `vitest.config.mts`,
+  `vitest.integration.config.mts`, `playwright.config.ts` and
+  `next.config.ts`. Other-role files reused without edits:
+  `src/app/ta/flags/page.tsx`, `src/components/ta/flag-queue.tsx`,
+  `src/components/ta/moderation-panel.tsx`, `src/lib/ta/moderation.ts`,
+  `src/server/ta/moderation-validation.ts`, `src/lib/ta/submissions.ts` and
+  `src/server/ta/submissions.ts`; `src/lib/moderation/flags.ts` is also
+  reused without edits. No seed, CI, workflow script or dependency changes.
+  Docs stage uses `README.md` and `docs/DeveloperGuide.md`.
+- **Constraints:** This task delivers all of LRN-07.1–07.7 in one run and
+  defers nothing. Keep T-13's result sections, “Retry challenge” and “Retry
+  grading”, and T-14's “Current grade”, “Override history” and “Moderation
+  flags” unchanged apart from rendering the newly returned flag through the
+  existing display. Change no TA code; the TA flags page already lists every
+  flag kind.
+
+  Add `POST /api/v1/submissions/:id/reports` backed by one user-callable
+  `public.create_learner_report(p_submission_id uuid, p_idempotency_key uuid,
+  p_payload jsonb)` with an explicit execute grant to authenticated only and
+  revocation from PUBLIC, anon and service_role. Use security definer with an
+  empty search_path and qualified identifiers. Learner reports are a
+  user-scoped write under SYS-12, not a SYS-10.3 admin use: no admin client,
+  no provider call, no usage reservation, no grading run and no grade,
+  override, matching, comment or answer-key change. Grant no table privileges;
+  `review_flags` keeps select-only access. Reuse the existing `review_flags`
+  check constraint and `review_flags_report_once` index unchanged.
+
+  At the route, reuse T-11's `submissionCaller`, `matchesRequestOrigin`,
+  `matchesWorkspaceAccount` and workspace account header, database-denial
+  recovery and safe error envelope. Validate the path ID, required
+  `Idempotency-Key` UUID, no query parameters and a strict Zod body
+  `{ commentId: UUID, reason: Text(2000) }` under a body limit that admits
+  every valid payload. The caller supplies no learner, kind, source or grade.
+  Validate the returned `FlagView` strictly before a 201 `{ data }`.
+
+  Add a private ledger keyed by actor, submission and idempotency key, with
+  RLS and no API-role grants, mirroring T-11's
+  `private.submission_create_requests`. Compute the SHA-256 fingerprint inside
+  the function from the canonical validated payload (lowercase comment UUID and
+  trimmed reason). Resolve an existing ledger entry before reevaluating
+  eligibility: replay recorded success as the same flag's current `FlagView`
+  and replay recorded definitive failures; a different fingerprint returns
+  `IDEMPOTENCY_CONFLICT`. Use T-11's transaction advisory lock pattern so a
+  concurrent duplicate returns in-progress. On a fresh key, require the
+  caller's own submission, a completed grading whose original grade lists the
+  comment in `unmatchedCommentIds` (never matched or duplicate), and no
+  existing learner_report for that pair. Publication state does not affect
+  eligibility, so both attempts and historical results after
+  unpublish/archive qualify. Create the flag and ledger outcome atomically.
+  Map outcomes to the §3 table: 400 `VALIDATION_ERROR` with reason field
+  errors; 401/403/503 per SYS-11; 404 `NOT_FOUND` for an absent submission
+  or a comment outside it; 409 `INVALID_STATE` for ineligible comments,
+  an already-reported pair and an in-progress replay, distinguished by stable
+  server messages as T-11 distinguishes its in-progress state. Define those
+  three messages once as shared constants in `src/lib/learner/` (as T-11's
+  `submissionErrorMessages`), used by both the route and the client; 409
+  `IDEMPOTENCY_CONFLICT`; 413 `PAYLOAD_TOO_LARGE`; 429 `RATE_LIMITED`; and
+  503 `SERVICE_UNAVAILABLE` split into definitive and uncertain outcomes by
+  T-11's rollback classification.
+
+  Compose the report control into the existing `GradingResult` comment list
+  for completed results, reading eligibility from the projected
+  `unmatchedCommentIds`, `duplicateCommentIds` and the submission's
+  learner_report flags. Implement LRN-07.2–07.7 copy, focus and announcement
+  rules exactly. Keep one in-memory request (key and payload) for “Check
+  report” replays; issue a new key only for a new explicit send after a
+  definitive failure; never resend automatically, including after sign-in.
+  Merge a successful `FlagView` into the displayed submission so “Moderation
+  flags” shows it without reload; refresh through the existing
+  `GET /api/v1/submissions/:id` read on duplicate rejection, “Back to result”
+  and “Refresh result”. Render reasons as inert text.
+
+  Add the new migration strictly after master's latest
+  `20261114130000_learner_history.sql` and open PR #98's
+  `20261114120000_author_lifecycle.sql`; never edit merged migrations.
+  Regenerate types locally and keep older deployments compatible. Recheck
+  master and PR #98 at every gate and at close-out; a migration-order or
+  `database.types.ts` collision requires a human decision before changing the
+  planned path. Read the installed Next.js guides for Route Handlers and
+  authentication with Cache Components before Next.js code. Add no
+  dependencies. Local/CI tests use the fake provider; Docs describes reports
+  while preserving the hosted SoC versus local/CI fake-provider distinction.
+- **Depends on:** T-14 (done) and T-13 (done), with T-12, T-11 and the
+  auth/data foundations inherited. Consume committed moderation readers only;
+  T-31 remains blocked and is not a completion dependency or implementation
+  scope. Seed resolutions directly in the local harness.
+- **Status:** done
+
 ## Author
 
 ### T-20: Create, configure, list and edit challenge drafts
