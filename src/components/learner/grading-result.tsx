@@ -15,6 +15,7 @@ import { gradingFailureMessages, gradingFailureSchema, gradingIntentHeader, grad
 import { historyHref, submissionFailureSchema, submissionSuccessSchema, workspaceAccountHeader, type SubmissionView } from "@/lib/learner/submissions";
 import { ChallengeMetadata } from "./challenge-metadata";
 import { MissedCriteria } from "./missed-criteria";
+import { ModerationHistory } from "./moderation-history";
 
 const gradeResponse = z.strictObject({ data: gradingViewSchema });
 const pollInterval = 1000;
@@ -55,6 +56,7 @@ export function GradingResult({
 }: GradingResultProps & {
   refreshRetryEligibility?: () => void;
 }) {
+  const resultHeading = useRef<HTMLHeadingElement>(null);
   const endpoint = `/api/v1/submissions/${encodeURIComponent(submissionId)}`;
   const [submission, setSubmission] = useState(initialSubmission);
   const [readError, setReadError] = useState<ReadError | undefined>(initialReadFailed ? "unavailable" : undefined);
@@ -214,6 +216,9 @@ export function GradingResult({
     };
   }, []);
 
+  const hasSubmission = Boolean(submission);
+  useEffect(() => { if (hasSubmission) resultHeading.current?.focus(); }, [hasSubmission]);
+
   const state = submission?.grading.state;
   useEffect(() => {
     if (reading || readError || uncertain || (state !== "pending" && state !== "running")) return;
@@ -262,7 +267,7 @@ export function GradingResult({
       <Link href={catalogueHref}>Browse challenges</Link>
     </nav>
     <header>
-      <h1>Review result</h1>
+      <h1 ref={resultHeading} tabIndex={-1}>Review result</h1>
       <h2>{challenge.title}</h2>
       <ChallengeMetadata challenge={challenge} />
       <p>Attempt {submission.attemptNumber}</p>
@@ -286,6 +291,7 @@ export function GradingResult({
         onClick={() => void postGrade({ key: crypto.randomUUID(), retry: true, accountId: submission.learner.id })}>
         {retrying ? "Retrying grading…" : "Retry grading"}
       </button>}
+    <ModerationHistory submission={submission} />
     {original && <OriginalAssessment grade={original} />}
     <CodeDiffView code={challenge.code} />
     <section aria-labelledby="submitted-comments">

@@ -1,0 +1,1 @@
+export const flagLabels: Record<string,string> = { near_pass_mark: "Score near the pass mark", grading_output_retried: "AI grading output needed a retry", assessment_disagreement: "Location match and AI assessment disagree", learner_report: "Learner reported an unmatched comment" };

@@ -8,7 +8,7 @@ Reads. This header allocates no tasks.
 
 ## Capacity
 
-At most 17 tasks total, with at most 5 in Foundations and 4 each in Learner,
+At most 19 tasks total, with at most 5 in Foundations, 6 in Learner and 4 each in
 Author and TA. A task covers at most 3 stories of one role, or one foundation area,
 and fits one implementer run. One task is one issue, one PR and one loop run.
 Done tasks still count. If a feature exceeds capacity, the planner stops and
@@ -999,6 +999,178 @@ the limits above remain unchanged.
   and keep the documented hosted SoC and local/CI fake-provider distinction.
 - **Depends on:** T-12 and T-11, with T-10 and the auth/data foundations
   through those tasks.
+- **Status:** done
+
+### T-14: Review history and retained moderation outcomes
+
+- **Issue:** #52 (history split; approved base `upstream/master`
+  `115d49c8767e0584b3da8474c7c045349e92441e`).
+- **Covers:** LRN-08.1–08.8. Apply SYS-02.1–02.2, SYS-04.1–04.2,
+  SYS-08.1–08.3, SYS-09, SYS-10.1–10.2 and SYS-10.4, SYS-11,
+  SYS-12.1, SYS-12.3 (read ordering/effective grade) and SYS-12.4 (retention),
+  SYS-14.2–14.3, SYS-17 and SYS-19.1–19.4 to these reads and screens.
+  Preserve ACC-03.2–03.9, LRN-05.1–05.7 and LRN-06.1–06.7.
+- **Route:** high (new caller-scoped database function, grants and migration).
+- **Reads:** `workflow/specs/stories/LRN-08-review-history.md` (all);
+  `workflow/specs/stories/ACC-03-role-based-landing-and-navigation.md`
+  Acceptance criteria (ACC-03.2–03.9: navigation, empty history and access
+  recovery); `workflow/specs/stories/LRN-05-grade-a-submitted-review.md`
+  Acceptance criteria (LRN-05.1–05.7: result, original assessment, observation,
+  Retry grading and recovery) and UI notes;
+  `workflow/specs/stories/LRN-06-feedback-hints-and-retry.md` Acceptance
+  criteria (LRN-06.1–06.7: preserve feedback, hints and Retry challenge) and
+  UI notes. `workflow/specs/PRODUCT-SPEC.md` §3 Story index → Learner,
+  §4 Product decisions → Hints and attempts, Grading and Moderation flags,
+  §5 Navigation and UI (Learner), and §7 Non-functional requirements.
+  `workflow/specs/TECHNICAL-SPEC.md` SYS-02 — Untrusted input and submitted
+  code, SYS-04 — Shared building blocks, SYS-08 — Authorization at the data
+  boundary, SYS-09 — Authentication with Cache Components, SYS-10 — Database
+  enforcement and privileged access, SYS-11 — Authentication and authorization
+  failures, SYS-12 — Record access and audit (own submissions, original grades,
+  overrides, flags, resolutions and retained Learner material), SYS-14 —
+  Delivery and database evolution (SYS-14.2–14.3), SYS-17 — Simple, accessible
+  UI, and SYS-19 — Test strategy. `workflow/specs/INTEGRATION-SPEC.md` §1
+  Scope and contract conventions → Shared values and bounds; §2 Domain model
+  and publication lifecycle (submission/grading/moderation records and
+  auditOrder), SYS-12 decision: immutable published revisions, and Code,
+  proposals and locations (Learner projection); §3 API contracts → Transport,
+  concurrency and errors, Shared response types (`SubmissionCard`,
+  `SubmissionView`, `GradingView`, `LearnerGrade`, `FlagView`) and Learner
+  surface (list and detail); §5 Deterministic grading, moderation and progress
+  → Matching and score (effective score/pass mark only) and Flags; §6 Shared
+  deterministic seed fixtures → C1: Checkout totals, C2: Safe quotient,
+  Submissions and expected outcomes and Derived fixture scenarios (history
+  and moderation); §7 Integration verification (access, retained projection
+  and Learner history). No new AI operation or SEC requirement is allocated.
+- **Tests:** Unit/contracts in `tests/unit/learner/history-contract.test.ts`
+  (new) cover strict `limit`, `cursor`, optional `challengeId`, duplicate and
+  unknown query fields, malformed/filter-mismatched cursors, exact bounded
+  `Page<SubmissionCard>` validation and failure mapping. Components in
+  `tests/unit/learner/history-list.test.tsx` (new) cover separate attempts,
+  every grading state, completed zero versus unavailable score, timezone,
+  counts/links, empty/loading/error/invalid states, same-page retry, disabled
+  pagination, URL restoration, stale-response suppression and focus/status
+  announcements. `tests/unit/learner/history-moderation.test.tsx` (new)
+  covers original versus current grades, shared pass mark/source labels,
+  noncompleted states, all four flag kinds, rule flags without invented
+  associations, learner-report comment/line, no-record messages, every
+  override/resolution and correction in auditOrder despite timestamp ties,
+  latest markers, full inert reasons and times. Assert “TA action” and no
+  actor IDs or identity columns in the rendered page, while contract tests
+  retain actorId in the DTO. Preserve the single original components,
+  credits/feedback and T-13 learning sections with and without overrides.
+  Local Supabase in `tests/integration/domain/learner-history.test.ts` (new)
+  exercises the GET, application reader and direct user-scoped RPC with two
+  users per role and anonymous access. Verify 401/403/400/503 categories,
+  forged caller/role input denial, self-only rows even with another user's
+  challengeId, explicit grants and private-helper denial, default/maximum
+  bounds, tie-safe pagination, filter binding, latest effective score and
+  open-only flag counts. Compare list/detail outcomes for pending, running,
+  failed and completed grading; test zero, overrides and timestamp ties.
+  Prove pinned titles/code/comments/original grades/hints and all moderation
+  survive republish, unpublish and archive; cross-owner detail stays forbidden
+  and absent detail stays not found. Assert exact Learner projections, no
+  private answers/real diff/email leakage, no admin/provider dispatch and no
+  writes or usage reservations from list/history reads. Seed stored flags,
+  resolutions and corrections directly in the local harness; no report API
+  or live moderation operation is needed for fixtures.
+  Production-build Chromium in `tests/e2e/learner/history.spec.ts` (new)
+  covers both attempts, pagination/back/reload, empty and read-recovery states,
+  result navigation, current/original distinction and every moderation kind,
+  retained result links after lifecycle changes, account switching/sign-out
+  and direct forbidden/missing access. Check keyboard focus, announcements
+  and readable 320 CSS-pixel layout without page-level overflow. Before any
+  gate reports Chromium results, run every new e2e file with `--repeat-each 3`:
+  `bun run test:e2e tests/e2e/learner/history.spec.ts --project chromium --repeat-each 3`.
+  Run existing `tests/unit/learner/grading-result.test.tsx`,
+  `tests/unit/learner/feedback-and-hints.test.tsx`,
+  `tests/unit/learner/retry-challenge.test.tsx`,
+  `tests/e2e/learner/grading.spec.ts`,
+  `tests/e2e/learner/feedback-and-retry-challenge.spec.ts`, and
+  `tests/integration/ta/inspection/reads.test.ts` as targeted regressions for
+  the touched result/shared label boundary. The orchestrator runs all
+  database-backed checks on local Supabase; specialists report them unrun.
+- **Config paths:** `supabase/migrations/20261114130000_learner_history.sql`
+  (new), `src/lib/supabase/database.types.ts` (local generation),
+  `src/lib/moderation/flags.ts` (new neutral shared labels), and
+  `src/lib/ta/moderation.ts` (only replace flagLabels with a one-line re-export).
+  New fixture helpers: `tests/integration/domain/learner-history-fixture.ts`
+  and `tests/unit/learner/history-fixture.ts`; new browser file consumes the
+  former. Reuse without edits `tests/integration/domain/learner-browse-fixture.ts`,
+  `tests/integration/domain/fixture.ts`, `tests/integration/auth/local.ts`,
+  `tests/unit/learner/grading-fixture.ts`, `tests/unit/server/llm/fixtures.ts`,
+  `tests/e2e/account/server.ts`, `package.json` (`db:types`, `test:integration`
+  and `test:e2e` scripts), `vitest.config.mts`,
+  `vitest.integration.config.mts`, `playwright.config.ts` and `next.config.ts`.
+  Reuse without edits `src/lib/ta/submissions.ts`,
+  `src/server/ta/submissions.ts`, `src/components/ta/flag-queue.tsx` and
+  `src/components/ta/moderation-panel.tsx`; existing TA consumers keep the
+  compatibility re-export. No other-role implementation, seed, CI or workflow
+  script changes. Docs stage uses `README.md` and `docs/DeveloperGuide.md`.
+- **Constraints:** This task delivers all eight LRN-08 criteria in one run.
+  The approved split supersedes T-13's prospective allocation of reports to
+  T-14: LRN-07 is future T-15; add no report creation control, route or database
+  function, and no reports documentation. Future T-23 Author maintenance is
+  separate. Display every returned flag kind, including learner_report,
+  regardless of which feature originally created it.
+
+  Add `GET /api/v1/submissions` returning the exact caller-scoped
+  `Page<SubmissionCard>` envelope and a new `list_learner_submissions` RPC
+  backed by a private SubmissionCard projection helper. Keep
+  `list_ta_submissions` unchanged. Validate all query and response fields with
+  Zod; accept only optional `limit`, `cursor` and `challengeId` per §3.
+  Use default 20, integer 1–50, opaque cursors of at most 512 characters
+  bound to filters/order, submittedAt descending then submission ID ascending,
+  and at most limit-plus-one candidate rows before card projection. Reject
+  malformed, duplicate, unknown and filter-mismatched inputs. Derive the
+  Learner from verified identity/stored role, never a caller-supplied learnerId.
+  Check access at every route/read and inside the RPC; no TA/admin client or
+  broadened table grants. Grant only the public list RPC to authenticated;
+  revoke PUBLIC/anon/service_role execution, and grant no API roles access
+  to the private helper. Use empty search_path and qualified identifiers for
+  security-definer functions. Keep the list read-only and bounded.
+
+  The private helper projects only §3's card fields from the pinned revision,
+  own profile, canonical grading state, latest server-audit-ordered effective
+  score and unresolved flag count. Reuse existing grade/moderation projection
+  rules so list and result agree; never select a best attempt or maximum score,
+  invent zero for unavailable grades or expose private evidence. A broken read
+  fails as unavailable, not empty history or a missing score. History list
+  reads start no grading. Existing LRN-05 result entry retains its grading
+  behavior. Preserve optional challengeId through cursor navigation/retry;
+  “First page” removes the cursor, with invalid-page recovery to
+  `/learner/history` as LRN-08.3 specifies.
+
+  Replace the history landing placeholder and compose read-only “Current
+  grade”, “Override history” and “Moderation flags” into the existing result
+  flow. Reuse `read_learner_submission` / `readLearnerSubmission` and
+  `readLearnerResultWithRetry`; preserve their signatures, strict
+  `SubmissionView`, `GradingView` and `FlagView`, including actorId.
+  Show generic “TA action” without rendering identities; do not strip DTO
+  fields to enforce presentation. Keep all audit entries oldest to newest by
+  auditOrder, the current/latest markers, full inert reasons and explicit
+  date/time/timezone. A resolution alone changes no grade. Retain all flags,
+  original assessment, earned credit, missed criteria, hints, next actions,
+  Retry challenge eligibility and Retry grading recovery exactly as T-12/T-13
+  define them. Do not add TA editing controls or a new review through history.
+  Move only flagLabels into `src/lib/moderation/flags.ts`; preserve the TA
+  import surface with the one-line re-export in `src/lib/ta/moderation.ts`.
+
+  Add the new migration strictly after latest approved-base migration
+  `20261113120000_author_publication.sql`; never edit merged migrations.
+  Regenerate public/private types locally and preserve old-deployment
+  compatibility. At close-out recheck upstream migration ordering and issue
+  #84's unpublish/archive work (#84 was an open issue, not a PR); collisions
+  require a human decision before changing the planned migration path.
+  Test lifecycle retention with fixture transitions without implementing
+  Author maintenance. Read the installed Next.js guides for Route Handlers,
+  authentication with Cache Components and URL/search-parameter navigation
+  before Next.js code. Add no dependencies. Local/CI tests use the fake
+  provider; Docs describes history while preserving the hosted SoC versus
+  local/CI fake-provider distinction.
+- **Depends on:** T-13 (done), with T-12, T-11 and auth/data foundations
+  inherited. Consume committed moderation readers/contracts only; T-31
+  remains blocked and is not a completion dependency or implementation scope.
 - **Status:** done
 
 ## Author

@@ -533,6 +533,73 @@ retry submission and history restoration before and after unpublication.
 bun run test:e2e tests/e2e/learner/feedback-and-retry-challenge.spec.ts tests/e2e/learner/retry-history-restore.spec.ts --project chromium
 ```
 
+### Learner review history
+
+Open **Review history** at `/learner/history` to revisit your own submissions.
+Each attempt appears separately with **Challenge**, **Attempt**, **Submitted**
+(in UTC), **Grading status**, **Effective score** and **Open flags**. The title
+and **View result** open that attempt's result. Completed attempts show their
+effective score out of 100; **Pending**, **Running** and **Failed** attempts
+show **Not available**. An empty list shows “No reviews yet.” and keeps catalogue
+navigation available.
+
+**Next page** puts the cursor in the URL; **First page** removes it. Back and
+reload restore the requested page. Reads announce **Loading review history…**
+and disable pagination. “We couldn't load review history. Try again.” offers
+**Try again** for the same URL. “This history page isn't valid.” offers
+**First page** back to `/learner/history`. Pagination focuses the history heading;
+opening a result focuses **Review result**.
+
+On a completed result, **Current grade** shows the effective score and pass
+status, labelled **Original AI assessment** or **TA override**. **Original
+assessment**, its component credits, feedback, hints and retry eligibility remain
+separate. Noncompleted results show “Current grade not available.”
+
+**Override history** and each flag's **Resolution history** retain every stored
+entry and correction in server audit order, oldest first, including tied times.
+Entries show **TA action**, UTC recorded time and the full plain-text reason;
+Learner screens omit actor identities. **Current override** and **Latest
+resolution** identify the latest entries. **Moderation flags** keeps both open
+and resolved flags visible. With no entries, the page says **No TA overrides.**,
+**No moderation flags.** or **Awaiting TA review.**, as appropriate. Resolving a
+flag does not itself change the grade. These sections are read-only.
+
+Newer publication, unpublication and archiving preserve own history entries
+and result links, including the submitted title, pinned Learner-visible code,
+comments, original assessment, permitted hints and moderation. Access remains
+scoped to the signed-in Learner; retry availability follows the existing
+[challenge retry rules](#retry-a-challenge).
+
+#### History read contracts
+
+`GET /api/v1/submissions` returns `Page<SubmissionCard>` with private, no-store
+responses. It accepts optional `limit` (default 20, range 1–50), `cursor` (at most
+512 characters) and `challengeId`; unknown, duplicate, malformed and
+filter-mismatched query values are rejected. Ordering is submission time
+descending, then submission ID ascending. Cursors retain the filter and order.
+See the [Learner surface contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface).
+
+The authenticated-only `list_learner_submissions` RPC derives ownership from
+verified identity and stored role. It bounds candidates before invoking the
+private `learner_submission_card` helper, which reuses the canonical result
+projection. List reads start no grading and write no grades or usage records.
+Result and moderation DTOs retain their existing signatures. Shared flag labels
+live in `src/lib/moderation/flags.ts`; `src/lib/ta/moderation.ts` re-exports them
+for existing TA consumers. See the [history migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261114130000_learner_history.sql).
+
+#### History checks
+
+Run unit checks without Supabase. Run the database files separately to avoid
+shared-fixture overlap, then run the history browser file three times against a
+production build with local Supabase and the fake provider:
+
+```bash
+bun run test tests/unit/learner/history-contract.test.ts tests/unit/learner/history-list.test.tsx tests/unit/learner/history-moderation.test.tsx
+bun run test:integration tests/integration/domain/learner-history.test.ts
+bun run test:integration tests/integration/ta/inspection/reads.test.ts
+bun run test:e2e tests/e2e/learner/history.spec.ts --project chromium --repeat-each 3
+```
+
 ### TA submission inspection
 
 Sign in as a TA to open **Submissions** at `/ta/submissions`. Each attempt has
@@ -818,8 +885,9 @@ Both forms require a reason of 1–2,000 Unicode code points after trimming.
 TA's ID, time, score and reason and marks **Current override**. To correct a
 score, append another override. Overrides do not change matching, per-flaw
 credit, hints, category evidence or flags, and do not rerun AI grading.
-The form identifies override reasons as learner-visible; learner result/history
-screens remain outside this implementation.
+The form identifies override reasons as learner-visible. [Learner review history](#learner-review-history)
+shows stored reasons and corrections with the generic **TA action** label, while
+TA screens retain their existing actor identity display.
 
 Saving disables the forms and **Refresh submission**. A successful save announces
 “Resolution saved.” or “Grade override saved.”. Validation focuses the first

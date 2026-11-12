@@ -15,6 +15,10 @@ const exact = (text: string) => screen.getByText(text, { exact: true });
 const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
 const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
 const endpoint = `/api/v1/submissions/${submissionId}`;
+async function originalScore() {
+  const heading = await screen.findByRole("heading", { name: "Original assessment" });
+  return within(heading.closest("section")!).getByText("25 / 100", { exact: true });
+}
 
 function view(grading: unknown) {
   return { ...submission, grading } as SubmissionView;
@@ -58,11 +62,13 @@ it.each([
 
 it("LRN-05.4 LRN-05.5 renders the original score, components, classifications and credits once", () => {
   withGrade({ ...completed, effective: { score: 70, passed: true, source: "ta" } });
-  expect(screen.queryByText("70 / 100", { exact: true })).toBeNull();
+  const originalSection = screen.getByRole("heading", { name: "Original assessment" }).closest("section")!;
+  const originalAssessment = within(originalSection);
+  expect(originalAssessment.queryByText("70 / 100", { exact: true })).toBeNull();
   for (const text of [
     "Original assessment", "Score", "25 / 100", "Pass mark", "Not passed",
     "Component points", "Identification", "Explanation", "Actionable fix", "Matched flaws", "Missed flaws",
-  ]) expect(screen.getAllByText(text, { exact: true })).toHaveLength(1);
+  ]) expect(originalAssessment.getAllByText(text, { exact: true })).toHaveLength(1);
   const statuses = [
     { name: "Matched", note: null },
     { name: "Duplicate", note: "Another comment already counts for this flaw." },
@@ -115,7 +121,7 @@ it("LRN-05.3 starts one explicit retry for the same submission and disables it u
   expect(fetch).toHaveBeenCalledOnce();
   expect(fetch).toHaveBeenCalledWith(endpoint + "/grade", expect.objectContaining({ method: "POST" }));
   response.resolve(Response.json({ data: completed }));
-  expect(await screen.findByText("25 / 100", { exact: true })).toBeDefined();
+  expect(await originalScore()).toBeDefined();
 });
 
 it("LRN-05.7 shows a loading status then retries a failed initial read for the same submission", async () => {
@@ -128,7 +134,7 @@ it("LRN-05.7 shows a loading status then retries a failed initial read for the s
   expect(await screen.findByText("We couldn't load this review result. Try again.", { exact: true })).toBeDefined();
   fetch.mockResolvedValueOnce(Response.json({ data: view(completed) }));
   fireEvent.click(button("Try again"));
-  expect(await screen.findByText("25 / 100", { exact: true })).toBeDefined();
+  expect(await originalScore()).toBeDefined();
   expect(fetch.mock.calls.map(([input, init]) => [input, init?.method ?? "GET"])).toEqual([
     [endpoint, "GET"], [endpoint, "GET"],
   ]);
@@ -152,7 +158,7 @@ it("LRN-05.3 LRN-05.7 observes the same submission after an uncertain retry resp
   withGrade(failed("AI_UNAVAILABLE"));
   fireEvent.click(button("Retry grading"));
 
-  expect(await screen.findByText("25 / 100", { exact: true })).toBeDefined();
+  expect(await originalScore()).toBeDefined();
   expect(fetch.mock.calls.map(([input, init]) => [input, init?.method ?? "GET"])).toEqual([
     [endpoint + "/grade", "POST"], [endpoint, "GET"],
   ]);

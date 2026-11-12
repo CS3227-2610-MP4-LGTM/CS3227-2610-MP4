@@ -1,5 +1,3 @@
-/// <reference types="vite/client" />
-
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { renderToReadableStream } from "react-dom/server";
@@ -24,9 +22,7 @@ vi.mock("@/server/auth/account", () => ({
 vi.mock("@/server/auth/actions", () => ({ signOutAction: async () => {} }));
 vi.mock("@/server/supabase/server", () => ({ createClient: async () => ({ rpc: retryServer.rpc }) }));
 
-const retryPages = import.meta.glob<{ default: ComponentType<{ params: Promise<{ id: string }> }> }>(
-  "/src/app/learner/history/*/retry/page.tsx",
-);
+const retryPageModule = "../../../src/app/learner/history/[id]/retry/page.tsx";
 
 const secondId = uid(502);
 const resultHref = `/learner/history/${submissionId}`;
@@ -207,10 +203,9 @@ it.each([
 });
 
 it("LRN-06.7 SYS-09 shows Loading retry while the direct page waits for its authorized source", async () => {
-  const path = "/src/app/learner/history/[id]/retry/page.tsx";
-  const load = retryPages[path];
-  if (!load) throw new Error(`Missing T-13 retry page: ${path}`);
-  const { default: RetryPage } = await load();
+  const { default: RetryPage } = await import(retryPageModule) as {
+    default: ComponentType<{ params: Promise<{ id: string }> }>;
+  };
   const source = Promise.withResolvers<{ data: { status: "not_found" }; error: null }>();
   retryServer.rpc.mockImplementation(name => {
     if (name === "read_learner_submission") return source.promise;
