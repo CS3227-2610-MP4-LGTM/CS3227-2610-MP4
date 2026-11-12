@@ -600,6 +600,81 @@ bun run test:integration tests/integration/ta/inspection/reads.test.ts
 bun run test:e2e tests/e2e/learner/history.spec.ts --project chromium --repeat-each 3
 ```
 
+### Learner unmatched-comment reports
+
+On your own completed result, each unmatched comment under **Earned credit**
+that has no report yet offers **Report unmatched comment**. Matched and
+duplicate comments, and pending, running or failed results, offer no report.
+Each attempt follows these rules on its own, including historical results after
+a challenge is unpublished or archived.
+
+The form repeats the selected comment and line read-only, explains “Reporting
+does not change your grade.”, and asks for a required **Reason** of up to 2,000
+characters after trimming. **Send report** checks it first: “Enter a reason.”
+or “Reason is too long.” keeps your text and focuses **Reason**. **Cancel**
+closes the form without a report. While sending, the button reads **Sending
+report…** and editing and **Cancel** are disabled. Success shows “Report sent. A
+TA can review this comment.”, replaces the action with **Reported** and adds the
+flag under **Moderation flags**. A comment can be reported once; **Reported**
+stays after reload and after a TA resolves the flag, with no edit or withdrawal.
+Reporting never changes either grade, matching, comments or the answer key, and
+starts no regrading. Only one report can be in progress at a time.
+
+If the outcome is unknown, the page shows “We couldn't confirm your report. Check
+report again.” and keeps the reason read-only. **Check report** (**Checking
+report…** while pending) resends the same request; “Your report is still being
+confirmed. Check again.” keeps that check. Other outcomes:
+
+| Message | Next step |
+| --- | --- |
+| “We couldn't send your report. Try again.” or “Too many requests. Try again later.” | The form returns with your reason; **Send report** sends a new request. |
+| “This comment has already been reported.” | The result refreshes to show **Reported** and the existing flag. |
+| “This comment isn't available for reporting.” | **Back to result** reloads the result without reporting. |
+| “We couldn't reuse this report request. Refresh the result to check your reports.” | **Refresh result** reloads; nothing is sent automatically. |
+
+Sign-in and access failures use the [account recovery](#account-pages) flow; no
+report is replayed after signing in again. TAs filter these flags with **Learner
+reported an unmatched comment** in [Flagged submissions](#ta-flag-resolution-and-grade-overrides).
+
+#### Report contract and persistence
+
+`POST /api/v1/submissions/:id/reports` follows the
+[Learner surface contract](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#learner-surface), the
+[transport rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#transport-concurrency-and-errors) and the
+[flag rules](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/specs/INTEGRATION-SPEC.md#flags). It reuses the request checks from
+[Learner first review](#learner-first-review) (same-origin `Origin`, workspace
+account header and `Idempotency-Key`) and accepts bodies up to 64 KiB. The three
+409 `INVALID_STATE` outcomes (ineligible comment, existing report and in-progress
+replay) are told apart by the shared messages in
+[`src/lib/learner/reports.ts`](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/src/lib/learner/reports.ts).
+A 503 says “We couldn't send your report. Try again.” when the write is known to
+have rolled back, and “We couldn't confirm your report. Check report again.” when
+it may have committed or the acknowledgement does not match the request.
+
+The [report migration](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/supabase/migrations/20261115120000_learner_reports.sql)
+adds `public.create_learner_report`, a security-definer function with an empty
+`search_path` that only `authenticated` may execute. It derives ownership from
+the verified identity and stored Learner role, requires the original grade to
+list the comment as unmatched and inserts one `learner_report` flag per
+submission and comment. Direct flag writes stay denied, and reports
+never use the admin client or the LLM provider. The private
+`learner_report_requests` ledger (RLS on, no API-role access) records outcomes
+on owned submissions by caller, submission and key: replaying a recorded success returns the flag's
+current `FlagView`, even if resolved, and reusing a key with a different payload
+conflicts. Concurrent reports of one comment serialise on a lock, so exactly
+one flag is created.
+
+#### Report checks
+
+Run unit checks without Supabase, the database file against local Supabase, then
+the browser file three times against a production build with the fake provider:
+
+```bash
+bun run test tests/unit/learner/report-contract.test.ts tests/unit/learner/report-comment.test.tsx
+bun run test:integration tests/integration/domain/learner-reports.test.ts
+bun run test:e2e tests/e2e/learner/reports.spec.ts --project chromium --repeat-each 3
+```
+
 ### TA submission inspection
 
 Sign in as a TA to open **Submissions** at `/ta/submissions`. Each attempt has
