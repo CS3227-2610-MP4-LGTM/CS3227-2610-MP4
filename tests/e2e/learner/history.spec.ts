@@ -75,7 +75,7 @@ test("LRN-08.4 LRN-08.5 LRN-08.6 LRN-08.7 distinguishes original/current and ret
   await expect(page.getByText("Latest resolution", { exact: true })).toHaveCount(1);
   await expect(page.getByText(history.reason, { exact: true }).first()).toBeVisible();
   await expect(page.locator('img[src*="attacker.example.test"], script[src*="attacker.example.test"]')).toHaveCount(0);
-  const content = await page.locator("main").innerText();
+  const content = await page.getByRole("main").innerText();
   for (const actor of [history.actors.taA, history.actors.taB]) { expect(content).not.toContain(actor.id); expect(content).not.toContain(actor.email); }
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /override|resolve|report/i })).toHaveCount(0);
@@ -128,7 +128,7 @@ test("LRN-08.8 SYS-12.4 retains result links, pinned source, original grade and 
     await expect(page.getByText("Current override", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /Show hint.*Edge case|Edge case.*Show hint/i }).click();
     await expect(page.getByText("Consider the smallest possible basket.", { exact: true })).toBeVisible();
-    const text = await page.locator("main").innerText();
+    const text = await page.getByRole("main").innerText();
     expect(text).not.toContain("Multiply price by one minus fraction.");
     await expect(page.getByRole("link", { name: "Retry challenge", exact: true })).toHaveCount(0);
   }
