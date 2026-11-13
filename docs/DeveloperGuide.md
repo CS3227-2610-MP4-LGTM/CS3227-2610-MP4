@@ -274,6 +274,7 @@ pages. Their retained decisions and checks explain the work they accompanied.
 | [handoffs/81-author-drafts.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/81-author-drafts.md) | Coordination evidence and decisions for 81 — author-drafts. |
 | [handoffs/82-author-proposals.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/82-author-proposals.md) | Coordination evidence and decisions for 82 — author-proposals. |
 | [handoffs/83-author-publication.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/83-author-publication.md) | Coordination evidence and decisions for 83 — author-publication. |
+| [handoffs/84-author-lifecycle.md](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/blob/master/workflow/handoffs/84-author-lifecycle.md) | Coordination evidence and decisions for 84 — author-lifecycle. |
 
 #### Scripts and fixtures
 
