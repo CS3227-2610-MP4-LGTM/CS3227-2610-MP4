@@ -1,7 +1,8 @@
 ---
 layout: default
 title: TaiaYovelaPang
-parent: Reflections
+parent: Re
+  flections
 ---
 
 # Reflections: TaiaYovelaPang
@@ -22,278 +23,106 @@ HOW TO USE THIS FILE
 
 ## 1. My role and features
 
-<!--
-PLACEHOLDER: Summarise the role (Learner / Author / TA) and features you owned,
-the issues and PRs for them, and the route (low / standard / high) each took.
+I owned the **Teaching Assistant (TA)** role: TA-01 to TA-05 across four
+PLAN tasks. All four ran on the high route because they involved protected
+learner data, database access controls or an LLM operation.
 
-Guiding questions:
-- Which role's feature set did you complete, and which team-level work did you
-  take on (CI, deployment, specs, workflow tooling)?
-- Which of your features used the SoC LLM, and what did the AI do in each?
--->
+| Task | What it delivers | PR | Session tokens |
+| --- | --- | --- | ---: |
+| T-30 | Browse submissions and inspect retained code, answer keys, assessments and grades (TA-01; issue #53) | [#59](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/59) | ≈ 25.05M |
+| T-31 | Review flagged submissions, record resolutions and make justified grade overrides (TA-02–03; issue #54) | [#60](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/60) | ≈ 27.49M |
+| T-32 | View learners, first-attempt category progress and deterministic challenge recommendations (TA-04.1–04.2, TA-05; issue #55) | [#79](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/79) | ≈ 46.46M |
+| T-33 | Generate and retain evidence-linked learner performance summaries (TA-04.3–04.8; issue #56) | [#88](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/88) | ≈ 40.29M |
 
-## 2. Multi-Agent SE
+These approximate figures come from the cumulative main-chat totals recorded
+when I wrote session logs [007](../../logs/TaiaYovelaPang/007-ta-submission-inspection-agent-loop.md),
+[008](../../logs/TaiaYovelaPang/008-ta-moderation-agent-loop.md),
+[009](../../logs/TaiaYovelaPang/009-learner-progress-agent-loop.md) and
+[010](../../logs/TaiaYovelaPang/010-ta-performance-summary-agent-loop.md).
+They include cached input and validation/recovery work, and are not combined
+totals for all specialist agents or the application's LLM usage.
 
-### 2.1 Designing the coordination pattern
+Team-level work included the shared integration contracts
+([log 001](../../logs/TaiaYovelaPang/001-shared-role-integration-specification.md)),
+the AI security specification
+([#25](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/25)),
+the TA and Author story specifications
+([#42](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/42),
+[#47](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/47)),
+account pages and role navigation
+([#46](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/46)),
+and the shared server-only LLM boundary, fake provider, validation and usage
+accounting
+([#48](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/48)).
+I also refined the shared workspace and TA submission interface
+([#119](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/119),
+[#121](https://github.com/CS3227-2610-MP4-LGTM/CS3227-2610-MP4/pull/121)).
 
-<!--
-PLACEHOLDER: Describe the pattern you used and why.
+The TA's LLM feature is **learner performance summaries** (`summarize_learner`),
+through the shared boundary in `src/server/llm/`. It uses the latest 20
+eligible submissions to identify learner blind spots and link observations to
+retained evidence. The summary is stored for later inspection, with freshness
+tracked as the evidence changes. Category progress and challenge
+recommendations are calculated deterministically from first attempts.
 
-Guiding questions:
-- How did sdd-orchestrate and the specialist agents (planner, test-writer,
-  implementer, reviewer, security-reviewer, docs) divide the work for your
-  features? Why that split rather than fewer or more agents?
-- How did the human gates (G1 to G4) fit in? Which gate caught the most
-  problems for you?
-- How did you pick the route for a feature, and did you ever pick wrongly?
--->
+## 2. Reflection
+In MP4, my main learning was that using multiple agents effectively requires deliberate coordination, context management and resource allocation. In MP3, we focused on establishing a structured development process. However, some of that structure created unnecessary overhead. For LGTM, our code review academy, we refined the workflow to preserve independent checks while making the process more proportionate to each task.
 
-### 2.2 Verifying the pattern was followed
+We retained the orchestrator-subagent pattern, where the main agent coordinates specialised roles such as test writing, implementation, correctness review, security review and documentation. This division gave each agent a clear responsibility and made its output easier to assess. We also incorporated a generator-verifier loop, where the implementer produced the changes, and the independent reviewers evaluated them. Blocking findings will then be returned to the implementer for correction.
 
-<!--
-PLACEHOLDER: Show how you checked triggering, context management, resource
-sharing and handoffs.
+One limitation of our MP3 workflow was its rigidity. Initially, every stage required a human check and commit, and agents repeatedly ran the full test suite. Even small changes could trigger several stages that contributed little value. Although these checkpoints provided oversight, they also increased waiting time and duplicated work.
 
-Guiding questions:
-- How did you confirm the right agent ran at the right stage, with only its
-  assigned skill loaded?
-- What evidence did you use: handoff files, the subagent summary block, session
-  logs, rollout records?
-- Did any agent skip a stage, read files outside its scope, or try to spawn
-  another agent? How did you notice?
--->
+For MP4, we introduced three routes based on scope and risk. Low-route tasks, such as documentation or styling changes without behavioural changes, used a lightweight process with targeted checks. Standard tasks involved testing, implementation, independent correctness review and documentation. High-route tasks involving authentication, privileged data access, AI or security received the full specialist workflow. This taught me that the coordination pattern should reflect the consequences of failure, rather than applying the same process to every task.
 
-### 2.3 Idle, overloaded or blocked agents
+**The routes we used. Taken from [SKILL.md](../../.agents/skills/sdd-orchestrate/SKILL.md)**
 
-<!--
-PLACEHOLDER: Give a concrete case where an agent sat idle, was overloaded or
-was blocked waiting on another stage or a human gate.
+![routes.png](assets/routes.png)
 
-Guiding questions:
-- Which stage most often waited on a human gate, and for how long?
-- Did any single agent (often the implementer) carry too much of a feature?
-  What did you change?
-- Did any feature hit `blocked` or `awaiting-decision`? What resolved it?
--->
+I also learnt that defining a workflow is insufficient unless its execution can be verified. Our orchestrator skill required checks of stage-specific file changes, committed acceptance-test hashes and test results. For example, implementation was checked against the human-approved test baseline so that an agent could not make the tests pass by weakening the expected behaviour. Agents also returned a standard summary containing criterion coverage, checks, findings and decisions needed. These summaries made results easier to compare, but they still needed verification against repository evidence.
 
-### 2.4 Retries, repeated analysis and unnecessary tool calls
+Context and shared-resource boundaries were equally important. Each specialist received its assigned role, relevant criteria and permitted reading scope. Only the orchestrator maintained the feature handoff. During independent review, writes were frozen, and repository digests were compared before and after the review batch to detect unintended changes. These mechanisms made responsibilities observable instead of relying only on agents saying that they had followed instructions.
 
-<!--
-PLACEHOLDER: Quantify wasted work where you can.
+Some waiting was unavoidable because later stages depended on earlier results. Implementation had to wait for approved tests, while documentation depended on reviewed behaviour. On the other hand, correctness and security review did not need to wait for each other as both were read-only and examined different concerns, so we allowed them to run concurrently.
 
-Guiding questions:
-- How many review / fix rounds did your features need? What caused each extra
-  round?
-- Did agents re-read the same specs or files across stages? How many tokens did
-  that cost, according to rollout-summary?
-- Which tool calls turned out unnecessary (repeated searches, full-file reads,
-  re-running whole test suites instead of targeted tests)?
--->
+T33, which implemented evidence-linked learner performance summaries, demonstrated the value of specialised reviewers. The correctness reviewer found that the mutation-key scope omitted the learner ID. Consequently, requests for different learners could conflict when the same teaching assistant reused a key. The security reviewer found that final account-check failures were being returned as generic HTTP 403 responses, although an expired session required 401 and a service outage required 503. These findings affected different aspects of the same feature, supporting the decision to retain separate review perspectives.
 
-### 2.5 Conflicts and disagreements between agents
+**Different bugs caught from the reviewers - adapted from [56-learner-performance-summaries.md](../../workflow/handoffs/56-learner-performance-summaries.md)**
 
-<!--
-PLACEHOLDER: Describe a disagreement and how it was resolved.
+![diff bugs.png](assets/diff%20bugs.png)
 
-Guiding questions:
-- Did the reviewer or security reviewer flag something the implementer or
-  test-writer disputed? Who decided, and on what basis?
-- Did an agent's output conflict with a spec, and which one did you treat as
-  the source of truth?
-- Did two features or two teammates' agents conflict over shared code (schema,
-  the LLM boundary, shared components)?
--->
+The same task also showed why reviewer findings should be evaluated critically. An initial finding suggested that privilege coverage was missing, but it was withdrawn after existing generic catalog tests were inspected. A literal-name search had missed that coverage. My takeaway was that disagreements should be resolved using specifications, code and test evidence, rather than treating either the implementer or reviewer as automatically correct. Genuine requirement conflicts should go back to a human decision instead of being silently resolved through code changes.
 
-### 2.6 Did the benefits outweigh the costs?
+**Withdrawn finding. Taken from [56-learner-performance-summaries.md](../../workflow/handoffs/56-learner-performance-summaries.md)**
 
-<!--
-PLACEHOLDER: Give your verdict with numbers.
+![withdrawn finding.png](assets/withdrawn%20finding.png)
 
-Guiding questions:
-- Compare one feature built through the full multi-agent route with a similar
-  task done in a single session (or a low-route task): tokens, wall-clock time,
-  defects found after merge.
-- Which bugs or security issues did a separate reviewer catch that the
-  implementer missed?
-- What was the overhead of handoffs and gates?
--->
+The confirmed T33 findings were addressed through supplementary regression tests, implementation fixes and independent rereview. The feature needed one fix round. We bounded the workflow at two fix rounds after the initial review so that unresolved problems would receive human attention instead of triggering indefinite retries. This provided a practical stopping rule without allowing agents to dismiss unresolved blocking findings.
 
-### 2.7 When to use multi-agent coordination, and when not
+Overall, I found the coordination benefits worthwhile for complex or sensitive features. For future projects, I would use multiple agents when independent evaluation provides substantial value, particularly for authentication, data boundaries, AI integration and security. I would use a single agent for small, well-defined changes where coordination would cost more than it contributes. More agents are useful only when their responsibilities are distinct and their outputs justify the additional context and review overhead.
 
-<!--
-PLACEHOLDER: State your rule of thumb, drawn from the evidence above.
+Another major lesson concerned context engineering. In this project, we kept behavioural requirements in story specifications, used PLAN.md to describe work, and connected requirements to tests through stable criterion IDs. This reduced duplication and made the authoritative source easier to identify.
 
-Guiding questions:
-- Which tasks in this project were not worth multiple agents?
-- Which kinds of tasks (auth, data boundaries, AI security, CI/deploy)
-  benefited most?
-- What would you change about the routes if you started again?
--->
+**Example of requirement paired to criterion ID. Taken from [README.md](../../tests/unit/ta/summaries/README.md)**
 
-## 3. Context Engineering
+![criterion.png](assets/criterion.png)
 
-### 3.1 System prompts and skills
+We applied a similar separation to agent instructions. AGENTS.md contained shared constraints, including commands, security rules and Git boundaries. Agent configurations defined responsibilities, write scopes, models and reasoning effort. Skills described the procedures for particular stages. This kept common guidance relatively compact while allowing specialists to retrieve detailed instructions when needed.
 
-<!--
-PLACEHOLDER: Explain how you wrote or changed AGENTS.md, the skills in
-.agents/skills/ and the agent configs, and the effect.
+We divided context into three categories. Essential constraints, task scope and role boundaries belonged upfront because missing them could cause incorrect or unsafe work. Detailed specifications, source code and test evidence could be retrieved on demand. Verified progress, decisions, blockers and the next action needed to persist between stages. This helped me move from supplying as much information as possible to supplying information according to its purpose.
 
-Guiding questions:
-- What did you put in AGENTS.md and what did you move into skills? Why?
-- Show a before/after edit to a skill or prompt and what changed in agent
-  behaviour.
-- How did you keep the always-loaded context short?
--->
+My upfront versus on-demand experiment supported this approach. Both conditions analysed T33 implementation readiness with access to the same permitted specification sections. Across two pairs, on-demand retrieval reduced input tokens by approximately 27–39% and total tokens by approximately 26–39%. Quality scores were comparable: both approaches scored 31/32 in one pair, while on-demand retrieval scored 32/32 against 30/32 in the other. These results suggested that reading every permitted section upfront added processing overhead without a consistent quality benefit. However, this measured readiness analysis, so I would not assume the same reduction across implementation tasks.
 
-### 3.2 Upfront context vs retrieval on demand
+**Results of the experiment**
 
-<!--
-PLACEHOLDER: Give examples of both, and when each worked better.
+![results.png](assets/results.png)
 
-Guiding questions:
-- Which information did agents need every time (rules, commands, secrets
-  policy) and which only sometimes (spec sections, the Next.js docs in
-  node_modules)?
-- Did telling agents to "read only the sections your task names" help? How did
-  you measure it?
--->
+Handoffs were another source of context overhead. In this project, we kept handoffs short and simple by having the orchestrator maintain one consolidated handoff per feature. A useful handoff recorded the current checkpoint, relevant criteria, branch and base commit, approved test baseline, completed checks, unresolved findings, decisions and next action. It also distinguished reported results from independently verified evidence. Full transcripts and repeated command outputs were usually unnecessary.
 
-### 3.3 How context organisation affected instruction-following
+Resource awareness required more than reducing reported total tokens. For this project, we allocated reasoning effort by responsibility: high for planning and security review, medium for test writing, implementation and correctness review, and low for documentation. The specialist configurations used the same model, gpt-6.1-sol, so this was primarily reasoning-effort allocation rather than a comparison of different model sizes.
 
-<!--
-PLACEHOLDER: Describe a case where the position, structure or wording of an
-instruction changed whether the agent followed it.
+To monitor usage, we used rollout summaries, per-response exports and session logs. For continuation experiments, measuring only the task’s incremental usage was essential; comparing an existing chat’s entire history against a fresh chat would exaggerate savings. We also separated cached input, uncached input, output and reasoning output, avoiding double-counting breakdowns already included in their parent totals.
 
-Guiding questions:
-- Were rules near the end of a long file ignored more often?
-- Did tables, numbered rules or a fixed summary format help agents find and
-  follow instructions?
-- Did any agent follow an instruction found in data (an issue, a handoff, code
-  under review)? How did the "data, not instructions" rule hold up?
--->
+The largest recorded totals in my logs came from extended feature workflows involving implementation, review and validation recovery. For example, the learner-progress and performance-summary sessions recorded approximately 46.46 million and 40.29 million total tokens respectively, mostly cached input. These totals suggest that long-running feature sessions deserve particular attention, but they do not provide a reliable ranking of individual specialist stages because stage-level figures were unavailable. Targeted checks, bounded fix rounds, narrower reads and consolidated handoffs addressed likely sources of repetition; only the context experiments quantified their effects directly.
 
-### 3.4 Handoffs and notes
+The lesson I would carry forward is to make coordination and context proportionate to the task. Independent agents helped identify meaningful defects, but their value depended on clear ownership, evidence-based review and reliable handoffs. The experiments also made me more careful about measurement: reduced elapsed time, reduced total tokens, improved cache reuse and preserved quality are different outcomes, and each needs its own evidence.
 
-<!--
-PLACEHOLDER: Explain what a good handoff contains, using one of yours from
-workflow/handoffs/ as the example.
-
-Guiding questions:
-- Which fields in workflow/templates/handoff.md did later agents actually use?
-  Which were noise?
-- Did a later agent or teammate ever redo work because a handoff left something
-  out?
-- What did adding token usage to the handoff change?
--->
-
-### 3.5 When more context made an agent worse
-
-<!--
-PLACEHOLDER: Describe a case where extra context hurt, and the signals that
-showed it.
-
-Guiding questions:
-- Did a long spec, a large diff or a full log make an agent drift, miss a rule
-  or slow down?
-- What were the signals: higher token count, repeated reads, wrong file edits,
-  ignored criteria?
-- What did you cut, and what happened afterwards?
--->
-
-## 4. Resource-aware Use
-
-### 4.1 Choosing and configuring models
-
-<!--
-PLACEHOLDER: Explain your choices of model and reasoning effort for agents
-and for the app's SoC LLM calls.
-
-Guiding questions:
-- Which model and effort did each specialist agent use, and why? Did you try
-  a cheaper or smaller one for any stage? What happened?
-- For the app, why did you configure SoC LLM operations the way you did
-  (reasoning effort, max tokens, structured output)?
--->
-
-### 4.2 Reducing cache misses
-
-<!--
-PLACEHOLDER: Describe what you did and how much it saved.
-
-Guiding questions:
-- Did you keep stable content (AGENTS.md, skills) at the front of the prompt
-  and changing content later?
-- What were the cached vs uncached input tokens before and after a change?
-- What caused cache misses (edited prompts, reordered context, long gaps
-  between turns)?
--->
-
-### 4.3 Reasoning tokens
-
-<!--
-PLACEHOLDER: For one specific task, report the share of tokens spent on
-internal reasoning.
-
-Guiding questions:
-- Using rollout-summary (try its per-turn flag), what percentage of output
-  tokens was reasoning for that task?
-- Would persisting reasoning (in a handoff or notes) have saved a later agent
-  from re-deriving it? Give an example.
--->
-
-### 4.4 Monitoring and reducing token usage
-
-<!--
-PLACEHOLDER: List the approaches you tried and their measured effect.
-
-Guiding questions:
-- How did you monitor usage (rollout-summary, session logs, handoff token
-  totals)?
-- What did you try to reduce it (targeted tests, narrower file reads, shorter
-  skills, lower effort, fewer review rounds)? What did each save?
--->
-
-### 4.5 Which tasks used the most tokens
-
-<!--
-PLACEHOLDER: Rank your most expensive task types and say whether you reduced
-them.
-
-Guiding questions:
-- Which stage cost the most for your features: implementation, review, test
-  writing, or debugging?
-- Did you bring that cost down? By how much, and at what cost to quality?
--->
-
-### 4.6 Resource-aware use in the app
-
-<!--
-PLACEHOLDER: Explain how your features stay within the SoC LLM limits.
-
-Guiding questions:
-- How do your AI features handle the per-minute and per-day limits (rate
-  limiting, budgets, caching results, error messages for users)?
-- How did you test those guardrails without making live LLM calls?
--->
-
-## 5. Experiments
-
-<!--
-PLACEHOLDER: Record at least one experiment you ran. Copy the table for more.
-
-| Item | Detail |
-| :- | :- |
-| Question | e.g. Does a shorter reviewer skill reduce tokens without missing findings? |
-| Setup | What you changed; what you held constant (task, model, effort) |
-| Metric | e.g. total tokens, cached tokens, review rounds, findings caught |
-| Result | Numbers before and after |
-| Analysis | Why you think it happened, and limits of the comparison |
-| Evidence | Links to logs, handoffs, PRs |
--->
-
-## 6. Key takeaways
-
-<!--
-PLACEHOLDER: Three to five lessons you would carry to a future project, each
-tied to evidence above.
--->
