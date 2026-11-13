@@ -17,6 +17,7 @@ This guide is for peer testers using the deployed app at
 
 - [Getting started](#getting-started)
 - [Navigating LGTM](#navigating-lgtm)
+- [Testing walkthrough](#testing-walkthrough)
 - [Learner guide](#learner-guide)
 - [Author guide](#author-guide)
 - [TA guide](#ta-guide)
@@ -63,6 +64,8 @@ email and password.
 1. Open <https://lgtm-cs3227.vercel.app>.
 2. Enter your **Email** and **Password**.
 3. Select **Sign in**.
+
+![signin.png](assets/signin.png)
 
 **Success:** your role's first screen opens. Signing in always takes you
 there, even if you were on another page before.
@@ -154,6 +157,79 @@ request and never does the action twice. Lifecycle changes use
 | **Account unavailable** — **We couldn't load a valid account profile.** | Your account profile couldn't be read. | Select **Try again**. If it persists, select **Sign out** and report it. |
 | **Service unavailable** — **We can't check your account right now. Try again.** | The account service didn't respond. | Select **Try again**, or **Sign out**. |
 
+## Testing walkthrough
+
+Try the full flow: **Author publishes → Learner reviews → TA checks**.
+[Create one account per role](#create-an-account-and-choose-a-role), using a
+different email for each. Switch accounts with **Sign out**, then **Sign in**.
+No Python or Java installation is needed.
+
+### 1. Author: create a challenge
+
+1. Sign in as the **Author**. Download either sample; both do the same thing:
+   [Python](assets/testing-walkthrough/delivery_fee.py) or
+   [Java](assets/testing-walkthrough/DeliveryFee.java).
+   Open the file and copy all its code. If the link opens source in your
+   browser, copy it directly or save it first.
+2. Select **Create challenge** and fill in:
+
+   | Field | Value |
+   | --- | --- |
+   | **Title** | `Delivery fee — YOUR NAME` (use your name to find it later). |
+   | **Description** | `Review a delivery-fee calculator using whole cents. Reject negative subtotals. Empty orders cost zero. Delivery costs 500 cents for positive subtotals below 5000, and is free at 5000 or above. The total includes delivery.` |
+   | **Language** | **Python** or **Java**, matching the sample. |
+   | **Difficulty** | **Easy** |
+   | **Working code** | Paste the sample code. |
+   | **Flaw count** | **2** |
+   | **Flaw categories** | **Logic bug** and **Edge case** |
+
+3. Select **Save draft**, then **Generate proposals**.
+4. Read each proposal's changes, explanation and fix. **Approve** meaningful
+   flaws and **Reject** unsuitable ones. Decide every proposal and approve at
+   least one; regenerate if none are suitable.
+5. Select **Preview final challenge**, check the diff and **Answer key**, then
+   **Publish challenge**. Keep the challenge published for the next step.
+
+**Check:** you see **Challenge published.** AI-generated flaws vary each time.
+
+### 2. Learner: attempt the challenge
+
+1. Sign in as the **Learner**. On **Challenges**, find your challenge by its
+   title and select **View challenge**. Filter by language if needed.
+2. Read the code against its description. On a faulty line, select the
+   gutter's **+**, explain **what is wrong, an example input, and how to fix
+   it**, then select **Add comment**. Repeat for other flaws you find.
+3. Select **Submit review** → **Confirm submission**. Stay on **Review result**
+   until grading finishes, then read your grade, comment feedback and missed
+   criteria. Try **Show hint** if you missed a flaw.
+4. Open **Review history** → **View result** to check your saved attempt.
+
+**Check:** your comments and completed grade are saved. There is no fixed
+expected score. For more practice, the result offers one **Retry challenge**.
+
+### 3. TA: review the submission
+
+1. Sign in as the **TA**. On **Submissions**, find your challenge and Learner,
+   then select **View submission** for **Attempt 1**.
+2. Compare **Submitted comments** with the code and **Private answer key**.
+   Check the AI feedback and **Current grade** against the evidence.
+3. If a correction is justified, select **Override grade**, enter a
+   **Replacement score** (0–100) and **Reason**, then **Save override**.
+4. If there is an open flag, select **Resolve flag**, choose **Upheld** or
+   **Dismissed**, enter a **Reason**, then **Save resolution**. A flag
+   resolution alone does not change the grade; having no flags is valid.
+5. Sign back in as the Learner and reopen the result through **Review
+   history**. Check that any TA override or resolution and its reason appear.
+
+**Check:** the TA can inspect the submission, and the Learner can see any
+moderation. Optionally, as the TA, try **Learners** → **View learner** →
+**Generate summary** to explore the learner's progress.
+
+Need help? See the [Author](#author-guide), [Learner](#learner-guide) and
+[TA](#ta-guide) guides. For AI failures or limits, see
+[AI features](#ai-features) and [Usage limits](#usage-limits). If an action's
+outcome is uncertain, use its **Check** button before trying again.
+
 ## Learner guide
 
 ### Find a challenge
@@ -162,6 +238,8 @@ request and never does the action twice. Lifecycle changes use
 2. Narrow the list with **Language**, **Difficulty** and **Flaw category**.
    The list updates as you choose.
 3. On a challenge card, select **View challenge**.
+
+![viewchallenges.png](assets/viewchallenges.png)
 
 Each card shows the description, language, difficulty and flaw categories.
 Languages are Python, Java, JavaScript and TypeScript. Difficulties are Easy,
@@ -197,6 +275,8 @@ The challenge page shows the title, description, metadata and the code.
    matters and how to fix it. Grading rewards all three.
 4. Select **Add comment** to keep it in this page's draft, or **Cancel**.
 
+![review challenges.png](assets/review%20challenges.png)
+
 To change a comment, select **Edit**, change the text and select **Save
 comment**. To delete it, select **Remove**.
 
@@ -223,6 +303,8 @@ the [leave warning](#unsaved-review-comments).
    **You haven't added any comments. Submit an empty review?**
 4. Select **Confirm submission**, or **Keep reviewing** to go back.
 
+![submit review.png](assets/submit%20review.png)
+
 **Success:** the **Review result** page opens and grading starts.
 
 You can submit each challenge once, plus one retry. If you open a challenge you
@@ -243,6 +325,8 @@ Grading starts by itself when the **Review result** page opens. You see
 **Grading pending**, then **Grading your review…**. Stay on the page; it
 updates on its own. If grading has not started when you leave, reopening the result starts it.
 Reopening a running result checks its current status.
+
+![review results.png](assets/review%20results.png)
 
 When grading finishes, the page shows:
 
@@ -276,6 +360,8 @@ location or fix.
 1. Select **Show hint** for a category.
 2. Read the hint. Select **Show hint** again for the next one in that
    category.
+
+![hints.png](assets/hints.png)
 
 When you have seen them all, you see **All hints shown**. If you missed no
 flaws, you see **No hints needed for missed flaws.** Hints were written when
@@ -380,6 +466,8 @@ labelled **TA action**. The latest entries are marked **Current override** or
    one to five **Flaw categories**.
 4. Select **Save draft**. Select **Cancel** to leave without saving.
 
+![createchallenge.png](assets/createchallenge.png)
+
 **Success:** **Flaw configuration** opens with **Draft saved.**
 
 **Next:** [Configure flaws](#configure-flaws) or go straight to
@@ -392,6 +480,8 @@ labelled **TA action**. The latest entries are marked **Current override** or
 
 1. Change the fields you want.
 2. Select **Save configuration**.
+
+![flawconfig.png](assets/flawconfig.png)
 
 **Success:** you see **Configuration saved.**
 
@@ -409,6 +499,8 @@ categories and difficulty.
 1. Save any changes first. Otherwise you see **Save your changes before
    generating proposals.**
 2. Select **Generate proposals**. You see **Generating proposals…**.
+
+![AIflaw.png](assets/AIflaw.png)
 
 **Success:** **Proposal preview** opens with **Proposals generated. Review
 every proposal before publishing.**
@@ -438,6 +530,8 @@ range in your working code, the **Original code**, the **Replacement code**, an
    publication, this changes the draft; the published revision stays unchanged
    until you publish again.
 
+![proposal preview.png](assets/proposal%20preview.png)
+
 Until every proposal has a decision, you see **Decide every proposal to
 preview the final challenge.** If you reject them all, you see **Approve at
 least one proposal to preview or publish.**
@@ -451,6 +545,8 @@ from **Generate proposals before reviewing flaws.**
 
 1. When every proposal has a decision and at least one is approved, select
    **Preview final challenge**.
+
+![finalchallengepreview.png](assets/finalchallengepreview.png)
 
 **Success:** **Final challenge preview** shows your working code compared with
 the flawed code Learners will review. The **Answer key** lists each kept flaw
@@ -466,6 +562,8 @@ The **Publication** section appears under the final preview. It shows the
 number of **Retained flaws** and their **Flaw categories**.
 
 1. Select **Publish challenge**. You see **Preparing hints and publishing…**.
+
+![publication.png](assets/publication.png)
 
 **Success:** **Publication result** opens with **Challenge published.** and
 the revision number and time. Learners can now find the challenge.
@@ -497,6 +595,8 @@ filter** to show all.
    **Working draft code** and the **AI flaw proposals** section.
 2. Select **Edit draft** to change any field, then **Save changes**.
 3. Select **Proposal preview** to return to existing proposals.
+
+![mychallenges.png](assets/mychallenges.png)
 
 Editing a published challenge changes only your working draft. The page shows
 **A published revision is live. Edits change only the working draft until a new revision is published.** To
@@ -579,6 +679,8 @@ For either lifecycle action:
    status**, then select **Apply filters**. **Clear filters** resets them.
 3. Select **View submission** on a card.
 
+![submissions.png](assets/submissions.png)
+
 The **Submission** page shows:
 
 - The learner, challenge, attempt, submission time and grading status.
@@ -630,6 +732,8 @@ You can override a grade once the original assessment is complete.
 3. Enter a **Reason**, up to 2,000 characters. The learner sees it.
 4. Select **Save override**, or **Cancel**.
 
+![grade.png](assets/grade.png)
+
 **Success:** you see **Grade override saved.** The **Current grade** shows
 **TA override**, and the override joins **Override history**. The learner sees
 the new grade and your reason on their result.
@@ -662,6 +766,8 @@ per-flaw credits, hints, progress evidence and flags unchanged and do not rerun 
 
 1. Select **Learners** in the top bar.
 2. Select **View learner** on a learner.
+
+![learnerperformance.png](assets/learnerperformance.png)
 
 **Learner performance** shows:
 
@@ -698,6 +804,8 @@ directory, where **Next page** and **First page** preserve the requested page.
 1. On **Learner performance**, select **Generate summary**. If a summary
    exists, the button reads **Regenerate summary**.
 2. You see **Generating performance summary…**.
+
+![generatesummary.png](assets/generatesummary.png)
 
 **Success:** you see **Performance summary generated.** The summary is labelled
 **AI-generated summary — review the supporting submissions.** It lists
